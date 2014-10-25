@@ -14,6 +14,6 @@ clean:
 	@rm -f -r tmp/*
 
 distclean: clean
-	@find . -type f -a -name "*.in" | sed -e 's/.in$$//' | xargs rm -f
+	@find . -type f -a -name "*.in" -a ! -name "control.in" | sed -e 's/.in$$//' | xargs rm -f
 
 devclean: clean
