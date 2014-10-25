@@ -29,44 +29,6 @@
 /* NOTE:  #includes at the end of this file */
 
 /*
- * Program specific config types (start at 50)
- */
-enum {
-   CFG_TYPE_ACL = 50,                   /* User Access Control List */
-   CFG_TYPE_AUDIT = 51,                 /* Auditing Command List */
-   CFG_TYPE_AUTHPROTOCOLTYPE = 52,      /* Authentication Protocol */
-   CFG_TYPE_AUTHTYPE = 53,              /* Authentication Type */
-   CFG_TYPE_DEVICE = 54,                /* Device resource */
-   CFG_TYPE_JOBTYPE = 55,               /* Type of Job */
-   CFG_TYPE_PROTOCOLTYPE = 56,          /* Protocol */
-   CFG_TYPE_LEVEL = 57,                 /* Backup Level */
-   CFG_TYPE_REPLACE = 58,               /* Replace option */
-   CFG_TYPE_SHRTRUNSCRIPT = 59,         /* Short Runscript definition */
-   CFG_TYPE_RUNSCRIPT = 60,             /* Runscript */
-   CFG_TYPE_RUNSCRIPT_CMD = 61,         /* Runscript Command */
-   CFG_TYPE_RUNSCRIPT_TARGET = 62,      /* Runscript Target (Host) */
-   CFG_TYPE_RUNSCRIPT_BOOL = 63,        /* Runscript Boolean */
-   CFG_TYPE_RUNSCRIPT_WHEN = 64,        /* Runscript When expression */
-   CFG_TYPE_MIGTYPE = 65,               /* Migration Type */
-   CFG_TYPE_INCEXC = 66,                /* Include/Exclude item */
-   CFG_TYPE_RUN = 67,                   /* Schedule Run Command */
-   CFG_TYPE_ACTIONONPURGE = 68,         /* Action to perform on Purge */
-
-   CFG_TYPE_FNAME = 80,                 /* Filename */
-   CFG_TYPE_PLUGINNAME = 81,            /* Pluginname */
-   CFG_TYPE_EXCLUDEDIR = 82,            /* Exclude directory */
-   CFG_TYPE_OPTIONS = 83,               /* Options block */
-   CFG_TYPE_OPTION = 84,                /* Option of Options block */
-   CFG_TYPE_REGEX = 85,                 /* Regular Expression */
-   CFG_TYPE_BASE = 86,                  /* Basejob Expression */
-   CFG_TYPE_WILD = 87,                  /* Wildcard Expression */
-   CFG_TYPE_PLUGIN = 88,                /* Plugin definition */
-   CFG_TYPE_FSTYPE = 89,                /* FileSytem match criterium (UNIX)*/
-   CFG_TYPE_DRIVETYPE = 90,             /* DriveType match criterium (Windows) */
-   CFG_TYPE_META = 91                   /* Meta tag */
-};
-
-/*
  * Resource codes -- they must be sequential for indexing
  */
 enum {
@@ -176,7 +138,7 @@ public:
    uint32_t jcr_watchdog_time;        /* Absolute time after which a Job gets terminated regardless of its progress */
    uint32_t stats_collect_interval;   /* Statistics collect interval in seconds */
    char *verid;                       /* Custom Id to print in version command */
-   char *keyencrkey;                  /* Key Encryption Key */
+   s_password keyencrkey;             /* Key Encryption Key */
 };
 
 /*
@@ -418,12 +380,10 @@ public:
    char *add_prefix;                  /* add prefix to filename  */
    char *add_suffix;                  /* add suffix to filename -- .old */
    char *backup_format;               /* Format of backup to use for protocols supporting multiple backup formats */
-   char *RestoreBootstrap;            /* Bootstrap file */
    char *PluginOptions;               /* Options to pass to plugin */
-   union {
-      char *WriteBootstrap;           /* Where to write bootstrap Job updates */
-      char *WriteVerifyList;          /* List of changed files */
-   };
+   char *RestoreBootstrap;            /* Bootstrap file */
+   char *WriteBootstrap;              /* Where to write bootstrap Job updates */
+   char *WriteVerifyList;             /* List of changed files */
    utime_t MaxRunTime;                /* max run time in seconds */
    utime_t MaxWaitTime;               /* max blocking time in seconds */
    utime_t FullMaxRunTime;            /* Max Full job run time */
@@ -452,9 +412,7 @@ public:
    POOLRES *diff_pool;                /* Pool for Differental backups */
    POOLRES *next_pool;                /* Next Pool for Copy/Migration Jobs and Virtual backups */
    char *selection_pattern;
-   union {
-      JOBRES *verify_job;             /* Job name to verify */
-   };
+   JOBRES *verify_job;                /* Job name to verify */
    JOBRES *jobdefs;                   /* Job defaults */
    alist *run_cmds;                   /* Run commands */
    alist *RunScripts;                 /* Run {client} program {after|before} Job */
@@ -527,10 +485,8 @@ struct INCEXE {
 /*
  * FileSet Resource
  */
-class FILESETRES {
+class FILESETRES : public BRSRES {
 public:
-   RES hdr;
-
    bool new_include;                  /* Set if new include used */
    INCEXE **include_items;            /* Array of incexe structures */
    int32_t num_includes;              /* Number in array */
@@ -543,11 +499,8 @@ public:
    bool enable_vss;                   /* Enable Volume Shadow Copy */
 
    /* Methods */
-   char *name() const;
    bool print_config(POOL_MEM& buff);
 };
-
-inline char *FILESETRES::name() const { return hdr.name; }
 
 /*
  * Schedule Resource
@@ -666,6 +619,8 @@ public:
    char woy[nbytes_for_bits(54 + 1)];   /* week of year */
    bool last_set;                       /* last week of month */
 };
+
+void init_dir_config(CONFIG *config, const char *configfile, int exit_code);
 
 #define GetPoolResWithName(x) ((POOLRES *)GetResWithName(R_POOL, (x)))
 #define GetStoreResWithName(x) ((STORERES *)GetResWithName(R_STORAGE, (x)))

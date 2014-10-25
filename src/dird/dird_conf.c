@@ -88,53 +88,53 @@ static int32_t res_all_size = sizeof(res_all);
  * name handler value code flags default_value
  */
 static RES_ITEM dir_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_dir.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL },
-   { "messages", CFG_TYPE_RES, ITEM(res_dir.messages), R_MSGS, 0, NULL },
-   { "dirport", CFG_TYPE_ADDRESSES_PORT, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
-   { "diraddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
-   { "diraddresses", CFG_TYPE_ADDRESSES, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
-   { "dirsourceaddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_dir.DIRsrc_addr), 0, CFG_ITEM_DEFAULT, "0" },
-   { "queryfile", CFG_TYPE_DIR, ITEM(res_dir.query_file), 0, CFG_ITEM_REQUIRED, NULL },
-   { "workingdirectory", CFG_TYPE_DIR, ITEM(res_dir.working_directory), 0, CFG_ITEM_DEFAULT, _PATH_BAREOS_WORKINGDIR },
-   { "piddirectory", CFG_TYPE_DIR, ITEM(res_dir.pid_directory), 0, CFG_ITEM_DEFAULT, _PATH_BAREOS_PIDDIR },
-   { "plugindirectory", CFG_TYPE_DIR, ITEM(res_dir.plugin_directory), 0, 0, NULL },
-   { "pluginnames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_dir.plugin_names), 0, 0, NULL },
-   { "scriptsdirectory", CFG_TYPE_DIR, ITEM(res_dir.scripts_directory), 0, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_dir.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL },
+   { "Messages", CFG_TYPE_RES, ITEM(res_dir.messages), R_MSGS, 0, NULL },
+   { "DirPort", CFG_TYPE_ADDRESSES_PORT, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
+   { "DirAddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
+   { "DirAddresses", CFG_TYPE_ADDRESSES, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT },
+   { "DirSourceAddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_dir.DIRsrc_addr), 0, CFG_ITEM_DEFAULT, "0" },
+   { "QueryFile", CFG_TYPE_DIR, ITEM(res_dir.query_file), 0, CFG_ITEM_REQUIRED, NULL },
+   { "WorkingDirectory", CFG_TYPE_DIR, ITEM(res_dir.working_directory), 0, CFG_ITEM_DEFAULT | CFG_ITEM_PLATFORM_SPECIFIC, _PATH_BAREOS_WORKINGDIR },
+   { "PidDirectory", CFG_TYPE_DIR, ITEM(res_dir.pid_directory), 0, CFG_ITEM_DEFAULT | CFG_ITEM_PLATFORM_SPECIFIC, _PATH_BAREOS_PIDDIR },
+   { "PluginDirectory", CFG_TYPE_DIR, ITEM(res_dir.plugin_directory), 0, 0, NULL },
+   { "PluginNames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_dir.plugin_names), 0, 0, NULL },
+   { "ScriptsDirectory", CFG_TYPE_DIR, ITEM(res_dir.scripts_directory), 0, 0, NULL },
 #if defined(HAVE_DYNAMIC_CATS_BACKENDS)
-   { "backenddirectory", CFG_TYPE_ALIST_DIR, ITEM(res_dir.backend_directories), 0, CFG_ITEM_DEFAULT, _PATH_BAREOS_BACKENDDIR },
+   { "BackendDirectory", CFG_TYPE_ALIST_DIR, ITEM(res_dir.backend_directories), 0, CFG_ITEM_DEFAULT | CFG_ITEM_PLATFORM_SPECIFIC, _PATH_BAREOS_BACKENDDIR },
 #endif
-   { "subscriptions", CFG_TYPE_PINT32, ITEM(res_dir.subscriptions), 0, CFG_ITEM_DEFAULT, "0" },
-   { "subsysdirectory", CFG_TYPE_DIR, ITEM(res_dir.subsys_directory), 0, 0, NULL },
-   { "maximumconcurrentjobs", CFG_TYPE_PINT32, ITEM(res_dir.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
-   { "maximumconsoleconnections", CFG_TYPE_PINT32, ITEM(res_dir.MaxConsoleConnect), 0, CFG_ITEM_DEFAULT, "20" },
-   { "password", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.password), 0, CFG_ITEM_REQUIRED, NULL },
-   { "fdconnecttimeout", CFG_TYPE_TIME, ITEM(res_dir.FDConnectTimeout), 0, CFG_ITEM_DEFAULT, "180" /* 3 minutes */ },
-   { "sdconnecttimeout", CFG_TYPE_TIME, ITEM(res_dir.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */ },
-   { "heartbeatinterval", CFG_TYPE_TIME, ITEM(res_dir.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL },
-   { "tlsverifypeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL },
-   { "tlsdhfile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL },
-   { "tlsallowedcn", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL },
-   { "statisticsretention", CFG_TYPE_TIME, ITEM(res_dir.stats_retention), 0, CFG_ITEM_DEFAULT, "160704000" /* 5 years */ },
-   { "statisticscollectinterval", CFG_TYPE_PINT32, ITEM(res_dir.stats_collect_interval), 0, CFG_ITEM_DEFAULT, "150" },
-   { "verid", CFG_TYPE_STR, ITEM(res_dir.verid), 0, 0, NULL },
-   { "optimizeforsize", CFG_TYPE_BOOL, ITEM(res_dir.optimize_for_size), 0, CFG_ITEM_DEFAULT, "false" },
-   { "optimizeforspeed", CFG_TYPE_BOOL, ITEM(res_dir.optimize_for_speed), 0, CFG_ITEM_DEFAULT, "false" },
-   { "omitdefaults", CFG_TYPE_BOOL, ITEM(res_dir.omit_defaults), 0, CFG_ITEM_DEFAULT, "true" },
-   { "keyencryptionkey", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.keyencrkey), 1, 0, NULL },
-   { "ndmpsnooping", CFG_TYPE_BOOL, ITEM(res_dir.ndmp_snooping), 0, 0, NULL },
-   { "ndmploglevel", CFG_TYPE_PINT32, ITEM(res_dir.ndmp_loglevel), 0, CFG_ITEM_DEFAULT, "4" },
-   { "absolutejobtimeout", CFG_TYPE_PINT32, ITEM(res_dir.jcr_watchdog_time), 0, 0, NULL },
-   { "auditing", CFG_TYPE_BOOL, ITEM(res_dir.auditing), 0, CFG_ITEM_DEFAULT, "false" },
-   { "auditevents", CFG_TYPE_AUDIT, ITEM(res_dir.audit_events), 0, 0, NULL },
+   { "Subscriptions", CFG_TYPE_PINT32, ITEM(res_dir.subscriptions), 0, CFG_ITEM_DEFAULT, "0" },
+   { "SubSysDirectory", CFG_TYPE_DIR, ITEM(res_dir.subsys_directory), 0, 0, NULL },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_dir.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
+   { "MaximumConsoleConnections", CFG_TYPE_PINT32, ITEM(res_dir.MaxConsoleConnect), 0, CFG_ITEM_DEFAULT, "20" },
+   { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.password), 0, CFG_ITEM_REQUIRED, NULL },
+   { "FdConnectTimeout", CFG_TYPE_TIME, ITEM(res_dir.FDConnectTimeout), 0, CFG_ITEM_DEFAULT, "180" /* 3 minutes */ },
+   { "SdConnectTimeout", CFG_TYPE_TIME, ITEM(res_dir.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */ },
+   { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_dir.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL },
+   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL },
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL },
+   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL },
+   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL },
+   { "StatisticsRetention", CFG_TYPE_TIME, ITEM(res_dir.stats_retention), 0, CFG_ITEM_DEFAULT, "160704000" /* 5 years */ },
+   { "StatisticsCollectInterval", CFG_TYPE_PINT32, ITEM(res_dir.stats_collect_interval), 0, CFG_ITEM_DEFAULT, "150" },
+   { "VerId", CFG_TYPE_STR, ITEM(res_dir.verid), 0, 0, NULL },
+   { "OptimizeForSize", CFG_TYPE_BOOL, ITEM(res_dir.optimize_for_size), 0, CFG_ITEM_DEFAULT, "false" },
+   { "OptimizeForSpeed", CFG_TYPE_BOOL, ITEM(res_dir.optimize_for_speed), 0, CFG_ITEM_DEFAULT, "false" },
+   { "OmitDefaults", CFG_TYPE_BOOL, ITEM(res_dir.omit_defaults), 0, CFG_ITEM_DEFAULT, "true" },
+   { "KeyEncryptionKey", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.keyencrkey), 1, 0, NULL },
+   { "NdmpSnooping", CFG_TYPE_BOOL, ITEM(res_dir.ndmp_snooping), 0, 0, NULL },
+   { "NdmpLogLevel", CFG_TYPE_PINT32, ITEM(res_dir.ndmp_loglevel), 0, CFG_ITEM_DEFAULT, "4" },
+   { "AbsoluteJobTimeout", CFG_TYPE_PINT32, ITEM(res_dir.jcr_watchdog_time), 0, 0, NULL },
+   { "Auditing", CFG_TYPE_BOOL, ITEM(res_dir.auditing), 0, CFG_ITEM_DEFAULT, "false" },
+   { "AuditEvents", CFG_TYPE_AUDIT, ITEM(res_dir.audit_events), 0, 0, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -144,31 +144,31 @@ static RES_ITEM dir_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM con_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_con.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_con.hdr.desc), 0, 0, NULL },
-   { "password", CFG_TYPE_AUTOPASSWORD, ITEM(res_con.password), 0, CFG_ITEM_REQUIRED, NULL },
-   { "jobacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Job_ACL, 0, NULL },
-   { "clientacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Client_ACL, 0, NULL },
-   { "storageacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Storage_ACL, 0, NULL },
-   { "scheduleacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Schedule_ACL, 0, NULL },
-   { "runacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Run_ACL, 0, NULL },
-   { "poolacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Pool_ACL, 0, NULL },
-   { "commandacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Command_ACL, 0, NULL },
-   { "filesetacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), FileSet_ACL, 0, NULL },
-   { "catalogacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Catalog_ACL, 0, NULL },
-   { "whereacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Where_ACL, 0, NULL },
-   { "pluginoptionsacl", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), PluginOptions_ACL, 0, NULL },
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_con.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_con.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_con.tls_require), 0, 0, NULL },
-   { "tlsverifypeer", CFG_TYPE_BOOL, ITEM(res_con.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_con.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_con.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_con.tls_keyfile), 0, 0, NULL },
-   { "tlsdhfile", CFG_TYPE_DIR, ITEM(res_con.tls_dhfile), 0, 0, NULL },
-   { "tlsallowedcn", CFG_TYPE_ALIST_STR, ITEM(res_con.tls_allowed_cns), 0, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_con.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_con.hdr.desc), 0, 0, NULL },
+   { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_con.password), 0, CFG_ITEM_REQUIRED, NULL },
+   { "JobACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Job_ACL, 0, NULL },
+   { "ClientACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Client_ACL, 0, NULL },
+   { "StorageACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Storage_ACL, 0, NULL },
+   { "ScheduleACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Schedule_ACL, 0, NULL },
+   { "RunACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Run_ACL, 0, NULL },
+   { "PoolACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Pool_ACL, 0, NULL },
+   { "CommandACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Command_ACL, 0, NULL },
+   { "FilesetACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), FileSet_ACL, 0, NULL },
+   { "CatalogACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Catalog_ACL, 0, NULL },
+   { "WhereACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Where_ACL, 0, NULL },
+   { "PluginoptionsACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), PluginOptions_ACL, 0, NULL },
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_con.tls_authenticate), 0, 0, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_con.tls_enable), 0, 0, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_con.tls_require), 0, 0, NULL },
+   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_con.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certfile), 0, 0, NULL },
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certdir), 0, 0, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_con.tls_crlfile), 0, 0, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_con.tls_certfile), 0, 0, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_con.tls_keyfile), 0, 0, NULL },
+   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_con.tls_dhfile), 0, 0, NULL },
+   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_con.tls_allowed_cns), 0, 0, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -178,42 +178,42 @@ static RES_ITEM con_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM cli_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_client.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_client.hdr.desc), 0, 0, NULL },
-   { "protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_client.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
-   { "authtype", CFG_TYPE_AUTHTYPE, ITEM(res_client.AuthType), 0, CFG_ITEM_DEFAULT, "None" },
-   { "address", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_REQUIRED, NULL },
-   { "fdaddress", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_ALIAS, NULL },
-   { "port", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT },
-   { "fdport", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, FD_DEFAULT_PORT },
-   { "username", CFG_TYPE_STR, ITEM(res_client.username), 0, 0, NULL },
-   { "password", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_REQUIRED, NULL },
-   { "fdpassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_ALIAS, NULL },
-   { "catalog", CFG_TYPE_RES, ITEM(res_client.catalog), R_CATALOG, 0, NULL },
-   { "passive", CFG_TYPE_BOOL, ITEM(res_client.passive), 0, CFG_ITEM_DEFAULT, "false" },
-   { "enabled", CFG_TYPE_BOOL, ITEM(res_client.enabled), 0, CFG_ITEM_DEFAULT, "true" },
-   { "hardquota", CFG_TYPE_SIZE64, ITEM(res_client.HardQuota), 0, CFG_ITEM_DEFAULT, "0" },
-   { "softquota", CFG_TYPE_SIZE64, ITEM(res_client.SoftQuota), 0, CFG_ITEM_DEFAULT, "0" },
-   { "softquotagraceperiod", CFG_TYPE_TIME, ITEM(res_client.SoftQuotaGracePeriod), 0, CFG_ITEM_DEFAULT, "0" },
-   { "strictquotas", CFG_TYPE_BOOL, ITEM(res_client.StrictQuotas), 0, CFG_ITEM_DEFAULT, "false" },
-   { "quotaincludefailedjobs", CFG_TYPE_BOOL, ITEM(res_client.QuotaIncludeFailedJobs), 0, CFG_ITEM_DEFAULT, "true" },
-   { "fileretention", CFG_TYPE_TIME, ITEM(res_client.FileRetention), 0, CFG_ITEM_DEFAULT, "5184000" /* 60 days */ },
-   { "jobretention", CFG_TYPE_TIME, ITEM(res_client.JobRetention), 0, CFG_ITEM_DEFAULT, "15552000" /* 180 days */ },
-   { "heartbeatinterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
-   { "autoprune", CFG_TYPE_BOOL, ITEM(res_client.AutoPrune), 0, CFG_ITEM_DEFAULT, "false" },
-   { "maximumconcurrentjobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_client.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_client.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_client.tls_require), 0, 0, NULL },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_client.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_client.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_client.tls_keyfile), 0, 0, NULL },
-   { "tlsallowedcn", CFG_TYPE_ALIST_STR, ITEM(res_client.tls_allowed_cns), 0, 0, NULL },
-   { "maximumbandwidthperjob", CFG_TYPE_SPEED, ITEM(res_client.max_bandwidth), 0, 0, NULL },
-   { "ndmploglevel", CFG_TYPE_PINT32, ITEM(res_client.ndmp_loglevel), 0, CFG_ITEM_DEFAULT, "4" },
-   { "ndmpblocksize", CFG_TYPE_PINT32, ITEM(res_client.ndmp_blocksize), 0, CFG_ITEM_DEFAULT, "64512" },
+   { "Name", CFG_TYPE_NAME, ITEM(res_client.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_client.hdr.desc), 0, 0, NULL },
+   { "Protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_client.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
+   { "Authtype", CFG_TYPE_AUTHTYPE, ITEM(res_client.AuthType), 0, CFG_ITEM_DEFAULT, "None" },
+   { "Address", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_REQUIRED, NULL },
+   { "FdAddress", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_ALIAS, NULL },
+   { "Port", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT },
+   { "FdPort", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, FD_DEFAULT_PORT },
+   { "Username", CFG_TYPE_STR, ITEM(res_client.username), 0, 0, NULL },
+   { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_REQUIRED, NULL },
+   { "FdPassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_ALIAS, NULL },
+   { "Catalog", CFG_TYPE_RES, ITEM(res_client.catalog), R_CATALOG, 0, NULL },
+   { "Passive", CFG_TYPE_BOOL, ITEM(res_client.passive), 0, CFG_ITEM_DEFAULT, "false" },
+   { "Enabled", CFG_TYPE_BOOL, ITEM(res_client.enabled), 0, CFG_ITEM_DEFAULT, "true" },
+   { "HardQuota", CFG_TYPE_SIZE64, ITEM(res_client.HardQuota), 0, CFG_ITEM_DEFAULT, "0" },
+   { "SoftQuota", CFG_TYPE_SIZE64, ITEM(res_client.SoftQuota), 0, CFG_ITEM_DEFAULT, "0" },
+   { "SoftQuotaGracePeriod", CFG_TYPE_TIME, ITEM(res_client.SoftQuotaGracePeriod), 0, CFG_ITEM_DEFAULT, "0" },
+   { "StrictQuotas", CFG_TYPE_BOOL, ITEM(res_client.StrictQuotas), 0, CFG_ITEM_DEFAULT, "false" },
+   { "QuotaIncludeFailedJobs", CFG_TYPE_BOOL, ITEM(res_client.QuotaIncludeFailedJobs), 0, CFG_ITEM_DEFAULT, "true" },
+   { "FileRetention", CFG_TYPE_TIME, ITEM(res_client.FileRetention), 0, CFG_ITEM_DEFAULT, "5184000" /* 60 days */ },
+   { "JobRetention", CFG_TYPE_TIME, ITEM(res_client.JobRetention), 0, CFG_ITEM_DEFAULT, "15552000" /* 180 days */ },
+   { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
+   { "Autoprune", CFG_TYPE_BOOL, ITEM(res_client.AutoPrune), 0, CFG_ITEM_DEFAULT, "false" },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_client.tls_authenticate), 0, 0, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_client.tls_enable), 0, 0, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_client.tls_require), 0, 0, NULL },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certfile), 0, 0, NULL },
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certdir), 0, 0, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_client.tls_crlfile), 0, 0, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_client.tls_certfile), 0, 0, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_client.tls_keyfile), 0, 0, NULL },
+   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_client.tls_allowed_cns), 0, 0, NULL },
+   { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_client.max_bandwidth), 0, 0, NULL },
+   { "NdmpLogLevel", CFG_TYPE_PINT32, ITEM(res_client.ndmp_loglevel), 0, CFG_ITEM_DEFAULT, "4" },
+   { "NdmpBlockSize", CFG_TYPE_PINT32, ITEM(res_client.ndmp_blocksize), 0, CFG_ITEM_DEFAULT, "64512" },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -222,37 +222,37 @@ static RES_ITEM cli_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM store_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_store.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_store.hdr.desc), 0, 0, NULL },
-   { "protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_store.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
-   { "authtype", CFG_TYPE_AUTHTYPE, ITEM(res_store.AuthType), 0, CFG_ITEM_DEFAULT, "None" },
-   { "address", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_REQUIRED, NULL },
-   { "sdaddress", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_ALIAS, NULL },
-   { "port", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT, SD_DEFAULT_PORT },
-   { "sdport", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, SD_DEFAULT_PORT },
-   { "username", CFG_TYPE_STR, ITEM(res_store.username), 0, 0, NULL },
-   { "password", CFG_TYPE_AUTOPASSWORD, ITEM(res_store.password), 0, CFG_ITEM_REQUIRED, NULL },
-   { "sdpassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_store.password), 0, CFG_ITEM_ALIAS, NULL },
-   { "device", CFG_TYPE_DEVICE, ITEM(res_store.device), R_DEVICE, CFG_ITEM_REQUIRED, NULL },
-   { "mediatype", CFG_TYPE_STRNAME, ITEM(res_store.media_type), 0, CFG_ITEM_REQUIRED, NULL },
-   { "autochanger", CFG_TYPE_BOOL, ITEM(res_store.autochanger), 0, CFG_ITEM_DEFAULT, "false" },
-   { "enabled", CFG_TYPE_BOOL, ITEM(res_store.enabled), 0, CFG_ITEM_DEFAULT, "true" },
-   { "allowcompression", CFG_TYPE_BOOL, ITEM(res_store.AllowCompress), 0, CFG_ITEM_DEFAULT, "true" },
-   { "heartbeatinterval", CFG_TYPE_TIME, ITEM(res_store.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
-   { "maximumconcurrentjobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
-   { "maximumconcurrentreadjobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentReadJobs), 0, CFG_ITEM_DEFAULT, "0" },
-   { "sddport", CFG_TYPE_PINT32, ITEM(res_store.SDDport), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_store.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_store.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_store.tls_require), 0, 0, NULL },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_store.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_store.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_store.tls_keyfile), 0, 0, NULL },
-   { "pairedstorage", CFG_TYPE_RES, ITEM(res_store.paired_storage), R_STORAGE, 0, NULL },
-   { "maximumbandwidthperjob", CFG_TYPE_SPEED, ITEM(res_store.max_bandwidth), 0, 0, NULL },
-   { "collectstatistics", CFG_TYPE_BOOL, ITEM(res_store.collectstats), 0, CFG_ITEM_DEFAULT, "false" },
+   { "Name", CFG_TYPE_NAME, ITEM(res_store.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_store.hdr.desc), 0, 0, NULL },
+   { "Protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_store.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
+   { "Authtype", CFG_TYPE_AUTHTYPE, ITEM(res_store.AuthType), 0, CFG_ITEM_DEFAULT, "None" },
+   { "Address", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_REQUIRED, NULL },
+   { "SdAddress", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_ALIAS, NULL },
+   { "Port", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT, SD_DEFAULT_PORT },
+   { "SdPort", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, SD_DEFAULT_PORT },
+   { "Username", CFG_TYPE_STR, ITEM(res_store.username), 0, 0, NULL },
+   { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_store.password), 0, CFG_ITEM_REQUIRED, NULL },
+   { "SdPassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_store.password), 0, CFG_ITEM_ALIAS, NULL },
+   { "Device", CFG_TYPE_DEVICE, ITEM(res_store.device), R_DEVICE, CFG_ITEM_REQUIRED, NULL },
+   { "MediaType", CFG_TYPE_STRNAME, ITEM(res_store.media_type), 0, CFG_ITEM_REQUIRED, NULL },
+   { "AutoChanger", CFG_TYPE_BOOL, ITEM(res_store.autochanger), 0, CFG_ITEM_DEFAULT, "false" },
+   { "Enabled", CFG_TYPE_BOOL, ITEM(res_store.enabled), 0, CFG_ITEM_DEFAULT, "true" },
+   { "AllowCompression", CFG_TYPE_BOOL, ITEM(res_store.AllowCompress), 0, CFG_ITEM_DEFAULT, "true" },
+   { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_store.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
+   { "MaximumConcurrentReadJobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentReadJobs), 0, CFG_ITEM_DEFAULT, "0" },
+   { "SddPort", CFG_TYPE_PINT32, ITEM(res_store.SDDport), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_store.tls_authenticate), 0, 0, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_store.tls_enable), 0, 0, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_store.tls_require), 0, 0, NULL },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certfile), 0, 0, NULL },
+   { "TlsCacertificateDir", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certdir), 0, 0, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_store.tls_crlfile), 0, 0, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_store.tls_certfile), 0, 0, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_store.tls_keyfile), 0, 0, NULL },
+   { "PairedStorage", CFG_TYPE_RES, ITEM(res_store.paired_storage), R_STORAGE, 0, NULL },
+   { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_store.max_bandwidth), 0, 0, NULL },
+   { "CollectStatistics", CFG_TYPE_BOOL, ITEM(res_store.collectstats), 0, CFG_ITEM_DEFAULT, "false" },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -262,30 +262,30 @@ static RES_ITEM store_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM cat_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_cat.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_cat.hdr.desc), 0, 0, NULL },
-   { "address", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, CFG_ITEM_ALIAS, NULL },
-   { "dbaddress", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, 0, NULL },
-   { "dbport", CFG_TYPE_PINT32, ITEM(res_cat.db_port), 0, 0, NULL },
-   { "password", CFG_TYPE_AUTOPASSWORD, ITEM(res_cat.db_password), 0, CFG_ITEM_ALIAS, NULL },
-   { "dbpassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_cat.db_password), 0, 0, NULL },
-   { "dbuser", CFG_TYPE_STR, ITEM(res_cat.db_user), 0, 0, NULL },
-   { "user", CFG_TYPE_STR, ITEM(res_cat.db_user), 0, CFG_ITEM_ALIAS, NULL },
-   { "dbname", CFG_TYPE_STR, ITEM(res_cat.db_name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_cat.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_cat.hdr.desc), 0, 0, NULL },
+   { "Address", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, CFG_ITEM_ALIAS, NULL },
+   { "DbAddress", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, 0, NULL },
+   { "DbPort", CFG_TYPE_PINT32, ITEM(res_cat.db_port), 0, 0, NULL },
+   { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_cat.db_password), 0, CFG_ITEM_ALIAS, NULL },
+   { "DbPassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_cat.db_password), 0, 0, NULL },
+   { "DbUser", CFG_TYPE_STR, ITEM(res_cat.db_user), 0, 0, NULL },
+   { "User", CFG_TYPE_STR, ITEM(res_cat.db_user), 0, CFG_ITEM_ALIAS, NULL },
+   { "DbName", CFG_TYPE_STR, ITEM(res_cat.db_name), 0, CFG_ITEM_REQUIRED, NULL },
 #ifdef HAVE_DYNAMIC_CATS_BACKENDS
-   { "dbdriver", CFG_TYPE_STR, ITEM(res_cat.db_driver), 0, CFG_ITEM_REQUIRED, NULL },
+   { "DbDriver", CFG_TYPE_STR, ITEM(res_cat.db_driver), 0, CFG_ITEM_REQUIRED, NULL },
 #else
-   { "dbdriver", CFG_TYPE_STR, ITEM(res_cat.db_driver), 0, 0, NULL },
+   { "DbDriver", CFG_TYPE_STR, ITEM(res_cat.db_driver), 0, 0, NULL },
 #endif
-   { "dbsocket", CFG_TYPE_STR, ITEM(res_cat.db_socket), 0, 0, NULL },
+   { "DbSocket", CFG_TYPE_STR, ITEM(res_cat.db_socket), 0, 0, NULL },
    /* Turned off for the moment */
-   { "multipleconnections", CFG_TYPE_BIT, ITEM(res_cat.mult_db_connections), 0, 0, NULL },
-   { "disablebatchinsert", CFG_TYPE_BOOL, ITEM(res_cat.disable_batch_insert), 0, CFG_ITEM_DEFAULT, "false" },
-   { "minconnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_min_connections), 0, CFG_ITEM_DEFAULT, "1" },
-   { "maxconnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_max_connections), 0, CFG_ITEM_DEFAULT, "5" },
-   { "incconnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_increment_connections), 0, CFG_ITEM_DEFAULT, "1" },
-   { "idletimeout", CFG_TYPE_PINT32, ITEM(res_cat.pooling_idle_timeout), 0, CFG_ITEM_DEFAULT, "30" },
-   { "validatetimeout", CFG_TYPE_PINT32, ITEM(res_cat.pooling_validate_timeout), 0, CFG_ITEM_DEFAULT, "120" },
+   { "MultipleConnections", CFG_TYPE_BIT, ITEM(res_cat.mult_db_connections), 0, 0, NULL },
+   { "DisableBatchInsert", CFG_TYPE_BOOL, ITEM(res_cat.disable_batch_insert), 0, CFG_ITEM_DEFAULT, "false" },
+   { "MinConnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_min_connections), 0, CFG_ITEM_DEFAULT, "1" },
+   { "MaxConnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_max_connections), 0, CFG_ITEM_DEFAULT, "5" },
+   { "IncConnections", CFG_TYPE_PINT32, ITEM(res_cat.pooling_increment_connections), 0, CFG_ITEM_DEFAULT, "1" },
+   { "IdleTimeout", CFG_TYPE_PINT32, ITEM(res_cat.pooling_idle_timeout), 0, CFG_ITEM_DEFAULT, "30" },
+   { "ValidateTimeout", CFG_TYPE_PINT32, ITEM(res_cat.pooling_validate_timeout), 0, CFG_ITEM_DEFAULT, "120" },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -295,87 +295,87 @@ static RES_ITEM cat_items[] = {
  * name handler value code flags default_value
  */
 RES_ITEM job_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_job.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_job.hdr.desc), 0, 0, NULL },
-   { "type", CFG_TYPE_JOBTYPE, ITEM(res_job.JobType), 0, CFG_ITEM_REQUIRED, NULL },
-   { "protocol", CFG_TYPE_PROTOCOLTYPE, ITEM(res_job.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
-   { "backupformat", CFG_TYPE_STR, ITEM(res_job.backup_format), 0, CFG_ITEM_DEFAULT, "Native" },
-   { "level", CFG_TYPE_LEVEL, ITEM(res_job.JobLevel), 0, 0, NULL },
-   { "messages", CFG_TYPE_RES, ITEM(res_job.messages), R_MSGS, CFG_ITEM_REQUIRED, NULL },
-   { "storage", CFG_TYPE_ALIST_RES, ITEM(res_job.storage), R_STORAGE, 0, NULL },
-   { "pool", CFG_TYPE_RES, ITEM(res_job.pool), R_POOL, CFG_ITEM_REQUIRED, NULL },
-   { "fullbackuppool", CFG_TYPE_RES, ITEM(res_job.full_pool), R_POOL, 0, NULL },
-   { "incrementalbackuppool", CFG_TYPE_RES, ITEM(res_job.inc_pool), R_POOL, 0, NULL },
-   { "differentialbackuppool", CFG_TYPE_RES, ITEM(res_job.diff_pool), R_POOL, 0, NULL },
-   { "nextpool", CFG_TYPE_RES, ITEM(res_job.next_pool), R_POOL, 0, NULL },
-   { "client", CFG_TYPE_RES, ITEM(res_job.client), R_CLIENT, 0, NULL },
-   { "fileset", CFG_TYPE_RES, ITEM(res_job.fileset), R_FILESET, 0, NULL },
-   { "schedule", CFG_TYPE_RES, ITEM(res_job.schedule), R_SCHEDULE, 0, NULL },
-   { "verifyjob", CFG_TYPE_RES, ITEM(res_job.verify_job), R_JOB, CFG_ITEM_ALIAS, NULL },
-   { "jobtoverify", CFG_TYPE_RES, ITEM(res_job.verify_job), R_JOB, 0, NULL },
-   { "catalog", CFG_TYPE_RES, ITEM(res_job.catalog), R_CATALOG, 0, NULL },
-   { "jobdefs", CFG_TYPE_RES, ITEM(res_job.jobdefs), R_JOBDEFS, 0, NULL },
-   { "run", CFG_TYPE_ALIST_STR, ITEM(res_job.run_cmds), 0, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_job.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_job.hdr.desc), 0, 0, NULL },
+   { "Type", CFG_TYPE_JOBTYPE, ITEM(res_job.JobType), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Protocol", CFG_TYPE_PROTOCOLTYPE, ITEM(res_job.Protocol), 0, CFG_ITEM_DEFAULT, "Native" },
+   { "BackupFormat", CFG_TYPE_STR, ITEM(res_job.backup_format), 0, CFG_ITEM_DEFAULT, "Native" },
+   { "Level", CFG_TYPE_LEVEL, ITEM(res_job.JobLevel), 0, 0, NULL },
+   { "Messages", CFG_TYPE_RES, ITEM(res_job.messages), R_MSGS, CFG_ITEM_REQUIRED, NULL },
+   { "Storage", CFG_TYPE_ALIST_RES, ITEM(res_job.storage), R_STORAGE, 0, NULL },
+   { "Pool", CFG_TYPE_RES, ITEM(res_job.pool), R_POOL, CFG_ITEM_REQUIRED, NULL },
+   { "FullBackupPool", CFG_TYPE_RES, ITEM(res_job.full_pool), R_POOL, 0, NULL },
+   { "IncrementalBackupPool", CFG_TYPE_RES, ITEM(res_job.inc_pool), R_POOL, 0, NULL },
+   { "DifferentialBackupPool", CFG_TYPE_RES, ITEM(res_job.diff_pool), R_POOL, 0, NULL },
+   { "NextPool", CFG_TYPE_RES, ITEM(res_job.next_pool), R_POOL, 0, NULL },
+   { "Client", CFG_TYPE_RES, ITEM(res_job.client), R_CLIENT, 0, NULL },
+   { "Fileset", CFG_TYPE_RES, ITEM(res_job.fileset), R_FILESET, 0, NULL },
+   { "Schedule", CFG_TYPE_RES, ITEM(res_job.schedule), R_SCHEDULE, 0, NULL },
+   { "VerifyJob", CFG_TYPE_RES, ITEM(res_job.verify_job), R_JOB, CFG_ITEM_ALIAS, NULL },
+   { "JobToVerify", CFG_TYPE_RES, ITEM(res_job.verify_job), R_JOB, 0, NULL },
+   { "Catalog", CFG_TYPE_RES, ITEM(res_job.catalog), R_CATALOG, 0, NULL },
+   { "JobDefs", CFG_TYPE_RES, ITEM(res_job.jobdefs), R_JOBDEFS, 0, NULL },
+   { "Run", CFG_TYPE_ALIST_STR, ITEM(res_job.run_cmds), 0, 0, NULL },
    /* Root of where to restore files */
-   { "where", CFG_TYPE_DIR, ITEM(res_job.RestoreWhere), 0, 0, NULL },
-   { "regexwhere", CFG_TYPE_STR, ITEM(res_job.RegexWhere), 0, 0, NULL },
-   { "stripprefix", CFG_TYPE_STR, ITEM(res_job.strip_prefix), 0, 0, NULL },
-   { "addprefix", CFG_TYPE_STR, ITEM(res_job.add_prefix), 0, 0, NULL },
-   { "addsuffix", CFG_TYPE_STR, ITEM(res_job.add_suffix), 0, 0, NULL },
+   { "Where", CFG_TYPE_DIR, ITEM(res_job.RestoreWhere), 0, 0, NULL },
+   { "RegexWhere", CFG_TYPE_STR, ITEM(res_job.RegexWhere), 0, 0, NULL },
+   { "StripPrefix", CFG_TYPE_STR, ITEM(res_job.strip_prefix), 0, 0, NULL },
+   { "AddPrefix", CFG_TYPE_STR, ITEM(res_job.add_prefix), 0, 0, NULL },
+   { "AddSuffix", CFG_TYPE_STR, ITEM(res_job.add_suffix), 0, 0, NULL },
    /* Where to find bootstrap during restore */
-   { "bootstrap", CFG_TYPE_DIR, ITEM(res_job.RestoreBootstrap), 0, 0, NULL },
+   { "Bootstrap", CFG_TYPE_DIR, ITEM(res_job.RestoreBootstrap), 0, 0, NULL },
    /* Where to write bootstrap file during backup */
-   { "writebootstrap", CFG_TYPE_DIR, ITEM(res_job.WriteBootstrap), 0, 0, NULL },
-   { "writeverifylist", CFG_TYPE_DIR, ITEM(res_job.WriteVerifyList), 0, 0, NULL },
-   { "replace", CFG_TYPE_REPLACE, ITEM(res_job.replace), 0, CFG_ITEM_DEFAULT, "Always" },
-   { "maximumbandwidth", CFG_TYPE_SPEED, ITEM(res_job.max_bandwidth), 0, 0, NULL },
-   { "maxrunschedtime", CFG_TYPE_TIME, ITEM(res_job.MaxRunSchedTime), 0, 0, NULL },
-   { "maxruntime", CFG_TYPE_TIME, ITEM(res_job.MaxRunTime), 0, 0, NULL },
-   { "fullmaxwaittime", CFG_TYPE_TIME, ITEM(res_job.FullMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "incrementalmaxwaittime", CFG_TYPE_TIME, ITEM(res_job.IncMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "differentialmaxwaittime", CFG_TYPE_TIME, ITEM(res_job.DiffMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "fullmaxruntime", CFG_TYPE_TIME, ITEM(res_job.FullMaxRunTime), 0, 0, NULL },
-   { "incrementalmaxruntime", CFG_TYPE_TIME, ITEM(res_job.IncMaxRunTime), 0, 0, NULL },
-   { "differentialmaxruntime", CFG_TYPE_TIME, ITEM(res_job.DiffMaxRunTime), 0, 0, NULL },
-   { "maxwaittime", CFG_TYPE_TIME, ITEM(res_job.MaxWaitTime), 0, 0, NULL },
-   { "maxstartdelay", CFG_TYPE_TIME, ITEM(res_job.MaxStartDelay), 0, 0, NULL },
-   { "maxfullinterval", CFG_TYPE_TIME, ITEM(res_job.MaxFullInterval), 0, 0, NULL },
-   { "maxdiffinterval", CFG_TYPE_TIME, ITEM(res_job.MaxDiffInterval), 0, 0, NULL },
-   { "prefixlinks", CFG_TYPE_BOOL, ITEM(res_job.PrefixLinks), 0, CFG_ITEM_DEFAULT, "false" },
-   { "prunejobs", CFG_TYPE_BOOL, ITEM(res_job.PruneJobs), 0, CFG_ITEM_DEFAULT, "false" },
-   { "prunefiles", CFG_TYPE_BOOL, ITEM(res_job.PruneFiles), 0, CFG_ITEM_DEFAULT, "false" },
-   { "prunevolumes", CFG_TYPE_BOOL, ITEM(res_job.PruneVolumes), 0, CFG_ITEM_DEFAULT, "false" },
-   { "purgemigrationjob", CFG_TYPE_BOOL, ITEM(res_job.PurgeMigrateJob), 0, CFG_ITEM_DEFAULT, "false" },
-   { "enabled", CFG_TYPE_BOOL, ITEM(res_job.enabled), 0, CFG_ITEM_DEFAULT, "true" },
-   { "spoolattributes", CFG_TYPE_BOOL, ITEM(res_job.SpoolAttributes), 0, CFG_ITEM_DEFAULT, "false" },
-   { "spooldata", CFG_TYPE_BOOL, ITEM(res_job.spool_data), 0, CFG_ITEM_DEFAULT, "false" },
-   { "spoolsize", CFG_TYPE_SIZE64, ITEM(res_job.spool_size), 0, 0, NULL },
-   { "rerunfailedlevels", CFG_TYPE_BOOL, ITEM(res_job.rerun_failed_levels), 0, CFG_ITEM_DEFAULT, "false" },
-   { "prefermountedvolumes", CFG_TYPE_BOOL, ITEM(res_job.PreferMountedVolumes), 0, CFG_ITEM_DEFAULT, "true" },
-   { "runbeforejob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
-   { "runafterjob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
-   { "runafterfailedjob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
-   { "clientrunbeforejob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
-   { "clientrunafterjob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
-   { "maximumconcurrentjobs", CFG_TYPE_PINT32, ITEM(res_job.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
-   { "rescheduleonerror", CFG_TYPE_BOOL, ITEM(res_job.RescheduleOnError), 0, CFG_ITEM_DEFAULT, "false" },
-   { "rescheduleinterval", CFG_TYPE_TIME, ITEM(res_job.RescheduleInterval), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */ },
-   { "rescheduletimes", CFG_TYPE_PINT32, ITEM(res_job.RescheduleTimes), 0, CFG_ITEM_DEFAULT, "5" },
-   { "priority", CFG_TYPE_PINT32, ITEM(res_job.Priority), 0, CFG_ITEM_DEFAULT, "10" },
-   { "allowmixedpriority", CFG_TYPE_BOOL, ITEM(res_job.allow_mixed_priority), 0, CFG_ITEM_DEFAULT, "false" },
-   { "writepartafterjob", CFG_TYPE_BOOL, ITEM(res_job.write_part_after_job), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "selectionpattern", CFG_TYPE_STR, ITEM(res_job.selection_pattern), 0, 0, NULL },
-   { "runscript", CFG_TYPE_RUNSCRIPT, ITEM(res_job.RunScripts), 0, CFG_ITEM_NO_EQUALS, NULL },
-   { "selectiontype", CFG_TYPE_MIGTYPE, ITEM(res_job.selection_type), 0, 0, NULL },
-   { "accurate", CFG_TYPE_BOOL, ITEM(res_job.accurate), 0, CFG_ITEM_DEFAULT, "false" },
-   { "allowduplicatejobs", CFG_TYPE_BOOL, ITEM(res_job.AllowDuplicateJobs), 0, CFG_ITEM_DEFAULT, "true" },
-   { "allowhigherduplicates", CFG_TYPE_BOOL, ITEM(res_job.AllowHigherDuplicates), 0, CFG_ITEM_DEFAULT, "true" },
-   { "cancellowerlevelduplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelLowerLevelDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
-   { "cancelqueuedduplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelQueuedDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
-   { "cancelrunningduplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelRunningDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
-   { "savefilehistory", CFG_TYPE_BOOL, ITEM(res_job.SaveFileHist), 0, CFG_ITEM_DEFAULT, "true" },
-   { "pluginoptions", CFG_TYPE_STR, ITEM(res_job.PluginOptions), 0, 0, NULL },
-   { "base", CFG_TYPE_ALIST_RES, ITEM(res_job.base), R_JOB, 0, NULL },
+   { "WriteBootstrap", CFG_TYPE_DIR, ITEM(res_job.WriteBootstrap), 0, 0, NULL },
+   { "WriteVerifyList", CFG_TYPE_DIR, ITEM(res_job.WriteVerifyList), 0, 0, NULL },
+   { "Replace", CFG_TYPE_REPLACE, ITEM(res_job.replace), 0, CFG_ITEM_DEFAULT, "Always" },
+   { "MaximumBandwidth", CFG_TYPE_SPEED, ITEM(res_job.max_bandwidth), 0, 0, NULL },
+   { "MaxrunSchedTime", CFG_TYPE_TIME, ITEM(res_job.MaxRunSchedTime), 0, 0, NULL },
+   { "MaxRunTime", CFG_TYPE_TIME, ITEM(res_job.MaxRunTime), 0, 0, NULL },
+   { "FullMaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.FullMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "IncrementalMaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.IncMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "DifferentialMaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.DiffMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "FullMaxRuntime", CFG_TYPE_TIME, ITEM(res_job.FullMaxRunTime), 0, 0, NULL },
+   { "IncrementalMaxRuntime", CFG_TYPE_TIME, ITEM(res_job.IncMaxRunTime), 0, 0, NULL },
+   { "DifferentialMaxRuntime", CFG_TYPE_TIME, ITEM(res_job.DiffMaxRunTime), 0, 0, NULL },
+   { "MaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.MaxWaitTime), 0, 0, NULL },
+   { "MaxStartDelay", CFG_TYPE_TIME, ITEM(res_job.MaxStartDelay), 0, 0, NULL },
+   { "MaxFullInterval", CFG_TYPE_TIME, ITEM(res_job.MaxFullInterval), 0, 0, NULL },
+   { "MaxDiffInterval", CFG_TYPE_TIME, ITEM(res_job.MaxDiffInterval), 0, 0, NULL },
+   { "PrefixLinks", CFG_TYPE_BOOL, ITEM(res_job.PrefixLinks), 0, CFG_ITEM_DEFAULT, "false" },
+   { "PruneJobs", CFG_TYPE_BOOL, ITEM(res_job.PruneJobs), 0, CFG_ITEM_DEFAULT, "false" },
+   { "PruneFiles", CFG_TYPE_BOOL, ITEM(res_job.PruneFiles), 0, CFG_ITEM_DEFAULT, "false" },
+   { "PruneVolumes", CFG_TYPE_BOOL, ITEM(res_job.PruneVolumes), 0, CFG_ITEM_DEFAULT, "false" },
+   { "PurgeMigrationJob", CFG_TYPE_BOOL, ITEM(res_job.PurgeMigrateJob), 0, CFG_ITEM_DEFAULT, "false" },
+   { "Enabled", CFG_TYPE_BOOL, ITEM(res_job.enabled), 0, CFG_ITEM_DEFAULT, "true" },
+   { "SpoolAttributes", CFG_TYPE_BOOL, ITEM(res_job.SpoolAttributes), 0, CFG_ITEM_DEFAULT, "false" },
+   { "SpoolData", CFG_TYPE_BOOL, ITEM(res_job.spool_data), 0, CFG_ITEM_DEFAULT, "false" },
+   { "SpoolSize", CFG_TYPE_SIZE64, ITEM(res_job.spool_size), 0, 0, NULL },
+   { "RerunFailedLevels", CFG_TYPE_BOOL, ITEM(res_job.rerun_failed_levels), 0, CFG_ITEM_DEFAULT, "false" },
+   { "PreferMountedVolumes", CFG_TYPE_BOOL, ITEM(res_job.PreferMountedVolumes), 0, CFG_ITEM_DEFAULT, "true" },
+   { "RunBeforeJob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
+   { "RunAfterJob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
+   { "RunAfterFailedJob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
+   { "ClientRunBeforeJob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
+   { "ClientRunAfterJob", CFG_TYPE_SHRTRUNSCRIPT, ITEM(res_job.RunScripts), 0, 0, NULL },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_job.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1" },
+   { "RescheduleOnError", CFG_TYPE_BOOL, ITEM(res_job.RescheduleOnError), 0, CFG_ITEM_DEFAULT, "false" },
+   { "RescheduleInterval", CFG_TYPE_TIME, ITEM(res_job.RescheduleInterval), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */ },
+   { "RescheduleTimes", CFG_TYPE_PINT32, ITEM(res_job.RescheduleTimes), 0, CFG_ITEM_DEFAULT, "5" },
+   { "Priority", CFG_TYPE_PINT32, ITEM(res_job.Priority), 0, CFG_ITEM_DEFAULT, "10" },
+   { "AllowMixedPriority", CFG_TYPE_BOOL, ITEM(res_job.allow_mixed_priority), 0, CFG_ITEM_DEFAULT, "false" },
+   { "WritePartAfterJob", CFG_TYPE_BOOL, ITEM(res_job.write_part_after_job), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "SelectionPattern", CFG_TYPE_STR, ITEM(res_job.selection_pattern), 0, 0, NULL },
+   { "RunScript", CFG_TYPE_RUNSCRIPT, ITEM(res_job.RunScripts), 0, CFG_ITEM_NO_EQUALS, NULL },
+   { "SelectionType", CFG_TYPE_MIGTYPE, ITEM(res_job.selection_type), 0, 0, NULL },
+   { "Accurate", CFG_TYPE_BOOL, ITEM(res_job.accurate), 0, CFG_ITEM_DEFAULT, "false" },
+   { "AllowDuplicateJobs", CFG_TYPE_BOOL, ITEM(res_job.AllowDuplicateJobs), 0, CFG_ITEM_DEFAULT, "true" },
+   { "AllowHigherDuplicates", CFG_TYPE_BOOL, ITEM(res_job.AllowHigherDuplicates), 0, CFG_ITEM_DEFAULT, "true" },
+   { "CancelLowerLevelDuplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelLowerLevelDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
+   { "CancelQueuedDuplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelQueuedDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
+   { "CancelRunningDuplicates", CFG_TYPE_BOOL, ITEM(res_job.CancelRunningDuplicates), 0, CFG_ITEM_DEFAULT, "false" },
+   { "SaveFileHistory", CFG_TYPE_BOOL, ITEM(res_job.SaveFileHist), 0, CFG_ITEM_DEFAULT, "true" },
+   { "PluginOptions", CFG_TYPE_STR, ITEM(res_job.PluginOptions), 0, 0, NULL },
+   { "Base", CFG_TYPE_ALIST_RES, ITEM(res_job.base), R_JOB, 0, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -385,12 +385,12 @@ RES_ITEM job_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM fs_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_fs.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_fs.hdr.desc), 0, 0, NULL },
-   { "include", CFG_TYPE_INCEXC, { 0 }, 0, CFG_ITEM_NO_EQUALS, NULL },
-   { "exclude", CFG_TYPE_INCEXC, { 0 }, 1, CFG_ITEM_NO_EQUALS, NULL },
-   { "ignorefilesetchanges", CFG_TYPE_BOOL, ITEM(res_fs.ignore_fs_changes), 0, CFG_ITEM_DEFAULT, "false" },
-   { "enablevss", CFG_TYPE_BOOL, ITEM(res_fs.enable_vss), 0, CFG_ITEM_DEFAULT, "true" },
+   { "Name", CFG_TYPE_NAME, ITEM(res_fs.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_fs.hdr.desc), 0, 0, NULL },
+   { "Include", CFG_TYPE_INCEXC, { 0 }, 0, CFG_ITEM_NO_EQUALS, NULL },
+   { "Exclude", CFG_TYPE_INCEXC, { 0 }, 1, CFG_ITEM_NO_EQUALS, NULL },
+   { "IgnoreFilesetChanges", CFG_TYPE_BOOL, ITEM(res_fs.ignore_fs_changes), 0, CFG_ITEM_DEFAULT, "false" },
+   { "EnableVSS", CFG_TYPE_BOOL, ITEM(res_fs.enable_vss), 0, CFG_ITEM_DEFAULT, "true" },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -400,10 +400,10 @@ static RES_ITEM fs_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM sch_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_sch.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_sch.hdr.desc), 0, 0, NULL },
-   { "run", CFG_TYPE_RUN, ITEM(res_sch.run), 0, 0, NULL },
-   { "enabled", CFG_TYPE_BOOL, ITEM(res_sch.enabled), 0, CFG_ITEM_DEFAULT, "true" },
+   { "Name", CFG_TYPE_NAME, ITEM(res_sch.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_sch.hdr.desc), 0, 0, NULL },
+   { "Run", CFG_TYPE_RUN, ITEM(res_sch.run), 0, 0, NULL },
+   { "Enabled", CFG_TYPE_BOOL, ITEM(res_sch.enabled), 0, CFG_ITEM_DEFAULT, "true" },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -413,40 +413,40 @@ static RES_ITEM sch_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM pool_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_pool.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_pool.hdr.desc), 0, 0, NULL },
-   { "pooltype", CFG_TYPE_STRNAME, ITEM(res_pool.pool_type), 0, CFG_ITEM_REQUIRED, NULL },
-   { "labelformat", CFG_TYPE_STRNAME, ITEM(res_pool.label_format), 0, 0, NULL },
-   { "labeltype", CFG_TYPE_LABEL, ITEM(res_pool.LabelType), 0, 0, NULL },
-   { "cleaningprefix", CFG_TYPE_STRNAME, ITEM(res_pool.cleaning_prefix), 0, CFG_ITEM_DEFAULT, "CLN" },
-   { "usecatalog", CFG_TYPE_BOOL, ITEM(res_pool.use_catalog), 0, CFG_ITEM_DEFAULT, "true" },
-   { "usevolumeonce", CFG_TYPE_BOOL, ITEM(res_pool.use_volume_once), 0, CFG_ITEM_DEPRECATED, NULL },
-   { "purgeoldestvolume", CFG_TYPE_BOOL, ITEM(res_pool.purge_oldest_volume), 0, 0, NULL },
-   { "actiononpurge", CFG_TYPE_ACTIONONPURGE, ITEM(res_pool.action_on_purge), 0, 0, NULL },
-   { "recycleoldestvolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_oldest_volume), 0, 0, NULL },
-   { "recyclecurrentvolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_current_volume), 0, 0, NULL },
-   { "maximumvolumes", CFG_TYPE_PINT32, ITEM(res_pool.max_volumes), 0, 0, NULL },
-   { "maximumvolumejobs", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolJobs), 0, 0, NULL },
-   { "maximumvolumefiles", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolFiles), 0, 0, NULL },
-   { "maximumvolumebytes", CFG_TYPE_SIZE64, ITEM(res_pool.MaxVolBytes), 0, 0, NULL },
-   { "catalogfiles", CFG_TYPE_BOOL, ITEM(res_pool.catalog_files), 0, CFG_ITEM_DEFAULT, "true" },
-   { "volumeretention", CFG_TYPE_TIME, ITEM(res_pool.VolRetention), 0, CFG_ITEM_DEFAULT, "31536000" /* 365 days */ },
-   { "volumeuseduration", CFG_TYPE_TIME, ITEM(res_pool.VolUseDuration), 0, 0, NULL },
-   { "migrationtime", CFG_TYPE_TIME, ITEM(res_pool.MigrationTime), 0, 0, NULL },
-   { "migrationhighbytes", CFG_TYPE_SIZE64, ITEM(res_pool.MigrationHighBytes), 0, 0, NULL },
-   { "migrationlowbytes", CFG_TYPE_SIZE64, ITEM(res_pool.MigrationLowBytes), 0, 0, NULL },
-   { "nextpool", CFG_TYPE_RES, ITEM(res_pool.NextPool), R_POOL, 0, NULL },
-   { "storage", CFG_TYPE_ALIST_RES, ITEM(res_pool.storage), R_STORAGE, 0, NULL },
-   { "autoprune", CFG_TYPE_BOOL, ITEM(res_pool.AutoPrune), 0, CFG_ITEM_DEFAULT, "true" },
-   { "recycle", CFG_TYPE_BOOL, ITEM(res_pool.Recycle), 0, CFG_ITEM_DEFAULT, "true" },
-   { "recyclepool", CFG_TYPE_RES, ITEM(res_pool.RecyclePool), R_POOL, 0, NULL },
-   { "scratchpool", CFG_TYPE_RES, ITEM(res_pool.ScratchPool), R_POOL, 0, NULL },
-   { "copypool", CFG_TYPE_ALIST_RES, ITEM(res_pool.CopyPool), R_POOL, 0, NULL },
-   { "catalog", CFG_TYPE_RES, ITEM(res_pool.catalog), R_CATALOG, 0, NULL },
-   { "fileretention", CFG_TYPE_TIME, ITEM(res_pool.FileRetention), 0, 0, NULL },
-   { "jobretention", CFG_TYPE_TIME, ITEM(res_pool.JobRetention), 0, 0, NULL },
-   { "minimumblocksize", CFG_TYPE_PINT32, ITEM(res_pool.MinBlocksize), 0, 0, NULL },
-   { "maximumblocksize", CFG_TYPE_PINT32, ITEM(res_pool.MaxBlocksize), 0, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_pool.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_pool.hdr.desc), 0, 0, NULL },
+   { "PoolType", CFG_TYPE_STRNAME, ITEM(res_pool.pool_type), 0, CFG_ITEM_REQUIRED, NULL },
+   { "LabelFormat", CFG_TYPE_STRNAME, ITEM(res_pool.label_format), 0, 0, NULL },
+   { "LabelType", CFG_TYPE_LABEL, ITEM(res_pool.LabelType), 0, 0, NULL },
+   { "CleaningPrefix", CFG_TYPE_STRNAME, ITEM(res_pool.cleaning_prefix), 0, CFG_ITEM_DEFAULT, "CLN" },
+   { "UseCatalog", CFG_TYPE_BOOL, ITEM(res_pool.use_catalog), 0, CFG_ITEM_DEFAULT, "true" },
+   { "UseVolumeOnce", CFG_TYPE_BOOL, ITEM(res_pool.use_volume_once), 0, CFG_ITEM_DEPRECATED, NULL },
+   { "PurgeOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.purge_oldest_volume), 0, 0, NULL },
+   { "ActionOnPurge", CFG_TYPE_ACTIONONPURGE, ITEM(res_pool.action_on_purge), 0, 0, NULL },
+   { "RecycleOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_oldest_volume), 0, 0, NULL },
+   { "RecycleCurrentVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_current_volume), 0, 0, NULL },
+   { "MaximumVolumes", CFG_TYPE_PINT32, ITEM(res_pool.max_volumes), 0, 0, NULL },
+   { "MaximumVolumeJobs", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolJobs), 0, 0, NULL },
+   { "MaximumVolumeFiles", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolFiles), 0, 0, NULL },
+   { "MaximumVolumeBytes", CFG_TYPE_SIZE64, ITEM(res_pool.MaxVolBytes), 0, 0, NULL },
+   { "CatalogFiles", CFG_TYPE_BOOL, ITEM(res_pool.catalog_files), 0, CFG_ITEM_DEFAULT, "true" },
+   { "VolumeRetention", CFG_TYPE_TIME, ITEM(res_pool.VolRetention), 0, CFG_ITEM_DEFAULT, "31536000" /* 365 days */ },
+   { "VolumeUseDuration", CFG_TYPE_TIME, ITEM(res_pool.VolUseDuration), 0, 0, NULL },
+   { "MigrationTime", CFG_TYPE_TIME, ITEM(res_pool.MigrationTime), 0, 0, NULL },
+   { "MigrationHighBytes", CFG_TYPE_SIZE64, ITEM(res_pool.MigrationHighBytes), 0, 0, NULL },
+   { "MigrationLowBytes", CFG_TYPE_SIZE64, ITEM(res_pool.MigrationLowBytes), 0, 0, NULL },
+   { "NextPool", CFG_TYPE_RES, ITEM(res_pool.NextPool), R_POOL, 0, NULL },
+   { "Storage", CFG_TYPE_ALIST_RES, ITEM(res_pool.storage), R_STORAGE, 0, NULL },
+   { "Autoprune", CFG_TYPE_BOOL, ITEM(res_pool.AutoPrune), 0, CFG_ITEM_DEFAULT, "true" },
+   { "Recycle", CFG_TYPE_BOOL, ITEM(res_pool.Recycle), 0, CFG_ITEM_DEFAULT, "true" },
+   { "RecyclePool", CFG_TYPE_RES, ITEM(res_pool.RecyclePool), R_POOL, 0, NULL },
+   { "ScratchPool", CFG_TYPE_RES, ITEM(res_pool.ScratchPool), R_POOL, 0, NULL },
+   { "CopyPool", CFG_TYPE_ALIST_RES, ITEM(res_pool.CopyPool), R_POOL, 0, NULL },
+   { "Catalog", CFG_TYPE_RES, ITEM(res_pool.catalog), R_CATALOG, 0, NULL },
+   { "FileRetention", CFG_TYPE_TIME, ITEM(res_pool.FileRetention), 0, 0, NULL },
+   { "JobRetention", CFG_TYPE_TIME, ITEM(res_pool.JobRetention), 0, 0, NULL },
+   { "MinimumBlocksize", CFG_TYPE_PINT32, ITEM(res_pool.MinBlocksize), 0, 0, NULL },
+   { "MaximumBlocksize", CFG_TYPE_PINT32, ITEM(res_pool.MaxBlocksize), 0, 0, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -456,12 +456,12 @@ static RES_ITEM pool_items[] = {
  * name handler value code flags default_value
  */
 static RES_ITEM counter_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_counter.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_counter.hdr.desc), 0, 0, NULL },
-   { "minimum", CFG_TYPE_INT32, ITEM(res_counter.MinValue), 0, CFG_ITEM_DEFAULT, "0" },
-   { "maximum", CFG_TYPE_PINT32, ITEM(res_counter.MaxValue), 0, CFG_ITEM_DEFAULT, "2147483647" /* INT32_MAX */ },
-   { "wrapcounter", CFG_TYPE_RES, ITEM(res_counter.WrapCounter), R_COUNTER, 0, NULL },
-   { "catalog", CFG_TYPE_RES, ITEM(res_counter.Catalog), R_CATALOG, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_counter.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_counter.hdr.desc), 0, 0, NULL },
+   { "Minimum", CFG_TYPE_INT32, ITEM(res_counter.MinValue), 0, CFG_ITEM_DEFAULT, "0" },
+   { "Maximum", CFG_TYPE_PINT32, ITEM(res_counter.MaxValue), 0, CFG_ITEM_DEFAULT, "2147483647" /* INT32_MAX */ },
+   { "WrapCounter", CFG_TYPE_RES, ITEM(res_counter.WrapCounter), R_COUNTER, 0, NULL },
+   { "Catalog", CFG_TYPE_RES, ITEM(res_counter.Catalog), R_CATALOG, 0, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -480,19 +480,19 @@ static RES_ITEM counter_items[] = {
  * name handler value code flags default_value
  */
 static RES_TABLE resources[] = {
-   { "director", dir_items, R_DIRECTOR, sizeof(DIRRES) },
-   { "client", cli_items, R_CLIENT, sizeof(CLIENTRES) },
-   { "jobdefs", job_items, R_JOBDEFS, sizeof(JOBRES) },
-   { "job", job_items, R_JOB, sizeof(JOBRES) },
-   { "storage", store_items, R_STORAGE, sizeof(STORERES) },
-   { "catalog", cat_items, R_CATALOG, sizeof(CATRES) },
-   { "schedule", sch_items, R_SCHEDULE, sizeof(SCHEDRES) },
-   { "fileset", fs_items, R_FILESET, sizeof(FILESETRES) },
-   { "pool", pool_items, R_POOL, sizeof(POOLRES) },
-   { "messages", msgs_items, R_MSGS, sizeof(MSGSRES) },
-   { "counter", counter_items, R_COUNTER, sizeof(COUNTERRES) },
-   { "console", con_items, R_CONSOLE, sizeof(CONRES) },
-   { "device", NULL, R_DEVICE, sizeof(DEVICERES) }, /* info obtained from SD */
+   { "Director", dir_items, R_DIRECTOR, sizeof(DIRRES) },
+   { "Client", cli_items, R_CLIENT, sizeof(CLIENTRES) },
+   { "JobDefs", job_items, R_JOBDEFS, sizeof(JOBRES) },
+   { "Job", job_items, R_JOB, sizeof(JOBRES) },
+   { "Storage", store_items, R_STORAGE, sizeof(STORERES) },
+   { "Catalog", cat_items, R_CATALOG, sizeof(CATRES) },
+   { "Schedule", sch_items, R_SCHEDULE, sizeof(SCHEDRES) },
+   { "Fileset", fs_items, R_FILESET, sizeof(FILESETRES) },
+   { "Pool", pool_items, R_POOL, sizeof(POOLRES) },
+   { "Messages", msgs_items, R_MSGS, sizeof(MSGSRES) },
+   { "Counter", counter_items, R_COUNTER, sizeof(COUNTERRES) },
+   { "Console", con_items, R_CONSOLE, sizeof(CONRES) },
+   { "Device", NULL, R_DEVICE, sizeof(DEVICERES) }, /* info obtained from SD */
    { NULL, NULL, 0, 0 }
 };
 
@@ -512,15 +512,15 @@ static RUNSCRIPT res_runscript;
  * name handler value code flags default_value
  */
 static RES_ITEM runscript_items[] = {
- { "command", CFG_TYPE_RUNSCRIPT_CMD, { (char **)&res_runscript }, SHELL_CMD, 0, NULL },
- { "console", CFG_TYPE_RUNSCRIPT_CMD, { (char **)&res_runscript }, CONSOLE_CMD, 0, NULL },
- { "target", CFG_TYPE_RUNSCRIPT_TARGET, { (char **)&res_runscript }, 0, 0, NULL },
- { "runsonsuccess", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.on_success }, 0, 0, NULL },
- { "runsonfailure", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.on_failure }, 0, 0, NULL },
- { "failjobonerror", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.fail_on_error }, 0, 0, NULL },
- { "abortjobonerror", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.fail_on_error }, 0, 0, NULL },
- { "runswhen", CFG_TYPE_RUNSCRIPT_WHEN, { (char **)&res_runscript.when }, 0, 0, NULL },
- { "runsonclient", CFG_TYPE_RUNSCRIPT_TARGET, { (char **)&res_runscript }, 0, 0, NULL }, /* TODO */
+ { "Command", CFG_TYPE_RUNSCRIPT_CMD, { (char **)&res_runscript }, SHELL_CMD, 0, NULL },
+ { "Console", CFG_TYPE_RUNSCRIPT_CMD, { (char **)&res_runscript }, CONSOLE_CMD, 0, NULL },
+ { "Target", CFG_TYPE_RUNSCRIPT_TARGET, { (char **)&res_runscript }, 0, 0, NULL },
+ { "RunsOnSuccess", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.on_success }, 0, 0, NULL },
+ { "RunsOnFailure", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.on_failure }, 0, 0, NULL },
+ { "FailJobOnError", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.fail_on_error }, 0, 0, NULL },
+ { "AbortJobOnError", CFG_TYPE_RUNSCRIPT_BOOL, { (char **)&res_runscript.fail_on_error }, 0, 0, NULL },
+ { "RunsWhen", CFG_TYPE_RUNSCRIPT_WHEN, { (char **)&res_runscript.when }, 0, 0, NULL },
+ { "RunsOnClient", CFG_TYPE_RUNSCRIPT_TARGET, { (char **)&res_runscript }, 0, 0, NULL }, /* TODO */
  { NULL, 0, { 0 }, 0, 0, NULL }
 };
 
@@ -689,7 +689,6 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
       if (list != NULL) {
          foreach_alist(runscript, list) {
             int len;
-            bool shortrunscript = false;
             POOLMEM *cmdbuf;
 
             len = strlen(runscript->command);
@@ -698,46 +697,43 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
             escape_string(cmdbuf, runscript->command, len);
 
             /*
-             * Check if runscript can be written as short runscript
+             * Don't print runscript when its inherited from a JobDef.
              */
-            if (runscript->cmd_type == '|') {  /* short runscripts only support shell command */
+            if (runscript->from_jobdef) {
+               continue;
+            }
+
+            /*
+             * Check if runscript must be written as short runscript
+             */
+            if (runscript->short_form) {
                if (runscript->when == SCRIPT_Before &&           /* runbeforejob */
                   (bstrcmp(runscript->target, ""))) {
                      Mmsg(temp, "run before job = \"%s\"\n", cmdbuf);
-                     shortrunscript = true;
                } else if (runscript->when == SCRIPT_After &&     /* runafterjob */
                           runscript->on_success &&
                          !runscript->on_failure &&
                          !runscript->fail_on_error &&
                           bstrcmp(runscript->target, "")) {
                   Mmsg(temp, "run after job = \"%s\"\n", cmdbuf);
-                  shortrunscript = true;
                } else if (runscript->when == SCRIPT_After &&     /* client run after job */
                           runscript->on_success &&
                          !runscript->on_failure &&
                          !runscript->fail_on_error &&
                           !bstrcmp(runscript->target, "")) {
                   Mmsg(temp, "client run after job = \"%s\"\n", cmdbuf);
-                  shortrunscript = true;
                } else if (runscript->when == SCRIPT_Before &&      /* client run before job */
                           !bstrcmp(runscript->target, "")) {
                   Mmsg(temp, "before job = \"%s\"\n", cmdbuf);
-                  shortrunscript = true;
                } else if (runscript->when == SCRIPT_After &&      /* run after failed job */
                           runscript->on_failure &&
                          !runscript->on_success &&
                          !runscript->fail_on_error &&
                           bstrcmp(runscript->target, "")) {
                   Mmsg(temp, "run after failed job = \"%s\"\n", cmdbuf);
-                  shortrunscript = true;
                }
                indent_config_item(cfg_str, 1, temp.c_str());
-            }
-
-            /*
-             * If we cannot write the runscript as short runscript...
-             */
-            if (!shortrunscript) {
+            } else {
                Mmsg(temp, "runscript {\n");
                indent_config_item(cfg_str, 1, temp.c_str());
 
@@ -750,7 +746,7 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                indent_config_item(cfg_str, 2, temp.c_str());
 
                /*
-                * default: never
+                * Default: never
                 */
                char *when = (char *)"never";
                switch (runscript->when) {
@@ -773,23 +769,29 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                   indent_config_item(cfg_str, 2, temp.c_str());
                }
 
-               /* default: fail_on_error = true */
+               /*
+                * Default: fail_on_error = true
+                */
                char *fail_on_error = (char *)"Yes";
-               if (! runscript->fail_on_error){
+               if (!runscript->fail_on_error){
                   fail_on_error = (char *)"No";
                   Mmsg(temp, "failonerror = %s\n", fail_on_error);
                   indent_config_item(cfg_str, 2, temp.c_str());
                }
 
-               /* default: on_success = true */
+               /*
+                * Default: on_success = true
+                */
                char *run_on_success = (char *)"Yes";
-               if (! runscript->on_success){
+               if (!runscript->on_success){
                   run_on_success = (char *)"No";
                   Mmsg(temp, "runsonsuccess = %s\n", run_on_success);
                   indent_config_item(cfg_str, 2, temp.c_str());
                }
 
-               /* default: on_failure = false */
+               /*
+                * Default: on_failure = false
+                */
                char *run_on_failure = (char *)"No";
                if (runscript->on_failure) {
                   run_on_failure = (char *)"Yes";
@@ -801,7 +803,9 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                Dmsg1(200, "   level = %d\n", runscript->level);
                */
 
-               /* default: runsonclient = yes */
+               /*
+                * Default: runsonclient = yes
+                */
                char *runsonclient = (char *)"Yes";
                if (bstrcmp(runscript->target, "")) {
                   runsonclient = (char *)"No";
@@ -810,7 +814,7 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                }
 
                indent_config_item(cfg_str, 1, "}\n");
-            } /* not a short runscript */
+            }
 
             free_pool_memory(cmdbuf);
          }
@@ -922,12 +926,12 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
          /*
           * run->mday , output is just the number comma separated
           */
-         all_set =  true;
+         all_set = true;
          interval_start = -1;
 
          POOL_MEM t; /* is one entry of day/month/week etc. */
 
-         pm_strcpy(temp, '\0');
+         pm_strcpy(temp, "");
          for (int i = 0; i < 32; i++) {  /* search for one more than needed to detect also intervals that stop on last value  */
             if (bit_is_set(i, run->mday)) {
                if (interval_start == -1) {   // bit is set and we are not in an interval
@@ -958,7 +962,7 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
          if (!all_set) { // suppress output if all bits are set
             pm_strcat(temp, " ");
             pm_strcat(run_str, temp.c_str() + 1); /* jump over first comma*/
-            all_set =  true;
+            all_set = true;
          }
 
          /*
@@ -968,8 +972,8 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
           */
          interval_start = -1;
 
-         all_set =  true;
-         pm_strcpy(temp, '\0');
+         all_set = true;
+         pm_strcpy(temp, "");
          for (int i = 0; i < 5; i++) {
             if (bit_is_set(i, run->wom)) {
                if (interval_start == -1) {   // bit is set and we are not in an interval
@@ -1008,8 +1012,8 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
          /*
           * run->wday output is Sun, Mon, ..., Sat comma separated
           */
-         all_set =  true;
-         pm_strcpy(temp, '\0');
+         all_set = true;
+         pm_strcpy(temp, "");
          for (int i = 0; i < 7; i++) {
             if (bit_is_set(i, run->wday)) {
                if (interval_start == -1) {   // bit is set and we are not in an interval
@@ -1047,7 +1051,7 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
           * run->woy output is w00 - w53, comma separated
           */
          all_set = true;
-         pm_strcpy(temp, '\0');
+         pm_strcpy(temp, "");
          for (int i = 0; i < 55; i++) {
             if (bit_is_set(i, run->woy)) {
                if (interval_start == -1) {   // bit is set and we are not in an interval
@@ -1085,7 +1089,7 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
           * only "hourly" sets all bits.
           */
          all_set = true;
-         pm_strcpy(temp, '\0');
+         pm_strcpy(temp, "");
          for (int i = 0; i < 24; i++) {
             if bit_is_set(i, run->hour) {
                Mmsg(temp, "at %02d:%02d\n", i, run->minute);
@@ -1148,39 +1152,87 @@ bool FILESETRES::print_config(POOL_MEM &buff)
 
                for (p = &fo->opts[0]; *p; p++) {
                   switch (*p) {
-                     case 'a':                 /* alway replace */
-                        indent_config_item(cfg_str, 3, "replace = always\n");
-                        break;
                      case '0':                 /* no option */
                         break;
+                     case 'a':                 /* alway replace */
+                        indent_config_item(cfg_str, 3, "Replace = Always\n");
+                        break;
+                     case 'C':                 /* */
+                        indent_config_item(cfg_str, 3, "Accurate = ");
+                        p++;                   /* skip C */
+                        for (; *p && *p != ':'; p++) {
+                           Mmsg(temp, "%c", *p);
+                           pm_strcat(cfg_str, temp.c_str());
+                        }
+                        pm_strcat(cfg_str, "\n");
+                        break;
+                     case 'd':
+                        switch(*(p + 1)) {
+                        case '1':
+                           indent_config_item(cfg_str, 3, "Shadowing = LocalWarn\n");
+                           p++;
+                           break;
+                        case '2':
+                           indent_config_item(cfg_str, 3, "Shadowing = LocalRemove\n");
+                           p++;
+                           break;
+                        case '3':
+                           indent_config_item(cfg_str, 3, "Shadowing = GlobalWarn\n");
+                           p++;
+                           break;
+                        case '4':
+                           indent_config_item(cfg_str, 3, "Shadowing = GlobalRemove\n");
+                           p++;
+                           break;
+                        }
+                        break;
                      case 'e':
-                        indent_config_item(cfg_str, 3, "exclude = yes\n");
+                        indent_config_item(cfg_str, 3, "Exclude = yes\n");
                         break;
                      case 'f':
-                        indent_config_item(cfg_str, 3, "onefs = no\n");
+                        indent_config_item(cfg_str, 3, "OneFS = no\n");
                         break;
                      case 'h':                 /* no recursion */
-                        indent_config_item(cfg_str, 3, "recurse = no\n");
+                        indent_config_item(cfg_str, 3, "Recurse = no\n");
                         break;
                      case 'H':                 /* no hard link handling */
-                        indent_config_item(cfg_str, 3, "hardlinks = no\n");
+                        indent_config_item(cfg_str, 3, "Hardlinks = no\n");
                         break;
                      case 'i':
-                        indent_config_item(cfg_str, 3, "ignorecase = yes\n");
+                        indent_config_item(cfg_str, 3, "IgnoreCase = yes\n");
+                        break;
+                     case 'J':                 /* Base Job */
+                        indent_config_item(cfg_str, 3, "BaseJob = ");
+                        p++;                   /* skip J */
+                        for (; *p && *p != ':'; p++) {
+                           Mmsg(temp, "%c", *p);
+                           pm_strcat(cfg_str, temp.c_str());
+                        }
+                        pm_strcat(cfg_str, "\n");
                         break;
                      case 'M':                 /* MD5 */
-                        indent_config_item(cfg_str, 3, "signature = md5\n");
+                        indent_config_item(cfg_str, 3, "Signature = MD5\n");
                         break;
                      case 'n':
-                        indent_config_item(cfg_str, 3, "replace = never\n");
+                        indent_config_item(cfg_str, 3, "Replace = Never\n");
                         break;
                      case 'p':                 /* use portable data format */
-                        indent_config_item(cfg_str, 3, "portable = yes\n");
+                        indent_config_item(cfg_str, 3, "Portable = Yes\n");
+                        break;
+                     case 'P':                 /* strip path */
+                        indent_config_item(cfg_str, 3, "Strip = ");
+                        p++;                   /* skip P */
+                        for (; *p && *p != ':'; p++) {
+                           Mmsg(temp, "%c", *p);
+                           pm_strcat(cfg_str, temp.c_str());
+                        }
+                        pm_strcat(cfg_str, "\n");
                         break;
                      case 'R':                 /* Resource forks and Finder Info */
-                        indent_config_item(cfg_str, 3, "hfsplussupport = yes\n");
+                        indent_config_item(cfg_str, 3, "HFSPlusSupport = Yes\n");
+                        break;
                      case 'r':                 /* read fifo */
-                        indent_config_item(cfg_str, 3, "readfifo = yes\n");
+                        indent_config_item(cfg_str, 3, "ReadFifo = Yes\n");
                         break;
                      case 'S':
                         switch(*(p + 1)) {
@@ -1188,94 +1240,98 @@ bool FILESETRES::print_config(POOL_MEM &buff)
                            /* Old director did not specify SHA variant */
                            break;
                         case '1':
-                           indent_config_item(cfg_str, 3, "signature = sha1\n");
+                           indent_config_item(cfg_str, 3, "Signature = SHA1\n");
                            p++;
                            break;
 #ifdef HAVE_SHA2
                         case '2':
-                           indent_config_item(cfg_str, 3, "signature = sha256\n");
+                           indent_config_item(cfg_str, 3, "Signature = SHA256\n");
                            p++;
                            break;
                         case '3':
-                           indent_config_item(cfg_str, 3, "signature = sha512\n");
+                           indent_config_item(cfg_str, 3, "Signature = SHA512\n");
                            p++;
                            break;
 #endif
                         default:
                            /* Automatically downgrade to SHA-1 if an unsupported
                             * SHA variant is specified */
-                           indent_config_item(cfg_str, 3, "signature = sha1\n");
+                           indent_config_item(cfg_str, 3, "Signature = SHA1\n");
                            p++;
                            break;
                         }
                         break;
                      case 's':
-                        indent_config_item(cfg_str, 3, "sparse = yes\n");
+                        indent_config_item(cfg_str, 3, "Sparse = Yes\n");
                         break;
                      case 'm':
-                        indent_config_item(cfg_str, 3, "mtimeonly = yes\n");
+                        indent_config_item(cfg_str, 3, "MtimeOnly = Yes\n");
                         break;
                      case 'k':
-                        indent_config_item(cfg_str, 3, "keepatime = yes\n");
+                        indent_config_item(cfg_str, 3, "KeepAtime = Yes\n");
+                        break;
+                     case 'K':
+                        indent_config_item(cfg_str, 3, "NoAtime = Yes\n");
                         break;
                      case 'A':
-                        indent_config_item(cfg_str, 3, "aclsupport = yes\n");
+                        indent_config_item(cfg_str, 3, "AclSupport = Yes\n");
                         break;
                      case 'V':                  /* verify options */
-                        indent_config_item(cfg_str, 3, "verify = ");
-
-                        /*
-                         * Copy Verify Options
-                         */
-                        //for (int j = 0; *p && *p != ':'; p++) {
+                        indent_config_item(cfg_str, 3, "Verify = ");
+                        p++;                   /* skip V */
                         for (; *p && *p != ':'; p++) {
                            Mmsg(temp, "%c", *p);
                            pm_strcat(cfg_str, temp.c_str());
-                           //fo->VerifyOpts[j] = *p;
-                           //if (j < (int)sizeof(fo->VerifyOpts) - 1) {
-                           //   j++;
-                           //}
                         }
-                        //fo->VerifyOpts[j] = 0;
+                        pm_strcat(cfg_str, "\n");
                         break;
                      case 'w':
-                        indent_config_item(cfg_str, 3, "replace = ifnewer\n");
+                        indent_config_item(cfg_str, 3, "Replace = IfNewer\n");
                         break;
                      case 'W':
-                        indent_config_item(cfg_str, 3, "enhancedwild = yes\n");
+                        indent_config_item(cfg_str, 3, "EnhancedWild = Yes\n");
+                        break;
+                     case 'z':                 /* size */
+                        indent_config_item(cfg_str, 3, "Size = ");
+                        p++;                   /* skip z */
+                        for (; *p && *p != ':'; p++) {
+                           Mmsg(temp, "%c", *p);
+                           pm_strcat(cfg_str, temp.c_str());
+                        }
+                        pm_strcat(cfg_str, "\n");
                         break;
                      case 'Z':                 /* compression */
-                        indent_config_item(cfg_str, 3, "compression = ");
+                        indent_config_item(cfg_str, 3, "Compression = ");
                         p++;                   /* skip Z */
                         if (*p >= '0' && *p <= '9') {
-                           Mmsg(temp, "gzip\n");
+                           Mmsg(temp, "GZIP\n");
                            pm_strcat(cfg_str, temp.c_str());
                            Mmsg(temp, "%c\n", *p);
                            pm_strcat(cfg_str, temp.c_str());
                            p++; /* skip number */
                         } else if (*p == 'o') {
-                           Mmsg(temp, "lzo\n");
+                           Mmsg(temp, "LZO\n");
                            pm_strcat(cfg_str, temp.c_str());
                            break;
                         } else if (*p == 'f') {
                            p++;
                            if (*p == 'f') {
-                              Mmsg(temp, "lzfast\n");
+                              Mmsg(temp, "LZFAST\n");
                               pm_strcat(cfg_str, temp.c_str());
                               break;
                            } else if (*p == '4') {
-                              Mmsg(temp, "lz4\n");
+                              Mmsg(temp, "LZ4\n");
                               pm_strcat(cfg_str, temp.c_str());
                               break;
                            } else if (*p == 'h') {
-                              Mmsg(temp, "lz4hc\n");
+                              Mmsg(temp, "LZ4HC\n");
                               pm_strcat(cfg_str, temp.c_str());
                               break;
                            }
                         }
                         break;
                      case 'X':
-                        indent_config_item(cfg_str, 3, "xattr = yes\n");
+                        indent_config_item(cfg_str, 3, "Xattr = Yes\n");
                         break;
                      default:
                         Emsg1(M_ERROR, 0, _("Unknown include/exclude option: %c\n"), *p);
@@ -1284,7 +1340,7 @@ bool FILESETRES::print_config(POOL_MEM &buff)
                }
 
                for (int k = 0; k < fo->regex.size(); k++) {
-                  Mmsg(temp, "Regex =  \"%s\"\n", fo->regex.get(k));
+                  Mmsg(temp, "Regex = \"%s\"\n", fo->regex.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
@@ -1299,7 +1355,7 @@ bool FILESETRES::print_config(POOL_MEM &buff)
                }
 
                for (int k = 0; k < fo->wild.size(); k++) {
-                  Mmsg(temp, "Wild =  \"%s\"\n", fo->wild.get(k));
+                  Mmsg(temp, "Wild = \"%s\"\n", fo->wild.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
@@ -1309,12 +1365,12 @@ bool FILESETRES::print_config(POOL_MEM &buff)
                }
 
                for (int k = 0; k < fo->wildfile.size(); k++) {
-                  Mmsg(temp, "Wild File =  \"%s\"\n", fo->wildfile.get(k));
+                  Mmsg(temp, "Wild File = \"%s\"\n", fo->wildfile.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
                for (int k = 0; k < fo->wildbase.size(); k++) {
-                  Mmsg(temp, "Wild Base =  \"%c %s\"\n", enhanced_wild ? 'B' : 'F', fo->wildbase.get(k));
+                  Mmsg(temp, "Wild Base = \"%c %s\"\n", enhanced_wild ? 'B' : 'F', fo->wildbase.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
@@ -1324,7 +1380,7 @@ bool FILESETRES::print_config(POOL_MEM &buff)
                }
 
                for (int k = 0; k < fo->fstype.size(); k++) {
-                  Mmsg(temp, "Fs Type =  \"%s\"\n", fo->fstype.get(k));
+                  Mmsg(temp, "Fs Type = \"%s\"\n", fo->fstype.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
@@ -1374,7 +1430,7 @@ bool FILESETRES::print_config(POOL_MEM &buff)
           */
          if (incexe->plugin_list.size()) {
             for (int l = 0; l < incexe->plugin_list.size(); l++) {
-               Mmsg(temp, "Plugin =  %s\n", incexe->plugin_list.get(l));
+               Mmsg(temp, "Plugin = %s\n", incexe->plugin_list.get(l));
                indent_config_item(cfg_str, 2, temp.c_str());
             }
          }
@@ -1672,8 +1728,8 @@ void free_resource(RES *sres, int type)
       if (res->res_dir.verid) {
          free(res->res_dir.verid);
       }
-      if (res->res_dir.keyencrkey) {
-         free(res->res_dir.keyencrkey);
+      if (res->res_dir.keyencrkey.value) {
+         free(res->res_dir.keyencrkey.value);
       }
       if (res->res_dir.audit_events) {
          delete res->res_dir.audit_events;
@@ -1870,6 +1926,9 @@ void free_resource(RES *sres, int type)
       }
       if (res->res_job.WriteBootstrap) {
          free(res->res_job.WriteBootstrap);
+      }
+      if (res->res_job.WriteVerifyList) {
+         free(res->res_job.WriteVerifyList);
       }
       if (res->res_job.PluginOptions) {
          free(res->res_job.PluginOptions);
@@ -2208,6 +2267,7 @@ bool populate_jobdefs()
 
             foreach_alist(rs, jobdefs->RunScripts) {
                elt = copy_runscript(rs);
+               elt->from_jobdef = true;
                job->RunScripts->append(elt); /* we have to free it */
             }
          }
@@ -2247,6 +2307,7 @@ bool populate_jobdefs()
                   }
                   *svalue = bstrdup(*def_svalue);
                   set_bit(i, job->hdr.item_present);
+                  set_bit(i, job->hdr.inherit_content);
                   break;
                case CFG_TYPE_RES:
                   /*
@@ -2261,6 +2322,7 @@ bool populate_jobdefs()
                   }
                   *svalue = *def_svalue;
                   set_bit(i, job->hdr.item_present);
+                  set_bit(i, job->hdr.inherit_content);
                   break;
                case CFG_TYPE_ALIST_RES:
                   /*
@@ -2268,6 +2330,7 @@ bool populate_jobdefs()
                    */
                   if (bit_is_set(i, job->jobdefs->hdr.item_present)) {
                      set_bit(i, job->hdr.item_present);
+                     set_bit(i, job->hdr.inherit_content);
                   }
                   break;
                case CFG_TYPE_BIT:
@@ -2289,6 +2352,7 @@ bool populate_jobdefs()
                   ivalue = (uint32_t *)((char *)job + offset);
                   *ivalue = *def_ivalue;
                   set_bit(i, job->hdr.item_present);
+                  set_bit(i, job->hdr.inherit_content);
                   break;
                case CFG_TYPE_TIME:
                case CFG_TYPE_SIZE64:
@@ -2303,6 +2367,7 @@ bool populate_jobdefs()
                   lvalue = (int64_t *)((char *)job + offset);
                   *lvalue = *def_lvalue;
                   set_bit(i, job->hdr.item_present);
+                  set_bit(i, job->hdr.inherit_content);
                   break;
                case CFG_TYPE_BOOL:
                   /*
@@ -2314,6 +2379,7 @@ bool populate_jobdefs()
                   bvalue = (bool *)((char *)job + offset);
                   *bvalue = *def_bvalue;
                   set_bit(i, job->hdr.item_present);
+                  set_bit(i, job->hdr.inherit_content);
                   break;
                default:
                   break;
@@ -2409,6 +2475,7 @@ static void store_actiononpurge(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2454,6 +2521,7 @@ static void store_device(LEX *lc, RES_ITEM *item, int index, int pass)
 
       scan_to_eol(lc);
       set_bit(index, res_all.hdr.item_present);
+      clear_bit(index, res_all.hdr.inherit_content);
    } else {
       store_resource(CFG_TYPE_ALIST_RES, lc, item, index, pass);
    }
@@ -2484,6 +2552,7 @@ static void store_migtype(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2511,6 +2580,7 @@ static void store_jobtype(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2538,6 +2608,7 @@ static void store_protocoltype(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 static void store_replace(LEX *lc, RES_ITEM *item, int index, int pass)
@@ -2562,6 +2633,7 @@ static void store_replace(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2588,6 +2660,7 @@ static void store_authprotocoltype(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2615,6 +2688,7 @@ static void store_authtype(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2642,6 +2716,7 @@ static void store_level(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2727,6 +2802,7 @@ static void store_acl(LEX *lc, RES_ITEM *item, int index, int pass)
       break;
    }
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -2756,6 +2832,7 @@ static void store_audit(LEX *lc, RES_ITEM *item, int index, int pass)
       break;
    }
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 /*
  * Store a runscript->when in a bit field
@@ -2835,31 +2912,36 @@ static void store_short_runscript(LEX *lc, RES_ITEM *item, int index, int pass)
       script->set_job_code_callback(job_code_callback_director);
 
       script->set_command(lc->str);
-      if (bstrcmp(item->name, "runbeforejob")) {
+      if (bstrcasecmp(item->name, "runbeforejob")) {
          script->when = SCRIPT_Before;
          script->set_target("");
-      } else if (bstrcmp(item->name, "runafterjob")) {
+      } else if (bstrcasecmp(item->name, "runafterjob")) {
          script->when = SCRIPT_After;
          script->on_success = true;
          script->on_failure = false;
          script->fail_on_error = false;
          script->set_target("");
-      } else if (bstrcmp(item->name, "clientrunafterjob")) {
+      } else if (bstrcasecmp(item->name, "clientrunafterjob")) {
          script->when = SCRIPT_After;
          script->on_success = true;
          script->on_failure = false;
          script->fail_on_error = false;
          script->set_target("%c");
-      } else if (bstrcmp(item->name, "clientrunbeforejob")) {
+      } else if (bstrcasecmp(item->name, "clientrunbeforejob")) {
          script->when = SCRIPT_Before;
          script->set_target("%c");
-      } else if (bstrcmp(item->name, "runafterfailedjob")) {
+      } else if (bstrcasecmp(item->name, "runafterfailedjob")) {
          script->when = SCRIPT_After;
          script->on_failure = true;
          script->on_success = false;
          script->fail_on_error = false;
          script->set_target("");
       }
+
+      /*
+       * Remember that the entry was configured in the short runscript form.
+       */
+      script->short_form = true;
 
       if (*runscripts == NULL) {
         *runscripts = New(alist(10, not_owned_by_alist));
@@ -2992,6 +3074,11 @@ static void store_runscript(LEX *lc, RES_ITEM *item, int index, int pass)
          script->target = NULL;
          script->set_target(res_runscript.target);
 
+         /*
+          * Remember that the entry was configured in the short runscript form.
+          */
+         script->short_form = false;
+
          (*runscripts)->append(script);
          script->debug();
       }
@@ -3004,6 +3091,7 @@ static void store_runscript(LEX *lc, RES_ITEM *item, int index, int pass)
 
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -3063,10 +3151,10 @@ extern "C" char *job_code_callback_director(JCR *jcr, const char *param)
          if (jcr->VolumeName) {
             return jcr->VolumeName;
          } else {
-            return _("*none*");
+            return (char *)_("*none*");
          }
       } else {
-         return _("*none*");
+         return (char *)_("*none*");
       }
       break;
    }
@@ -3415,7 +3503,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str)
    }
 }
 
-bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code)
+void init_dir_config(CONFIG *config, const char *configfile, int exit_code)
 {
    config->init(configfile,
                 NULL,
@@ -3430,5 +3518,11 @@ bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code)
                 R_LAST,
                 resources,
                 res_head);
+}
+
+bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code)
+{
+   init_dir_config( config, configfile, exit_code );
+
    return config->parse_config();
 }

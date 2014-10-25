@@ -320,6 +320,7 @@ static void store_authtype(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -374,6 +375,7 @@ static void store_devtype(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -408,6 +410,7 @@ static void store_io_direction(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -430,6 +433,7 @@ static void store_compressionalgorithm(LEX *lc, RES_ITEM *item, int index, int p
    }
    scan_to_eol(lc);
    set_bit(index, res_all.hdr.item_present);
+   clear_bit(index, res_all.hdr.inherit_content);
 }
 
 /*
@@ -633,8 +637,8 @@ void free_resource(RES *sres, int type)
       if (res->res_dir.tls_allowed_cns) {
          delete res->res_dir.tls_allowed_cns;
       }
-      if (res->res_dir.keyencrkey) {
-         free(res->res_dir.keyencrkey);
+      if (res->res_dir.keyencrkey.value) {
+         free(res->res_dir.keyencrkey.value);
       }
       break;
    case R_NDMP:

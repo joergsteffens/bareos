@@ -31,6 +31,7 @@
 
 /* Forward referenced subroutines */
 static void scan_types(LEX *lc, MSGSRES *msg, int dest, char *where, char *cmd);
+static const char *datatype_to_str(int type);
 
 extern CONFIG *my_config;             /* Our Global config */
 
@@ -168,7 +169,7 @@ static void store_msgs(LEX *lc, RES_ITEM *item, int index, int pass)
          /*
           * Pick up comma separated list of destinations
           */
-         for ( ;; ) {
+         for (;;) {
             token = lex_get_token(lc, T_NAME);   /* scan destination */
             dest = check_pool_memory_size(dest, dest_len + lc->str_len + 2);
             if (dest[0] != 0) {
@@ -219,6 +220,7 @@ static void store_msgs(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
    Dmsg0(900, "Done store_msgs\n");
 }
 
@@ -235,7 +237,7 @@ static void scan_types(LEX *lc, MSGSRES *msg, int dest_code, char *where, char *
    int msg_type = 0;
    char *str;
 
-   for ( ;; ) {
+   for (;;) {
       lex_get_token(lc, T_NAME);            /* expect at least one type */
       found = false;
       if (lc->str[0] == '!') {
@@ -257,7 +259,7 @@ static void scan_types(LEX *lc, MSGSRES *msg, int dest_code, char *where, char *
          return;
       }
 
-      if (msg_type == M_MAX+1) {         /* all? */
+      if (msg_type == M_MAX + 1) {       /* all? */
          for (i = 1; i <= M_MAX; i++) {      /* yes set all types */
             add_msg_dest(msg, dest_code, i, where, cmd);
          }
@@ -277,7 +279,7 @@ static void scan_types(LEX *lc, MSGSRES *msg, int dest_code, char *where, char *
 
 /*
  * This routine is ONLY for resource names
- *  Store a name at specified address.
+ * Store a name at specified address.
  */
 static void store_name(LEX *lc, RES_ITEM *item, int index, int pass)
 {
@@ -295,12 +297,13 @@ static void store_name(LEX *lc, RES_ITEM *item, int index, int pass)
     */
    if (*(item->value)) {
       scan_err2(lc, _("Attempt to redefine name \"%s\" to \"%s\"."),
-         *(item->value), lc->str);
+                *(item->value), lc->str);
       return;
    }
    *(item->value) = bstrdup(lc->str);
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -326,6 +329,7 @@ static void store_strname(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -347,6 +351,7 @@ static void store_str(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -373,6 +378,7 @@ static void store_dir(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -416,6 +422,7 @@ static void store_md5password(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -439,6 +446,7 @@ static void store_clearpassword(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -468,6 +476,7 @@ static void store_res(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -522,6 +531,7 @@ static void store_alist_res(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -562,6 +572,7 @@ static void store_alist_str(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -609,6 +620,7 @@ static void store_alist_dir(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -616,7 +628,6 @@ static void store_alist_dir(LEX *lc, RES_ITEM *item, int index, int pass)
  */
 static void store_plugin_names(LEX *lc, RES_ITEM *item, int index, int pass)
 {
-   int token;
    alist *list;
    char *p, *plugin_name, *plugin_names;
    URES *res_all = (URES *)my_config->m_res_all;
@@ -646,6 +657,7 @@ static void store_plugin_names(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -685,6 +697,7 @@ static void store_int32(LEX *lc, RES_ITEM *item, int index, int pass)
    *(item->i32value) = lc->int32_val;
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -698,6 +711,7 @@ static void store_pint32(LEX *lc, RES_ITEM *item, int index, int pass)
    *(item->ui32value) = lc->pint32_val;
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -711,6 +725,7 @@ static void store_int64(LEX *lc, RES_ITEM *item, int index, int pass)
    *(item->i64value) = lc->int64_val;
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -794,6 +809,7 @@ static void store_int_unit(LEX *lc, RES_ITEM *item, int index, int pass,
       scan_to_eol(lc);
    }
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
    Dmsg0(900, "Leave store_unit\n");
 }
 
@@ -865,6 +881,7 @@ static void store_time(LEX *lc, RES_ITEM *item, int index, int pass)
       scan_to_eol(lc);
    }
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -885,6 +902,7 @@ static void store_bit(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -905,6 +923,7 @@ static void store_bool(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -932,6 +951,7 @@ static void store_label(LEX *lc, RES_ITEM *item, int index, int pass)
    }
    scan_to_eol(lc);
    set_bit(index, res_all->hdr.item_present);
+   clear_bit(index, res_all->hdr.inherit_content);
 }
 
 /*
@@ -960,7 +980,7 @@ static void store_label(LEX *lc, RES_ITEM *item, int index, int pass)
  *     }
  *     ip = {
  *       addr = bluedot.thun.net
- (     }
+ *     }
  *   }
  *   negativ
  *   = { ip = { } }
@@ -1241,7 +1261,7 @@ static inline void print_config_size(RES_ITEM *item, POOL_MEM &cfg_str)
       pm_strcat(volspec, "0");
    } else {
       for (int t=0; modifier[t]; t++) {
-         Dmsg2(200, " %s bytes: %d\n", item->name,  bytes);
+         Dmsg2(200, " %s bytes: %lld\n", item->name, bytes);
          factor = bytes / multiplier[t];
          bytes  = bytes % multiplier[t];
          if (factor > 0) {
@@ -1366,10 +1386,10 @@ bool MSGSRES::print_config(POOL_MEM &buff)
       for (int j = 0; j < M_MAX - 1; j++) {
          if bit_is_set(msg_types[j].token, d->msg_types) {
             nr_set ++;
-            Mmsg(temp, ",%s" , msg_types[j].name );
+            Mmsg(temp, ",%s" , msg_types[j].name);
             pm_strcat(t, temp.c_str());
          } else {
-            Mmsg(temp, ",!%s" , msg_types[j].name );
+            Mmsg(temp, ",!%s" , msg_types[j].name);
             nr_unset++;
             pm_strcat(u, temp.c_str());
          }
@@ -1396,15 +1416,16 @@ bool BRSRES::print_config(POOL_MEM &buff)
    POOL_MEM temp;
    RES_ITEM *items;
    int i = 0;
-   int rindex = this->hdr.rcode - my_config->m_r_first;
+   int rindex;
 
    /*
     * If entry is not used, then there is nothing to print.
     */
-   if (this->hdr.rcode < my_config->m_r_first ||
+   if (this->hdr.rcode < (uint32_t)my_config->m_r_first ||
        this->hdr.refcnt <= 0) {
       return true;
    }
+   rindex = this->hdr.rcode - my_config->m_r_first;
 
    /*
     * Make sure the resource class has any items.
@@ -1437,81 +1458,100 @@ bool BRSRES::print_config(POOL_MEM &buff)
          print_item = true;
       } else if (items[i].flags & CFG_ITEM_DEFAULT) {
          /*
-          * Check for default values.
+          * See if the item has inherited content from somewhere.
+          * If that is true there is no need to check the whole default setting.
           */
-         switch (items[i].type) {
-         case CFG_TYPE_STR:
-         case CFG_TYPE_DIR:
-         case CFG_TYPE_NAME:
-         case CFG_TYPE_STRNAME:
-            print_item = !bstrcmp(*(items[i].value), items[i].default_value);
-            break;
-         case CFG_TYPE_INT32:
-            print_item = (*(items[i].i32value) != str_to_int32(items[i].default_value));
-            break;
-         case CFG_TYPE_PINT32:
-            print_item = (*(items[i].ui32value) != (uint32_t)str_to_int32(items[i].default_value));
-            break;
-         case CFG_TYPE_INT64:
-            print_item = (*(items[i].i64value) != str_to_int64(items[i].default_value));
-            break;
-         case CFG_TYPE_SPEED:
-            print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
-            break;
-         case CFG_TYPE_SIZE64:
-            print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
-            break;
-         case CFG_TYPE_SIZE32:
-            print_item = (*(items[i].ui32value) != (uint32_t)str_to_int32(items[i].default_value));
-            break;
-         case CFG_TYPE_TIME:
-            print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
-            break;
-         case CFG_TYPE_BOOL: {
-            bool default_value = bstrcasecmp(items[i].default_value, "true") ||
-                                 bstrcasecmp(items[i].default_value, "yes");
+         if (!bit_is_set(i, this->hdr.inherit_content)) {
+            /*
+             * Check for default values.
+             */
+            switch (items[i].type) {
+            case CFG_TYPE_STR:
+            case CFG_TYPE_DIR:
+            case CFG_TYPE_NAME:
+            case CFG_TYPE_STRNAME:
+               print_item = !bstrcmp(*(items[i].value), items[i].default_value);
+               break;
+            case CFG_TYPE_INT32:
+               print_item = (*(items[i].i32value) != str_to_int32(items[i].default_value));
+               break;
+            case CFG_TYPE_PINT32:
+               print_item = (*(items[i].ui32value) != (uint32_t)str_to_int32(items[i].default_value));
+               break;
+            case CFG_TYPE_INT64:
+               print_item = (*(items[i].i64value) != str_to_int64(items[i].default_value));
+               break;
+            case CFG_TYPE_SPEED:
+               print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
+               break;
+            case CFG_TYPE_SIZE64:
+               print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
+               break;
+            case CFG_TYPE_SIZE32:
+               print_item = (*(items[i].ui32value) != (uint32_t)str_to_int32(items[i].default_value));
+               break;
+            case CFG_TYPE_TIME:
+               print_item = (*(items[i].ui64value) != (uint64_t)str_to_int64(items[i].default_value));
+               break;
+            case CFG_TYPE_BOOL: {
+               bool default_value = bstrcasecmp(items[i].default_value, "true") ||
+                                    bstrcasecmp(items[i].default_value, "yes");
 
-            print_item = (*items[i].boolvalue != default_value);
-            break;
-         }
-         default:
-            break;
+               print_item = (*items[i].boolvalue != default_value);
+               break;
+            }
+            default:
+               break;
+            }
          }
       } else {
-         switch (items[i].type) {
-         case CFG_TYPE_STR:
-         case CFG_TYPE_DIR:
-         case CFG_TYPE_NAME:
-         case CFG_TYPE_STRNAME:
-            print_item = *(items[i].value) != NULL;
-            break;
-         case CFG_TYPE_INT32:
-            print_item = (*(items[i].i32value) > 0);
-            break;
-         case CFG_TYPE_PINT32:
-            print_item = (*(items[i].ui32value) > 0);
-            break;
-         case CFG_TYPE_INT64:
-            print_item = (*(items[i].i64value) > 0);
-            break;
-         case CFG_TYPE_SPEED:
-            print_item = (*(items[i].ui64value) > 0);
-            break;
-         case CFG_TYPE_SIZE64:
-            print_item = (*(items[i].ui64value) > 0);
-            break;
-         case CFG_TYPE_SIZE32:
-            print_item = (*(items[i].ui32value) > 0);
-            break;
-         case CFG_TYPE_TIME:
-            print_item = (*(items[i].ui64value) > 0);
-            break;
-         case CFG_TYPE_BOOL:
-            print_item = (*items[i].boolvalue != false);
-            break;
-         default:
-            break;
+         /*
+          * See if the item has inherited content from somewhere.
+          * If that is true there is no need to check the whole default setting.
+          */
+         if (!bit_is_set(i, this->hdr.inherit_content)) {
+            switch (items[i].type) {
+            case CFG_TYPE_STR:
+            case CFG_TYPE_DIR:
+            case CFG_TYPE_NAME:
+            case CFG_TYPE_STRNAME:
+               print_item = *(items[i].value) != NULL;
+               break;
+            case CFG_TYPE_INT32:
+               print_item = (*(items[i].i32value) > 0);
+               break;
+            case CFG_TYPE_PINT32:
+               print_item = (*(items[i].ui32value) > 0);
+               break;
+            case CFG_TYPE_INT64:
+               print_item = (*(items[i].i64value) > 0);
+               break;
+            case CFG_TYPE_SPEED:
+               print_item = (*(items[i].ui64value) > 0);
+               break;
+            case CFG_TYPE_SIZE64:
+               print_item = (*(items[i].ui64value) > 0);
+               break;
+            case CFG_TYPE_SIZE32:
+               print_item = (*(items[i].ui32value) > 0);
+               break;
+            case CFG_TYPE_TIME:
+               print_item = (*(items[i].ui64value) > 0);
+               break;
+            case CFG_TYPE_BOOL:
+               print_item = (*items[i].boolvalue != false);
+               break;
+            default:
+               break;
+            }
          }
+      }
+
+      /*
+       * See if the item has inherited content from somewhere.
+       */
+      if (bit_is_set(i, this->hdr.inherit_content)) {
+         continue;
       }
 
       switch (items[i].type) {
@@ -1733,4 +1773,232 @@ bool BRSRES::print_config(POOL_MEM &buff)
    pm_strcat(buff, cfg_str.c_str());
 
    return true;
+}
+
+static void add_indent(POOL_MEM &cfg_str, int level)
+{
+   for (int i = 0; i < level; i++) {
+      pm_strcat(cfg_str, DEFAULT_INDENT_STRING);
+   }
+}
+
+void add_json_pair_plain(POOL_MEM &cfg_str, int level, const char *string, const char *value)
+{
+   POOL_MEM temp;
+
+   add_indent(cfg_str, level);
+   Mmsg(temp, "\"%s\": %s,\n", string, value);
+   pm_strcat(cfg_str, temp.c_str());
+}
+
+void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, const char *value)
+{
+   POOL_MEM temp;
+
+   Mmsg(temp, "\"%s\"", value);
+   add_json_pair_plain(cfg_str, level, string, temp.c_str());
+}
+
+void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, int value)
+{
+   POOL_MEM temp;
+
+   Mmsg(temp, "%d", value);
+   add_json_pair_plain(cfg_str, level, string, temp.c_str());
+}
+
+void add_json_object_start(POOL_MEM &cfg_str, int level, const char *string)
+{
+   add_indent(cfg_str, level);
+   POOL_MEM temp;
+   if (bstrcmp(string, "")) {
+      Mmsg(temp, "{\n");
+   } else {
+      Mmsg(temp, "\"%s\": {\n", string);
+   }
+   pm_strcat(cfg_str, temp.c_str());
+}
+
+void add_json_object_end(POOL_MEM &cfg_str, int level, const char *string)
+{
+   add_indent(cfg_str, level + 1);
+   pm_strcat(cfg_str, "\"\": null\n");
+   add_indent(cfg_str, level);
+   if (bstrcmp(string, "")) {
+      pm_strcat(cfg_str, "}\n");
+   } else {
+      pm_strcat(cfg_str, "},\n");
+   }
+}
+
+/*
+ * prints a resource item schema description in JSON format.
+ * Example output:
+ *
+ *   "filesetacl": {
+ *     "datatype": "BOOLEAN",
+ *     "datatype_number": 51,
+ *     "code": int
+ *     [ "defaultvalue": "xyz", ]
+ *     [ "required": true, ]
+ *     [ "alias": true, ]
+ *     [ "deprecated": true, ]
+ *     [ "equals": true, ]
+ *     ...
+ *   }
+ */
+bool print_res_item_schema_json(POOL_MEM &buff, int level, RES_ITEM *item)
+{
+    add_json_object_start(buff, level, item->name);
+
+    add_json_pair(buff, level + 1, "datatype", datatype_to_str(item->type));
+    add_json_pair(buff, level + 1, "datatype_number", item->type);
+    add_json_pair(buff, level + 1, "code", item->code);
+
+    if (item->flags & CFG_ITEM_ALIAS) {
+       add_json_pair(buff, level + 1, "alias", "true");
+    }
+    if (item->flags & CFG_ITEM_DEFAULT) {
+       add_json_pair(buff, level + 1, "default_value", item->default_value);
+    }
+    if (item->flags & CFG_ITEM_PLATFORM_SPECIFIC) {
+       add_json_pair(buff, level + 1, "platform_specific", "true");
+    }
+    if (item->flags & CFG_ITEM_DEPRECATED) {
+       add_json_pair_plain(buff, level + 1, "deprecated", "true");
+    }
+    if (item->flags & CFG_ITEM_NO_EQUALS) {
+       add_json_pair_plain(buff, level + 1, "equals", "false");
+    } else {
+       add_json_pair_plain(buff, level + 1, "equals", "true");
+    }
+    if (item->flags & CFG_ITEM_REQUIRED) {
+       add_json_pair_plain(buff, level + 1, "required", "true");
+    }
+    add_json_object_end(buff, level, item->name);
+
+   return true;
+}
+
+/*
+ * Print configuration file schema in json format
+ */
+bool print_config_schema_json(POOL_MEM &buffer)
+{
+   RES_TABLE *resources = my_config->m_resources;
+
+   add_json_object_start(buffer, 0, "");
+   for (int r = 0; resources[r].name; r++) {
+      RES_TABLE resource = my_config->m_resources[r];
+
+      add_json_object_start(buffer, 1, resource.name);
+      if (resource.items) {
+         RES_ITEM* items = resource.items;
+         for (int i = 0; items[i].name; i++) {
+            print_res_item_schema_json(buffer, 2, &items[i]);
+         }
+      }
+      add_json_object_end(buffer, 1, resource.name);
+   }
+   add_json_object_end(buffer, 0, "");
+
+   return true;
+}
+
+static DATATYPE_NAME datatype_names[] = {
+   /*
+    * Standard resource types. handlers in res.c
+    */
+   { CFG_TYPE_STR, "STRING", "String" },
+   { CFG_TYPE_DIR, "DIRECTORY", "directory" },
+   { CFG_TYPE_MD5PASSWORD, "MD5PASSWORD", "Password in MD5 format" },
+   { CFG_TYPE_CLEARPASSWORD, "CLEARPASSWORD", "Password as cleartext" },
+   { CFG_TYPE_AUTOPASSWORD, "AUTOPASSWORD", "Password stored in clear when needed otherwise hashed" },
+   { CFG_TYPE_NAME, "NAME", "Name" },
+   { CFG_TYPE_STRNAME, "STRNAME", "String name" },
+   { CFG_TYPE_RES, "RES", "Resource" },
+   { CFG_TYPE_ALIST_RES, "RESOURCE_LIST", "Resource list" },
+   { CFG_TYPE_ALIST_STR, "STRING_LIST", "string list" },
+   { CFG_TYPE_ALIST_DIR, "DIRECTORY_LIST", "directory list" },
+   { CFG_TYPE_INT32, "INT32", "Integer 32 bits" },
+   { CFG_TYPE_PINT32, "PINT32", "Positive 32 bits Integer (unsigned)" },
+   { CFG_TYPE_MSGS, "MESSAGES", "Message resource" },
+   { CFG_TYPE_INT64, "INT64", "Integer 64 bits" },
+   { CFG_TYPE_BIT, "BIT", "Bitfield" },
+   { CFG_TYPE_BOOL, "BOOLEAN", "boolean" },
+   { CFG_TYPE_TIME, "TIME", "time" },
+   { CFG_TYPE_SIZE64, "SIZE64", "64 bits file size" },
+   { CFG_TYPE_SIZE32, "SIZE32", "32 bits file size" },
+   { CFG_TYPE_SPEED, "SPEED", "speed" },
+   { CFG_TYPE_DEFS, "DEFS", "definition" },
+   { CFG_TYPE_LABEL, "LABEL", "label" },
+   { CFG_TYPE_ADDRESSES, "ADDRESSES", "ip addresses list" },
+   { CFG_TYPE_ADDRESSES_ADDRESS, "ADDRESS", "ip address" },
+   { CFG_TYPE_ADDRESSES_PORT, "PORT", "network port" },
+   { CFG_TYPE_PLUGIN_NAMES, "PLUGIN_NAMES", "Plugin Name(s)" },
+
+   /*
+    * Director resource types. handlers in dird_conf.
+    */
+   { CFG_TYPE_ACL, "ACL", "User Access Control List" },
+   { CFG_TYPE_AUDIT, "AUDIT_COMMAND_LIST", "Auditing Command List" },
+   { CFG_TYPE_AUTHPROTOCOLTYPE, "AUTH_PROTOCOL_TYPE", "Authentication Protocol" },
+   { CFG_TYPE_AUTHTYPE, "AUTH_TYPE", "Authentication Type" },
+   { CFG_TYPE_DEVICE, "DEVICE", "Device resource" },
+   { CFG_TYPE_JOBTYPE, "JOB_TYPE", "Type of Job" },
+   { CFG_TYPE_PROTOCOLTYPE, "PROTOCOL_TYPE", "Protocol" },
+   { CFG_TYPE_LEVEL, "BACKUP_LEVEL", "Backup Level" },
+   { CFG_TYPE_REPLACE, "REPLACE_OPTION", "Replace option" },
+   { CFG_TYPE_SHRTRUNSCRIPT, "RUNSCRIPT_SHORT", "Short Runscript definition" },
+   { CFG_TYPE_RUNSCRIPT, "RUNSCRIPT", "Runscript" },
+   { CFG_TYPE_RUNSCRIPT_CMD, "RUNSCRIPT_COMMAND", "Runscript Command" },
+   { CFG_TYPE_RUNSCRIPT_TARGET, "RUNSCRIPT_TARGET", "Runscript Target (Host)" },
+   { CFG_TYPE_RUNSCRIPT_BOOL, "RUNSCRIPT_BOOLEAN", "Runscript Boolean" },
+   { CFG_TYPE_RUNSCRIPT_WHEN, "RUNSCRIPT_WHEN", "Runscript When expression" },
+   { CFG_TYPE_MIGTYPE, "MIGRATION_TYPE", "Migration Type" },
+   { CFG_TYPE_INCEXC, "INCLUDE_EXCLUDE_ITEM", "Include/Exclude item" },
+   { CFG_TYPE_RUN, "SCHEDULE_RUN_COMMAND", "Schedule Run Command" },
+   { CFG_TYPE_ACTIONONPURGE, "ACTION_ON_PURGE", "Action to perform on Purge" },
+
+   /*
+    * Director fileset options. handlers in dird_conf.
+    */
+   { CFG_TYPE_FNAME, "FILENAME", "Filename" },
+   { CFG_TYPE_PLUGINNAME, "PLUGIN_NAME", "Pluginname" },
+   { CFG_TYPE_EXCLUDEDIR, "EXCLUDE_DIRECTORY", "Exclude directory" },
+   { CFG_TYPE_OPTIONS, "OPTIONS", "Options block" },
+   { CFG_TYPE_OPTION, "OPTION", "Option of Options block" },
+   { CFG_TYPE_REGEX, "REGEX", "Regular Expression" },
+   { CFG_TYPE_BASE, "BASEJOB", "Basejob Expression" },
+   { CFG_TYPE_WILD, "WILDCARD", "Wildcard Expression" },
+   { CFG_TYPE_PLUGIN, "PLUGIN", "Plugin definition" },
+   { CFG_TYPE_FSTYPE, "FILESYSTEM_TYPE", "FileSytem match criterium (UNIX)" },
+   { CFG_TYPE_DRIVETYPE, "DRIVE_TYPE", "DriveType match criterium (Windows)" },
+   { CFG_TYPE_META, "META_TAG", "Meta tag" },
+
+   /*
+    * Storage daemon resource types
+    */
+   { CFG_TYPE_DEVTYPE, "DEVICE_TYPE", "Device Type" },
+   { CFG_TYPE_MAXBLOCKSIZE, "MAX_BLOCKSIZE", "Maximum Blocksize" },
+   { CFG_TYPE_IODIRECTION, "IO_DIRECTION", "IO Direction" },
+   { CFG_TYPE_CMPRSALGO, "COMPRESSION_ALGORITHM", "Compression Algorithm" },
+
+   /*
+    * File daemon resource types
+    */
+   { CFG_TYPE_CIPHER, "ENCRYPTION_CIPHER", "Encryption Cipher" },
+
+   { 0, NULL, NULL }
+};
+
+static const char *datatype_to_str(int type)
+{
+   for (int i=0; datatype_names[i].name; i++) {
+      if (datatype_names[i].number == type) {
+         return datatype_names[i].name;
+      }
+   }
+
+   return "unknown";
 }
