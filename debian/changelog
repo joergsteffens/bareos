@@ -1,6 +1,8 @@
 bareos (14.2.1+20141017gitc6c5b56-1) unstable; urgency=medium
 
   * Import newer upstream snapshot.
+  * Use GnuTLS instead of OpenSSL to avoid licensing problems.
+  * Don't generate debian/control during build.
 
  -- Evgeni Golov <evgeni@debian.org>  Sat, 25 Oct 2014 21:32:39 +0200
 
