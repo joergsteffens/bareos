@@ -1,0 +1,38 @@
+bareos (14.2.1+20141017gitc6c5b56-4) unstable; urgency=medium
+
+  [ Joerg Steffens ]
+  * clearified description for bareos-database-common.
+    Thanks to Davide Prina (Closes: #768606)
+  * on purge, also remove /etc/bareos/.rndpwd.
+    Thanks to Andreas Beckmann (Closes: #769096)
+  * get rid of circular dependencies.
+    Thanks to Bill Allombert (Closes: #769536)
+
+ -- Evgeni Golov <evgeni@debian.org>  Tue, 02 Dec 2014 10:23:53 +0100
+
+bareos (14.2.1+20141017gitc6c5b56-3) unstable; urgency=medium
+
+  * do not install files as conffiles in /etc/bareos (Closes: #767819)
+
+ -- Evgeni Golov <evgeni@debian.org>  Tue, 04 Nov 2014 07:19:30 +0100
+
+bareos (14.2.1+20141017gitc6c5b56-2) unstable; urgency=medium
+
+  * Add more conflicts against Bacula packages.
+    Thanks to Ralf Treinen <treinen@free.fr> (Closes: #767058)
+
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 30 Oct 2014 17:17:58 +0100
+
+bareos (14.2.1+20141017gitc6c5b56-1) unstable; urgency=medium
+
+  * Import newer upstream snapshot.
+  * Use GnuTLS instead of OpenSSL to avoid licensing problems.
+  * Don't generate debian/control during build.
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 25 Oct 2014 21:32:39 +0200
+
+bareos (14.2.1+20140930git1339225-1) unstable; urgency=medium
+
+  * Initial Debian release. (Closes: Bug#762459)
+
+ -- Evgeni Golov <evgeni@debian.org>  Wed, 08 Oct 2014 13:21:16 +0200
