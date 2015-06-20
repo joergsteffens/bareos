@@ -1125,7 +1125,7 @@ License: AGPL-3.0 with Bacula and other exceptions
 
 Files: src/lib/bmtio.h
 Copyright: 1982,1986,1993 The Regents of the University of California
-License: permissive
+License: BSD-3-clause
     /*-
     * Copyright (c) 1982, 1986, 1993
     * The Regents of the University of California.  All rights reserved.
@@ -1166,7 +1166,7 @@ License: OpenLDAP
 
 Files: src/ndmp/md5.h src/ndmp/md5c.c
 Copyright:  1991,1992, RSA Data Security, Inc.
-License: permissive
+License: rsa-md5
     Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
     rights reserved.
     .
