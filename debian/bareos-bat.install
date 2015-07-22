@@ -1,0 +1,7 @@
+/etc/bareos/bat.conf       /usr/lib/bareos/defaultconfigs
+/usr/bin/bat
+/usr/share/pixmaps/bat.png
+/usr/share/pixmaps/bat.svg
+/usr/share/applications/bat.desktop
+/usr/share/man/man1/bat.1.gz
+/usr/share/doc/bareos/html/

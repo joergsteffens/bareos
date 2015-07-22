@@ -1,0 +1,5 @@
+/usr/lib/bareos/scripts/bconsole
+/etc/bareos/bconsole.conf      /usr/lib/bareos/defaultconfigs
+/usr/bin/bconsole
+/usr/sbin/bconsole
+/usr/share/man/man1/bconsole.1.gz

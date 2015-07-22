@@ -1,0 +1,4 @@
+/etc/bareos/bareos-fd.conf     /usr/lib/bareos/defaultconfigs
+/usr/sbin/bareos-fd
+/usr/lib/bareos/plugins/bpipe-fd.so
+/usr/share/man/man8/bareos-fd.8.gz

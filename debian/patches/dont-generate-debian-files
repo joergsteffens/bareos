@@ -1,0 +1,102 @@
+commit fe4ba264fc3234045e773c38aa14920d43915981
+Author: Evgeni Golov <evgeni@debian.org>
+Date:   Wed Jul 22 17:57:03 2015 +0200
+
+    do not try to generate debian/ files via automake
+
+diff --git a/autoconf/configure.in b/autoconf/configure.in
+index e0e054c..3f006dc 100644
+--- a/autoconf/configure.in
++++ b/autoconf/configure.in
+@@ -3947,43 +3947,6 @@ debian|ubuntu|univention)
+    DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
+    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
+    PFILES="${PFILES} ${DEBIAN_CONTROL} \
+-      debian/bareos-bat.install \
+-      debian/bareos-bat.postinst \
+-      debian/bareos-bconsole.install \
+-      debian/bareos-bconsole.postinst \
+-      debian/bareos-common.install \
+-      debian/bareos-common.postinst \
+-      debian/bareos-common.preinst \
+-      debian/bareos-database-common.config \
+-      debian/bareos-database-common.install \
+-      debian/bareos-database-common.postinst \
+-      debian/bareos-database-mysql.install \
+-      debian/bareos-database-postgresql.install \
+-      debian/bareos-database-sqlite3.install \
+-      debian/bareos-database-tools.install \
+-      debian/bareos-devel.install \
+-      debian/bareos-director-python-plugin.install \
+-      debian/bareos-director.bareos-dir.init \
+-      debian/bareos-director.install \
+-      debian/bareos-director.postinst \
+-      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-python-plugin.install \
+-      debian/bareos-filedaemon.bareos-fd.init \
+-      debian/bareos-filedaemon.install \
+-      debian/bareos-filedaemon.postinst \
+-      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-fifo.postinst \
+-      debian/bareos-storage-fifo.install \
+-      debian/bareos-storage-python-plugin.install \
+-      debian/bareos-storage-tape.postinst \
+-      debian/bareos-storage-tape.install \
+-      debian/bareos-storage.bareos-sd.init \
+-      debian/bareos-storage.install \
+-      debian/bareos-storage.postinst \
+-      debian/bareos-storage.preinst \
+-      debian/bareos-tools.install \
+-      debian/bareos-traymonitor.install \
+-      debian/bareos-traymonitor.postinst \
+       platforms/debian/Makefile \
+       platforms/debian/set_dbconfig_vars.sh"
+    case "$DISTNAME" in
+diff --git a/configure b/configure
+index 9952a62..a1e97dd 100755
+--- a/configure
++++ b/configure
+@@ -32153,43 +32153,6 @@ debian|ubuntu|univention)
+    DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
+    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
+    PFILES="${PFILES} ${DEBIAN_CONTROL} \
+-      debian/bareos-bat.install \
+-      debian/bareos-bat.postinst \
+-      debian/bareos-bconsole.install \
+-      debian/bareos-bconsole.postinst \
+-      debian/bareos-common.install \
+-      debian/bareos-common.postinst \
+-      debian/bareos-common.preinst \
+-      debian/bareos-database-common.config \
+-      debian/bareos-database-common.install \
+-      debian/bareos-database-common.postinst \
+-      debian/bareos-database-mysql.install \
+-      debian/bareos-database-postgresql.install \
+-      debian/bareos-database-sqlite3.install \
+-      debian/bareos-database-tools.install \
+-      debian/bareos-devel.install \
+-      debian/bareos-director-python-plugin.install \
+-      debian/bareos-director.bareos-dir.init \
+-      debian/bareos-director.install \
+-      debian/bareos-director.postinst \
+-      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-python-plugin.install \
+-      debian/bareos-filedaemon.bareos-fd.init \
+-      debian/bareos-filedaemon.install \
+-      debian/bareos-filedaemon.postinst \
+-      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-fifo.postinst \
+-      debian/bareos-storage-fifo.install \
+-      debian/bareos-storage-python-plugin.install \
+-      debian/bareos-storage-tape.postinst \
+-      debian/bareos-storage-tape.install \
+-      debian/bareos-storage.bareos-sd.init \
+-      debian/bareos-storage.install \
+-      debian/bareos-storage.postinst \
+-      debian/bareos-storage.preinst \
+-      debian/bareos-tools.install \
+-      debian/bareos-traymonitor.install \
+-      debian/bareos-traymonitor.postinst \
+       platforms/debian/Makefile \
+       platforms/debian/set_dbconfig_vars.sh"
+    case "$DISTNAME" in

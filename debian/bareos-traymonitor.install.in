@@ -1,6 +1,0 @@
-/etc/xdg/autostart/bareos-tray-monitor.desktop
-@sysconfdir@/tray-monitor.conf  @configtemplatedir@
-/usr/bin/bareos-tray-monitor
-/usr/share/man/man1/bareos-tray-monitor.1.gz
-/usr/share/applications/bareos-tray-monitor.desktop
-/usr/share/pixmaps/bareos-tray-monitor.xpm
