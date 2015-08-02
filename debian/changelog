@@ -1,3 +1,38 @@
+bareos (14.2.5-1) unstable; urgency=medium
+
+  * New upstream release.
+    + Fixes corruption when using multi-volume disk-based jobs
+      Closes: #788543
+
+  [ Joerg Steffens ]
+  * fixes some warnings from qa.debian.org
+  * set Debian section to python for Python packages
+  * fixes usage of dbconfig-common when installing
+  * fixes migrating from psql with password
+  * fixes a problem when migrating to dbconfig
+  * changed package dependencies
+    Closes: #771870
+
+  [ Marco van Wieringen ]
+  * Add missing bpipe fd plugin to filedaemon pkg.
+    Closes: #784923
+
+  [ Felix Geyer ]
+  * add autopkgtests
+    Closes: #788587
+
+  [ Evgeni Golov ]
+  * merge back changes from debian on top of the new branch
+  * Standards-Version: 3.9.6
+  * update d/copyright
+  * use debhelper 9
+  * do not set DH_VERBOSE / DH_OPTIONS=-v
+  * do not generate files in debian/ by upstream scripts
+  * also set dbuser and dbname in apply_dbconfig_settings()
+  * Switch Git URL to Alioth
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 02 Aug 2015 19:46:11 +0200
+
 bareos (14.2.1+20141017gitc6c5b56-4) unstable; urgency=medium
 
   [ Joerg Steffens ]
