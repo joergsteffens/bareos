@@ -1,0 +1,21 @@
+commit 785270fab7b90c7c3b827568346552cac44380ca
+Author: Evgeni Golov <evgeni@debian.org>
+Date:   Mon Aug 3 18:47:46 2015 +0200
+
+    call openssl rand with an excplicit RANDFILE=/dev/urandom
+    
+    this will prevent the creation of $HOME/.rnd in the users home
+
+diff --git a/scripts/bareos-config-lib.sh.in b/scripts/bareos-config-lib.sh.in
+index cc2daa9..751a887 100644
+--- a/scripts/bareos-config-lib.sh.in
++++ b/scripts/bareos-config-lib.sh.in
+@@ -733,7 +733,7 @@ initialize_passwords()
+     if [ ! -f ${DIR_CFG}/.rndpwd ]; then
+         for string in ${PASSWORD_SUBST}
+         do
+-           pass=`openssl rand -base64 33`
++           pass=`RANDFILE=/dev/urandom openssl rand -base64 33`
+            echo "${string}=${pass}" >> ${DIR_CFG}/.rndpwd
+         done
+         chmod 400 ${DIR_CFG}/.rndpwd
