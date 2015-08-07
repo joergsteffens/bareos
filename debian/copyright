@@ -1132,32 +1132,6 @@ Files: src/lmdb/*
 Copyright: 2011-2014 Howard Chu, Symas Corp.
 License: OpenLDAP
 
-
-Files: src/ndmp/md5.h src/ndmp/md5c.c
-Copyright:  1991,1992, RSA Data Security, Inc.
-License: rsa-md5
-    Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
-    rights reserved.
-    .
-    License to copy and use this software is granted provided that it
-    is identified as the "RSA Data Security, Inc. MD5 Message-Digest
-    Algorithm" in all material mentioning or referencing this software
-    or this function.
-    .
-    License is also granted to make and use derivative works provided
-    that such works are identified as "derived from the RSA Data
-    Security, Inc. MD5 Message-Digest Algorithm" in all material
-    mentioning or referencing the derived work.
-    .
-    RSA Data Security, Inc. makes no representations concerning either
-    the merchantability of this software or the suitability of this
-    software for any particular purpose. It is provided "as is"
-    without express or implied warranty of any kind.
-    .
-    These notices must be retained in any copies of any part of this
-    documentation and/or software.
-
-
 Files: src/ndmp/*
 Copyright: 1998-2002 Traakan, Inc., Los Altos, CA
 License: BSD-2-clause
@@ -1189,6 +1163,29 @@ License: BSD-2-clause
     * SUCH DAMAGE.
     */
 
+Files: src/ndmp/md5.h src/ndmp/md5c.c
+Copyright:  1991,1992, RSA Data Security, Inc.
+License: rsa-md5
+    Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
+    rights reserved.
+    .
+    License to copy and use this software is granted provided that it
+    is identified as the "RSA Data Security, Inc. MD5 Message-Digest
+    Algorithm" in all material mentioning or referencing this software
+    or this function.
+    .
+    License is also granted to make and use derivative works provided
+    that such works are identified as "derived from the RSA Data
+    Security, Inc. MD5 Message-Digest Algorithm" in all material
+    mentioning or referencing the derived work.
+    .
+    RSA Data Security, Inc. makes no representations concerning either
+    the merchantability of this software or the suitability of this
+    software for any particular purpose. It is provided "as is"
+    without express or implied warranty of any kind.
+    .
+    These notices must be retained in any copies of any part of this
+    documentation and/or software.
 
 Files: src/lib/bregex.h src/lib/bregex.c
 Copyright: 1991 Tatu Ylonen, Espoo, Finland
