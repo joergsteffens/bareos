@@ -1,0 +1,9 @@
+Document: bareos-bat
+Title: Bareos Administration Tool user's guide
+Abstract:  The bat is the graphical interface
+ to communicate with and administer the bareos director daemon.
+Section: File Management
+
+Format: HTML
+Index: /usr/share/doc/bareos/html/bat/index.html
+Files: /usr/share/doc/bareos/html/bat/*.html
