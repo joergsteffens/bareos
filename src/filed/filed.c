@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -33,6 +33,7 @@
 /* Imported Functions */
 extern void *handle_connection_request(void *dir_sock);
 extern bool parse_fd_config(CONFIG *config, const char *configfile, int exit_code);
+extern void prtmsg(void *sock, const char *fmt, ...);
 
 /* Forward referenced functions */
 static bool check_resources();
@@ -50,29 +51,28 @@ void *start_heap;
 
 char *configfile = NULL;
 static bool foreground = false;
-static workq_t dir_workq;             /* queue of work from Director */
-static alist *sock_fds;
-static pthread_t tcp_server_tid;
 
 static void usage()
 {
    fprintf(stderr, _(
 PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
-"Usage: bareos-fd [-f -s] [-c config_file] [-d debug_level]\n"
+"Usage: bareos-fd [options] [-c config_file]\n"
 "        -b          backup only mode\n"
 "        -c <file>   use <file> as configuration file\n"
 "        -d <nn>     set debug level to <nn>\n"
-"        -dt         print a timestamp in debug output\n"
+"        -dt         print timestamp in debug output\n"
 "        -f          run in foreground (for debugging)\n"
-"        -g          groupid\n"
+"        -g <group>  run as group <group>\n"
 "        -k          keep readall capabilities\n"
 "        -m          print kaboom output (for debugging)\n"
 "        -r          restore only mode\n"
 "        -s          no signals (for debugging)\n"
 "        -t          test configuration file and exit\n"
-"        -u          userid\n"
+"        -u <user>   run as user <user>\n"
 "        -v          verbose user messages\n"
+"        -xc         print configuration and exit\n"
+"        -xs         print configuration file schema in JSON format and exit\n"
 "        -?          print this message.\n"
 "\n"), 2000, VERSION, BDATE);
 
@@ -93,6 +93,8 @@ int main (int argc, char *argv[])
 {
    int ch;
    bool test_config = false;
+   bool export_config = false;
+   bool export_config_schema = false;
    bool keep_readall_caps = false;
    char *uid = NULL;
    char *gid = NULL;
@@ -107,7 +109,7 @@ int main (int argc, char *argv[])
    init_msg(NULL, NULL);
    daemon_start_time = time(NULL);
 
-   while ((ch = getopt(argc, argv, "bc:d:fg:kmrstu:v?")) != -1) {
+   while ((ch = getopt(argc, argv, "bc:d:fg:kmrstu:vx:?")) != -1) {
       switch (ch) {
       case 'b':
          backup_only_mode = true;
@@ -167,10 +169,20 @@ int main (int argc, char *argv[])
          verbose++;
          break;
 
+      case 'x':                    /* export configuration/schema and exit */
+         if (*optarg == 's') {
+            export_config_schema = true;
+         } else if (*optarg == 'c') {
+            export_config = true;
+         } else {
+            usage();
+         }
+         break;
+
       case '?':
       default:
          usage();
-
+         break;
       }
    }
    argc -= optind;
@@ -187,6 +199,10 @@ int main (int argc, char *argv[])
       usage();
    }
 
+   if (configfile == NULL) {
+      configfile = bstrdup(CONFIG_FILE);
+   }
+
    if (!uid && keep_readall_caps) {
       Emsg0(M_ERROR_TERM, 0, _("-k option has no meaning without -u option.\n"));
    }
@@ -198,20 +214,37 @@ int main (int argc, char *argv[])
       drop(uid, gid, keep_readall_caps);
    }
 
-   tcp_server_tid = pthread_self();
    if (!no_signals) {
       init_signals(terminate_filed);
    } else {
-      /* This reduces the number of signals facilitating debugging */
+      /*
+       * This reduces the number of signals facilitating debugging
+       */
       watchdog_sleep_time = 120;      /* long timeout for debugging */
    }
 
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
+   if (export_config_schema) {
+      POOL_MEM buffer;
+
+      my_config = new_config_parser();
+      init_fd_config(my_config, configfile, M_ERROR_TERM);
+      print_config_schema_json(buffer);
+      printf("%s\n", buffer.c_str());
+      goto bail_out;
    }
 
    my_config = new_config_parser();
    parse_fd_config(my_config, configfile, M_ERROR_TERM);
+
+   if (export_config) {
+      my_config->dump_resources(prtmsg, NULL);
+      goto bail_out;
+   }
+
+   if (!foreground && !test_config) {
+      daemon_start();
+      init_stack_dump();              /* set new pid */
+   }
 
    if (init_crypto() != 0) {
       Emsg0(M_ERROR, 0, _("Cryptography library initialization failed.\n"));
@@ -237,11 +270,6 @@ int main (int argc, char *argv[])
       terminate_filed(0);
    }
 
-   if (!foreground) {
-      daemon_start();
-      init_stack_dump();              /* set new pid */
-   }
-
    set_thread_concurrency(me->MaxConcurrentJobs + 10);
    lmgr_init_thread(); /* initialize the lockmanager stack */
 
@@ -259,25 +287,13 @@ int main (int argc, char *argv[])
          init_jcr_subsystem(me->jcr_watchdog_time); /* start JCR watchdogs etc. */
       }
    }
-   tcp_server_tid = pthread_self();
 
-   /* Become server, and handle requests */
-   IPADDR *p;
-   foreach_dlist(p, me->FDaddrs) {
-      Dmsg1(10, "filed: listening on port %d\n", p->get_port_host_order());
-   }
-
-   sock_fds = New(alist(10, not_owned_by_alist));
-   bnet_thread_server_tcp(me->FDaddrs,
-                          me->MaxConcurrentJobs,
-                          sock_fds,
-                          &dir_workq,
-                          me->nokeepalive,
-                          handle_connection_request);
+   start_socket_server(me->FDaddrs);
 
    terminate_filed(0);
 
-   exit(0);                           /* should never get here */
+bail_out:
+   exit(0);
 }
 
 void terminate_filed(int sig)
@@ -292,10 +308,7 @@ void terminate_filed(int sig)
    debug_level = 0;                   /* turn off debug */
    stop_watchdog();
 
-   bnet_stop_thread_server_tcp(tcp_server_tid);
-   cleanup_bnet_thread_server_tcp(sock_fds, &dir_workq);
-   delete sock_fds;
-   sock_fds = NULL;
+   stop_socket_server();
 
    unload_fd_plugins();
    flush_mntent_cache();
@@ -345,7 +358,7 @@ static bool check_resources()
               configfile);
          OK = false;
       }
-      my_name_is(0, NULL, me->hdr.name);
+      my_name_is(0, NULL, me->name());
       if (!me->messages) {
          me->messages = (MSGSRES *)GetNextRes(R_MSGS, NULL);
          if (!me->messages) {
@@ -384,11 +397,12 @@ static bool check_resources()
                                        NULL,
                                        NULL,
                                        NULL,
+                                       me->tls_cipherlist,
                                        me->tls_verify_peer);
 
          if (!me->tls_ctx) {
             Emsg2(M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
-                                me->hdr.name, configfile);
+                                me->name(), configfile);
             OK = false;
          }
 
@@ -411,7 +425,7 @@ static bool check_resources()
       if ((me->pki_encrypt || me->pki_sign) && !me->pki_keypair_file) {
          Emsg2(M_FATAL, 0, _("\"PKI Key Pair\" must be defined for File"
             " daemon \"%s\" in %s if either \"PKI Sign\" or"
-            " \"PKI Encrypt\" are enabled.\n"), me->hdr.name, configfile);
+            " \"PKI Encrypt\" are enabled.\n"), me->name(), configfile);
          OK = false;
       }
 
@@ -426,13 +440,13 @@ static bool check_resources()
          } else {
             if (!crypto_keypair_load_cert(me->pki_keypair, me->pki_keypair_file)) {
                Emsg2(M_FATAL, 0, _("Failed to load public certificate for File"
-                     " daemon \"%s\" in %s.\n"), me->hdr.name, configfile);
+                     " daemon \"%s\" in %s.\n"), me->name(), configfile);
                OK = false;
             }
 
             if (!crypto_keypair_load_key(me->pki_keypair, me->pki_keypair_file, NULL, NULL)) {
                Emsg2(M_FATAL, 0, _("Failed to load private key for File"
-                     " daemon \"%s\" in %s.\n"), me->hdr.name, configfile);
+                     " daemon \"%s\" in %s.\n"), me->name(), configfile);
                OK = false;
             }
          }
@@ -462,14 +476,14 @@ static bool check_resources()
                      if (crypto_keypair_has_key(filepath)) {
                         if (!crypto_keypair_load_key(keypair, filepath, NULL, NULL)) {
                            Emsg3(M_FATAL, 0, _("Failed to load private key from file %s for File"
-                              " daemon \"%s\" in %s.\n"), filepath, me->hdr.name, configfile);
+                              " daemon \"%s\" in %s.\n"), filepath, me->name(), configfile);
                            OK = false;
                         }
                      }
 
                   } else {
                      Emsg3(M_FATAL, 0, _("Failed to load trusted signer certificate"
-                        " from file %s for File daemon \"%s\" in %s.\n"), filepath, me->hdr.name, configfile);
+                        " from file %s for File daemon \"%s\" in %s.\n"), filepath, me->name(), configfile);
                      OK = false;
                   }
                }
@@ -500,7 +514,7 @@ static bool check_resources()
                      me->pki_recipients->append(keypair);
                   } else {
                      Emsg3(M_FATAL, 0, _("Failed to load master key certificate"
-                        " from file %s for File daemon \"%s\" in %s.\n"), filepath, me->hdr.name, configfile);
+                        " from file %s for File daemon \"%s\" in %s.\n"), filepath, me->name(), configfile);
                      OK = false;
                   }
                }
@@ -535,13 +549,13 @@ static bool check_resources()
 
       if (!director->tls_certfile && need_tls) {
          Emsg2(M_FATAL, 0, _("\"TLS Certificate\" file not defined for Director \"%s\" in %s.\n"),
-               director->hdr.name, configfile);
+               director->name(), configfile);
          OK = false;
       }
 
       if (!director->tls_keyfile && need_tls) {
          Emsg2(M_FATAL, 0, _("\"TLS Key\" file not defined for Director \"%s\" in %s.\n"),
-               director->hdr.name, configfile);
+               director->name(), configfile);
          OK = false;
       }
 
@@ -550,7 +564,7 @@ static bool check_resources()
                              " or \"TLS CA Certificate Dir\" are defined for Director \"%s\" in %s."
                              " At least one CA certificate store is required"
                              " when using \"TLS Verify Peer\".\n"),
-                             director->hdr.name, configfile);
+                             director->name(), configfile);
          OK = false;
       }
 
@@ -567,11 +581,12 @@ static bool check_resources()
                                              NULL,
                                              NULL,
                                              director->tls_dhfile,
+                                             director->tls_cipherlist,
                                              director->tls_verify_peer);
 
          if (!director->tls_ctx) {
             Emsg2(M_FATAL, 0, _("Failed to initialize TLS context for Director \"%s\" in %s.\n"),
-                                director->hdr.name, configfile);
+                                director->name(), configfile);
             OK = false;
          }
 

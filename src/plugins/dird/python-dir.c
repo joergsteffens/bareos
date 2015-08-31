@@ -1,7 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
-   Copyright (C) 2011-2012 Planets Communications B.V.
+   Copyright (C) 2011-2014 Planets Communications B.V.
    Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -649,7 +649,7 @@ static bRC PyLoadModule(bpContext *ctx, void *value)
          goto bail_out;
       }
 
-      Dmsg(ctx, dbglvl, "Sucessfully loaded module with name %s\n", p_ctx->module_name);
+      Dmsg(ctx, dbglvl, "Successfully loaded module with name %s\n", p_ctx->module_name);
 
       /*
        * Get the Python dictionary for lookups in the Python namespace.

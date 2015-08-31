@@ -16,7 +16,7 @@ s#@working_dir@#C:/ProgramData/Bareos/working#g
 s#@logdir@#C:/ProgramData/Bareos/logs#g
 s#@sbindir@#C:/Program Files/Bareos#g
 s#@bindir@#C:/Program Files/Bareos#g
-s#@sysconfdir@#C:/ProgramData/Bareos#g
+s#@confdir@#C:/ProgramData/Bareos#g
 s/@uncomment_dbi/#/g
 s#@db_name@#bareos#g
 s#@db_user@#bareos#g

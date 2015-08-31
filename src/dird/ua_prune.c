@@ -98,7 +98,7 @@ int file_delete_handler(void *ctx, int num_fields, char **row)
  * prune stats
  * prune directory=xxx [client=xxx] [recursive]
  */
-int prune_cmd(UAContext *ua, const char *cmd)
+bool prune_cmd(UAContext *ua, const char *cmd)
 {
    CLIENTRES *client;
    POOLRES *pool;
@@ -222,9 +222,8 @@ int prune_cmd(UAContext *ua, const char *cmd)
          return false;
       }
 
-      if (mr.Enabled == 2) {
-         ua->error_msg(_("Cannot prune Volume \"%s\" because it is archived.\n"),
-                       mr.VolumeName);
+      if (mr.Enabled == VOL_ARCHIVED) {
+         ua->error_msg(_("Cannot prune Volume \"%s\" because it is archived.\n"), mr.VolumeName);
          return false;
       }
 
@@ -566,10 +565,7 @@ bail_out:
 
 static void drop_temp_tables(UAContext *ua)
 {
-   int i;
-   for (i=0; drop_deltabs[i]; i++) {
-      db_sql_query(ua->db, drop_deltabs[i]);
-   }
+   db_sql_query(ua->db, drop_deltabs[db_get_type_index(ua->db)]);
 }
 
 static bool create_temp_tables(UAContext *ua)
@@ -851,7 +847,7 @@ bool prune_volume(UAContext *ua, MEDIA_DBR *mr)
    bool ok = false;
    int count;
 
-   if (mr->Enabled == 2) {
+   if (mr->Enabled == VOL_ARCHIVED) {
       return false;                   /* Cannot prune archived volumes */
    }
 
@@ -890,7 +886,7 @@ int get_prune_list_for_volume(UAContext *ua, MEDIA_DBR *mr, del_ctx *del)
    utime_t now, period;
    char ed1[50], ed2[50];
 
-   if (mr->Enabled == 2) {
+   if (mr->Enabled == VOL_ARCHIVED) {
       return 0;                    /* cannot prune Archived volumes */
    }
 

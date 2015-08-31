@@ -1,6 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
+   Copyright (C) 2013-2014 Planets Communications B.V.
    Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -633,7 +634,7 @@ static bool auto_deflate_record(bpContext *ctx, DCR *dcr)
 
    /*
     * See what our starting point is. When dcr->after_rec is set we already have
-    * a translated record by an other SD plugin. Then we use that translated record
+    * a translated record by another SD plugin. Then we use that translated record
     * as the starting point otherwise we start at dcr->before_rec. When an earlier
     * translation already happened we can free that record when we have a success
     * full translation here as that record is of no use anymore.
@@ -785,7 +786,7 @@ static bool auto_inflate_record(bpContext *ctx, DCR *dcr)
 
    /*
     * See what our starting point is. When dcr->after_rec is set we already have
-    * a translated record by an other SD plugin. Then we use that translated record
+    * a translated record by another SD plugin. Then we use that translated record
     * as the starting point otherwise we start at dcr->before_rec. When an earlier
     * translation already happened we can free that record when we have a success
     * full translation here as that record is of no use anymore.

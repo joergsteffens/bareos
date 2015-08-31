@@ -41,12 +41,13 @@ LIBBAREOS_SRCS = address_conf.c alist.c attr.c attribs.c base64.c \
 		 compression.c cram-md5.c cbuf.c crypto.c crypto_cache.c \
 		 crypto_gnutls.c crypto_none.c crypto_nss.c crypto_openssl.c \
 		 crypto_wrap.c daemon.c devlock.c dlist.c edit.c fnmatch.c \
-		 guid_to_name.c hmac.c htable.c jcr.c lockmgr.c md5.c \
-		 mem_pool.c message.c mntent_cache.c passphrase.c plugins.c \
-		 poll.c priv.c queue.c rblist.c runscript.c rwlock.c scan.c \
-		 scsi_crypto.c scsi_lli.c sellist.c serial.c sha1.c signal.c \
-		 smartall.c tls_gnutls.c tls_none.c tls_nss.c tls_openssl.c \
-		 tree.c util.c var.c watchdog.c workq.c
+		 guid_to_name.c hmac.c htable.c jcr.c json.c lockmgr.c md5.c \
+		 mem_pool.c message.c mntent_cache.c output_formatter.c \
+		 passphrase.c path_list.c \
+		 plugins.c poll.c priv.c queue.c rblist.c runscript.c rwlock.c \
+		 scan.c scsi_crypto.c scsi_lli.c sellist.c serial.c sha1.c \
+		 signal.c smartall.c tls_gnutls.c tls_none.c tls_nss.c \
+		 tls_openssl.c tree.c util.c var.c watchdog.c workq.c
 LIBBAREOS_OBJS = $(LIBBAREOS_SRCS:.c=.o)
 
 LIBBAREOSCFG_SRCS = ini.c lex.c parse_bsr.c
@@ -82,5 +83,10 @@ distclean:: clean
 
 # inference rules
 .c.o:
+	@echo "Compiling $<"
+	$(CXX) $(DLL_USAGE) $(CXXFLAGS) -c -o $@ $<
+
+btime.o: DEFINES += -D_POSIX_C_SOURCE=200112
+btime.o: btime.c
 	@echo "Compiling $<"
 	$(CXX) $(DLL_USAGE) $(CXXFLAGS) -c -o $@ $<

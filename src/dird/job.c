@@ -1314,7 +1314,6 @@ void create_unique_job_name(JCR *jcr, const char *base_name)
    static time_t last_start_time = 0;
    static int seq = 0;
    time_t now = time(NULL);
-   struct tm tm;
    char dt[MAX_TIME_LENGTH];
    char name[MAX_NAME_LENGTH];
    char *p;
@@ -1335,10 +1334,13 @@ void create_unique_job_name(JCR *jcr, const char *base_name)
    last_start_time = now;
    V(mutex);                          /* allow creation of jobs */
    jcr->start_time = now;
-   /* Form Unique JobName */
-   (void)localtime_r(&now, &tm);
-   /* Use only characters that are permitted in Windows filenames */
-   strftime(dt, sizeof(dt), "%Y-%m-%d_%H.%M.%S", &tm);
+
+   /*
+    * Form Unique JobName
+    * Use only characters that are permitted in Windows filenames
+    */
+   bstrftime(dt, sizeof(dt), jcr->start_time, "%Y-%m-%d_%H.%M.%S");
+
    len = strlen(dt) + 5;   /* dt + .%02d EOS */
    bstrncpy(name, base_name, sizeof(name));
    name[sizeof(name)-len] = 0;          /* truncate if too long */
@@ -1898,7 +1900,6 @@ bool has_paired_storage(JCR *jcr)
 bool select_next_rstore(JCR *jcr, bootstrap_info &info)
 {
    USTORERES ustore;
-   int i;
 
    if (bstrcmp(jcr->res.rstore->name(), info.storage)) {
       return true;                 /* Same SD nothing to change */
@@ -1932,7 +1933,7 @@ bool select_next_rstore(JCR *jcr, bootstrap_info &info)
    /*
     * Wait for up to 6 hours to increment read stoage counter
     */
-   for (i=0; i < MAX_TRIES; i++) {
+   for (int i = 0; i < MAX_TRIES; i++) {
       /*
        * Try to get read storage counter incremented
        */
@@ -1964,8 +1965,10 @@ void create_clones(JCR *jcr)
    Dmsg2(900, "cloned=%d run_cmds=%p\n", jcr->cloned, jcr->res.job->run_cmds);
    if (!jcr->cloned && jcr->res.job->run_cmds) {
       char *runcmd;
+      JobId_t jobid;
       JOBRES *job = jcr->res.job;
       POOLMEM *cmd = get_pool_memory(PM_FNAME);
+
       UAContext *ua = new_ua_context(jcr);
       ua->batch = true;
       foreach_alist(runcmd, job->run_cmds) {
@@ -1973,12 +1976,12 @@ void create_clones(JCR *jcr)
          Mmsg(ua->cmd, "run %s cloned=yes", cmd);
          Dmsg1(900, "=============== Clone cmd=%s\n", ua->cmd);
          parse_ua_args(ua);                 /* parse command */
-         int status = run_cmd(ua, ua->cmd);
-         if (status == 0) {
-            Jmsg(jcr, M_ERROR, 0, _("Could not start clone job: \"%s\".\n"),
-                 ua->cmd);
+
+         jobid = do_run_cmd(ua, ua->cmd);
+         if (!jobid) {
+            Jmsg(jcr, M_ERROR, 0, _("Could not start clone job: \"%s\".\n"), ua->cmd);
          } else {
-            Jmsg(jcr, M_INFO, 0, _("Clone JobId %d started.\n"), status);
+            Jmsg(jcr, M_INFO, 0, _("Clone JobId %d started.\n"), jobid);
          }
       }
       free_ua_context(ua);

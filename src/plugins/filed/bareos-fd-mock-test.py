@@ -19,21 +19,25 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301, USA.
 #
-# Author: Maik Aussendorf
-#
 # Bareos-fd-mock-test a simple example for a python Bareos FD Plugin using the baseclass
 # and doing nothing
 # You may take this as a skeleton for your plugin
+#
+# Author: Maik Aussendorf
+#
 
-from bareosfd import *
-from bareos_fd_consts import *
+# Provided by the Bareos FD Python plugin interface
+import bareosfd
+import bareos_fd_consts
+import BareosFdWrapper
+from BareosFdWrapper import *  # noqa
+import BareosFdPluginBaseclass
 
-from BareosFdPluginBaseclass import *
-from BareosFdWrapper import *
 
 def load_bareos_plugin(context, plugindef):
-    DebugMessage(context, 100, "------ Plugin loader called with " + plugindef + "\n");
-    BareosFdWrapper.plugin_object = BareosFdPluginBaseclass (context, plugindef);
-    return bRCs['bRC_OK'];
+    bareosfd.DebugMessage(context, 100, "------ Plugin loader called with " + plugindef + "\n")
+    BareosFdWrapper.bareos_fd_plugin_object = \
+        BareosFdPluginBaseclass.BareosFdPluginBaseclass(context, plugindef)
+    return bareos_fd_consts.bRCs['bRC_OK']
 
 # the rest is done in the Plugin module

@@ -3,31 +3,9 @@
 # Copyright (c) 2011-2012 Bruno Friedmann (Ioda-Net) and Philipp Storz (dass IT)
 #               2013-2015 Bareos GmbH & Co KG
 #
-#   Redesign of the bareos specfile: goals (20110922)
-#
-#   * only support platforms that are available in OBS
-#   * activate all options available (if reasonable)
-#   * single-dir-install is not supported
-#   * Single packages for:
-#       * console package
-#       * dir package
-#       * sd package ( bls + btape + bcopy + bextract )
-#       * fd package ( )
-#       * tray monitor
-#       * bareos-database-{sqlite,postgresql,mysql} (libs) (make_database/tables/grant rights)
-#       * sql common abstract sql libraries (without db)
-#       * libs common libraries (without db)
-#       * tools without link to db libs (bwild, bregex)
-#       * tools with link to db libs (dbcheck, bscan)
-#       * bat
-#
-#	Notice: the libbareoscats* package to be able to pass the shlib name policy are
-#	explicitly named
-#
-# Please submit bugfixes or comments via http://bugs.opensuse.org/
 
 Name: 		bareos
-Version: 	14.2.5
+Version: 	15.2.1
 Release: 	0
 Group: 		Productivity/Archiving/Backup
 License: 	AGPL-3.0
@@ -36,7 +14,7 @@ URL: 		http://www.bareos.org/
 Vendor: 	The Bareos Team
 #Packager: 	{_packager}
 
-%define _libversion    14.2.5
+%define _libversion    15.2.1
 
 %define library_dir    %{_libdir}/bareos
 %define backend_dir    %{_libdir}/bareos/backends
@@ -64,6 +42,7 @@ Vendor: 	The Bareos Team
 %define build_bat 1
 %define build_qt_monitor 1
 %define build_sqlite3 1
+%define check_cmocka 1
 %define glusterfs 0
 %define have_git 1
 %define ceph 0
@@ -78,6 +57,7 @@ Vendor: 	The Bareos Team
 %define build_bat 0
 %define build_qt_monitor 0
 %define build_sqlite3 0
+%define check_cmocka 0
 %define have_git 0
 %define python_plugins 0
 %endif
@@ -87,9 +67,18 @@ Vendor: 	The Bareos Team
 %define _fwdefdir   %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services
 %endif
 
+# SLES 11
+%if 0%{?suse_version} == 1110
+# cmocka package is broken on SLES11SP3, 32bit.
+# We disable it in all SLES11 build.
+%define check_cmocka 0
+%endif
+
 %if 0%{?suse_version} > 1140
 %define systemd_support 1
 %endif
+
+
 
 #
 # RedHat (CentOS, Fedora, RHEL) specific settings
@@ -100,6 +89,7 @@ Vendor: 	The Bareos Team
 %define build_bat 0
 %define build_qt_monitor 0
 %define build_sqlite3 0
+%define check_cmocka 0
 %define have_git 0
 %define python_plugins 0
 %endif
@@ -175,6 +165,10 @@ BuildRequires: mtx
 BuildRequires: libqt4-devel
 %endif
 
+%if 0%{?check_cmocka}
+BuildRequires: libcmocka-devel >= 1.0.1
+%endif
+
 %if 0%{?python_plugins}
 BuildRequires: python-devel >= 2.6
 %endif
@@ -195,6 +189,7 @@ BuildRequires: update-desktop-files
 %if 0%{?suse_version} > 1010
 # link identical files
 BuildRequires: fdupes
+BuildRequires: libjansson-devel
 BuildRequires: lsb-release
 %endif
 
@@ -224,6 +219,7 @@ BuildRequires: fedora-release
 %endif
 
 %if 0%{?rhel_version} >= 600 || 0%{?centos_version} >= 600 || 0%{?fedora_version} >= 14
+BuildRequires: jansson-devel
 BuildRequires: tcp_wrappers-devel
 %endif
 
@@ -423,11 +419,10 @@ Group:      Productivity/Archiving/Backup
 Summary:    Devel headers
 Group:      Development/Languages/C and C++
 Requires:   %{name}-common = %{version}
-Requires:   tcpd-devel
 Requires:   zlib-devel
 Requires:   libacl-devel
-Requires:   libmysqlclient-devel
 Requires:   postgresql-devel
+Requires:   libcap-devel
 %if 0%{?build_sqlite3}
 %if 0%{?suse_version}
 Requires:   sqlite3-devel
@@ -435,8 +430,29 @@ Requires:   sqlite3-devel
 Requires:   sqlite-devel
 %endif
 %endif
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora_version}
+Requires:   openssl-devel
+%else
 Requires:   libopenssl-devel
-Requires:   libcap-devel
+%endif
+%if 0%{?rhel_version} >= 600 || 0%{?centos_version} >= 600 || 0%{?fedora_version}
+Requires:   tcp_wrappers-devel
+%else
+%if 0%{?rhel_version} || 0%{?centos_version}
+Requires:   tcp_wrappers
+%else
+Requires:   tcpd-devel
+%endif
+%endif
+%if 0%{?rhel_version} >= 700 || 0%{?centos_version} >= 700 || 0%{?fedora_version} >= 19
+Requires:   mariadb-devel
+%else
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora_version}
+Requires:   mysql-devel
+%else
+Requires:   libmysqlclient-devel
+%endif
+%endif
 
 %if 0%{?python_plugins}
 %package    director-python-plugin
@@ -448,6 +464,13 @@ Requires:   bareos-director = %{version}
 Summary:    Python plugin for Bareos File daemon
 Group:      Productivity/Archiving/Backup
 Requires:   bareos-filedaemon = %{version}
+
+%package    filedaemon-ldap-python-plugin
+Summary:    LDAP Python plugin for Bareos File daemon
+Group:      Productivity/Archiving/Backup
+Requires:   bareos-filedaemon = %{version}
+Requires:   filedaemon-python-plugin = %{version}
+Requires:   python-ldap
 
 %package    storage-python-plugin
 Summary:    Python plugin for Bareos Storage daemon
@@ -464,6 +487,11 @@ This package contains the python plugin for the director daemon
 
 This package contains the python plugin for the file daemon
 
+%description filedaemon-ldap-python-plugin
+%{dscr}
+
+This package contains the LDAP python plugin for the file daemon
+
 %description storage-python-plugin
 %{dscr}
 
@@ -471,6 +499,32 @@ This package contains the python plugin for the storage daemon
 
 %endif
 
+%if 0%{?glusterfs}
+%package    filedaemon-glusterfs-plugin
+Summary:    GlusterFS plugin for Bareos File daemon
+Group:      Productivity/Archiving/Backup
+Requires:   bareos-filedaemon = %{version}
+Requires:   glusterfs
+
+%description filedaemon-glusterfs-plugin
+%{dscr}
+
+This package contains the GlusterFS plugin for the file daemon
+
+%endif
+
+%if 0%{?ceph}
+%package    filedaemon-ceph-plugin
+Summary:    CEPH plugin for Bareos File daemon
+Group:      Productivity/Archiving/Backup
+Requires:   bareos-filedaemon = %{version}
+
+%description filedaemon-ceph-plugin
+%{dscr}
+
+This package contains the CEPH plugins for the file daemon
+
+%endif
 
 %description client
 %{dscr}
@@ -600,7 +654,8 @@ export MTX=/usr/sbin/mtx
   --libdir=%{library_dir} \
   --sbindir=%{_sbindir} \
   --with-sbin-perm=755 \
-  --sysconfdir=%{_sysconfdir}/bareos \
+  --sysconfdir=%{_sysconfdir} \
+  --with-confdir=%{_sysconfdir}/bareos \
   --mandir=%{_mandir} \
   --docdir=%{_docdir}/%{name} \
   --htmldir=%{_docdir}/%{name}/html \
@@ -666,7 +721,9 @@ export MTX=/usr/sbin/mtx
 #Add flags
 %__make CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS" %{?_smp_mflags};
 
-
+%check
+# run unit tests
+%__make CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS" %{?_smp_mflags} check;
 
 %install
 %if 0%{?suse_version}
@@ -733,6 +790,7 @@ ls -la %{buildroot}/%{library_dir}
 %if ! 0%{?python_plugins}
 rm -f %{buildroot}/%{plugin_dir}/python-*.so
 rm -f %{buildroot}/%{plugin_dir}/*.py*
+rm -f %{buildroot}/%{_sysconfdir}/bareos/bareos-dir.d/plugin-python-ldap.conf
 %endif
 
 %if 0%{?build_bat}
@@ -1052,7 +1110,6 @@ echo "This is a meta package to install a full bareos system" > %{buildroot}%{_d
 /usr/include/bareos
 %{library_dir}/*.la
 
-
 %if 0%{?python_plugins}
 %files filedaemon-python-plugin
 %defattr(-, root, root)
@@ -1064,6 +1121,12 @@ echo "This is a meta package to install a full bareos system" > %{buildroot}%{_d
 %{plugin_dir}/BareosFdPluginLocalFileset.py*
 %{plugin_dir}/BareosFdWrapper.py*
 %{plugin_dir}/bareos_fd_consts.py*
+
+%files filedaemon-ldap-python-plugin
+%defattr(-, root, root)
+%{plugin_dir}/bareos-fd-ldap.py*
+%{plugin_dir}/BareosFdPluginLDAP.py*
+%attr(0640, %{director_daemon_user}, %{daemon_group}) %config(noreplace) %{_sysconfdir}/bareos/bareos-dir.d/plugin-python-ldap.conf
 
 %files director-python-plugin
 %defattr(-, root, root)
@@ -1079,8 +1142,22 @@ echo "This is a meta package to install a full bareos system" > %{buildroot}%{_d
 %{plugin_dir}/python-sd.so
 %{plugin_dir}/bareos-sd.py*
 %{plugin_dir}/bareos_sd_consts.py*
+%{plugin_dir}/BareosSdPluginBaseclass.py*
+%{plugin_dir}/BareosSdWrapper.py*
+%{plugin_dir}/bareos-sd-class-plugin.py*
 
 %endif # python_plugins
+
+%if 0%{?glusterfs}
+%files filedaemon-glusterfs-plugin
+%{plugin_dir}/gfapi-fd.so
+%endif
+
+%if 0%{?ceph}
+%files filedaemon-ceph-plugin
+%{plugin_dir}/cephfs-fd.so
+%{plugin_dir}/rados-fd.so
+%endif
 
 #
 # Define some macros for updating the system settings.

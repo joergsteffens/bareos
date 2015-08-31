@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -20,10 +20,10 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 */
+
 /*
  * Resource codes -- they must be sequential for indexing
  */
-
 enum {
    R_DIRECTOR = 3001,
    R_NDMP,
@@ -44,10 +44,8 @@ enum {
 };
 
 /* Definition of the contents of each Resource */
-class DIRRES {
+class DIRRES : public BRSRES {
 public:
-   RES hdr;
-
    s_password password;               /* Director password */
    char *address;                     /* Director IP address or zero */
    bool monitor;                      /* Have only access to status and .status functions */
@@ -61,6 +59,7 @@ public:
    char *tls_certfile;                /* TLS Server Certificate File */
    char *tls_keyfile;                 /* TLS Server Key File */
    char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (per director) */
    s_password keyencrkey;             /* Key Encryption Key */
@@ -79,10 +78,8 @@ public:
 };
 
 /* Storage daemon "global" definitions */
-class STORES {
+class STORES : public BRSRES {
 public:
-   RES hdr;
-
    dlist *SDaddrs;
    dlist *SDsrc_addr;                 /* Address to source connections from */
    dlist *NDMPaddrs;
@@ -115,12 +112,15 @@ public:
    bool nokeepalive;                  /* Don't use SO_KEEPALIVE on sockets */
    bool collect_dev_stats;            /* Collect Device Statistics */
    bool collect_job_stats;            /* Collect Job Statistics */
+   bool device_reserve_by_mediatype;  /* Allow device reservation based on a matching mediatype */
+   bool filedevice_concurrent_read;   /* Allow filedevices to be read concurrently */
    char *tls_ca_certfile;             /* TLS CA Certificate File */
    char *tls_ca_certdir;              /* TLS CA Certificate Directory */
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Server Certificate File */
    char *tls_keyfile;                 /* TLS Server Key File */
    char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    char *verid;                       /* Custom Id to print in version command */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (global) */
@@ -128,10 +128,8 @@ public:
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
 };
 
-class AUTOCHANGERRES {
+class AUTOCHANGERRES : public BRSRES {
 public:
-   RES hdr;
-
    alist *device;                     /* List of DEVRES device pointers */
    char *changer_name;                /* Changer device name */
    char *changer_command;             /* Changer command  -- external program */
@@ -139,12 +137,11 @@ public:
 };
 
 /* Device specific definitions */
-class DEVRES {
+class DEVRES : public BRSRES {
 public:
-   RES hdr;
-
    char *media_type;                  /* User assigned media type */
    char *device_name;                 /* Archive device name */
+   char *device_options;              /* Device specific option string */
    char *diag_device_name;            /* Diagnostic device name */
    char *changer_name;                /* Changer device name */
    char *changer_command;             /* Changer command  -- external program */
@@ -159,7 +156,7 @@ public:
    bool query_crypto_status;          /* Query device for crypto status */
    bool collectstats;                 /* Set if statistics should be collected */
    uint32_t drive_index;              /* Autochanger drive index */
-   uint32_t cap_bits;                 /* Capabilities of this device */
+   char cap_bits[CAP_BYTES];          /* Capabilities of this device */
    utime_t max_changer_wait;          /* Changer timeout */
    utime_t max_rewind_wait;           /* Maximum secs to wait for rewind */
    utime_t max_open_wait;             /* Maximum secs to wait for open */
@@ -205,3 +202,6 @@ union URES {
    AUTOCHANGERRES res_changer;
    RES hdr;
 };
+
+void init_sd_config(CONFIG *config, const char *configfile, int exit_code);
+bool print_config_schema_json(POOL_MEM &buffer);

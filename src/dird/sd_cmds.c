@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2015 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -53,7 +53,7 @@ static char canceljobcmd[] =
 static char dotstatuscmd[] =
    ".status %s\n";
 static char statuscmd[] =
-   "status\n";
+   "status %s\n";
 static char bandwidthcmd[] =
    "setbandwidth=%lld Job=%s\n";
 static char pluginoptionscmd[] =
@@ -121,7 +121,7 @@ bool connect_to_storage_daemon(JCR *jcr, int retry_interval,
    sd->res = (RES *)store;        /* save pointer to other end */
    jcr->store_bsock = sd;
 
-   if (!authenticate_storage_daemon(jcr, store)) {
+   if (!authenticate_with_storage_daemon(jcr, store)) {
       sd->close();
       delete jcr->store_bsock;
       jcr->store_bsock = NULL;
@@ -765,15 +765,34 @@ void do_native_storage_status(UAContext *ua, STORERES *store, char *cmd)
    sd = ua->jcr->store_bsock;
    if (cmd) {
       sd->fsend(dotstatuscmd, cmd);
+
    } else {
-      sd->fsend(statuscmd);
+      int cnt = 0;
+      DEVICERES *device;
+      POOL_MEM devicenames;
+
+      /*
+       * Build a list of devicenames that belong to this storage defintion.
+       */
+      foreach_alist(device, store->device) {
+         if (cnt == 0) {
+            pm_strcpy(devicenames, device->name());
+         } else {
+            pm_strcat(devicenames, ",");
+            pm_strcat(devicenames, device->name());
+         }
+         cnt++;
+      }
+
+      bash_spaces(devicenames);
+      sd->fsend(statuscmd, devicenames.c_str());
    }
 
    while (sd->recv() >= 0) {
       ua->send_msg("%s", sd->msg);
    }
 
-   sd->signal( BNET_TERMINATE);
+   sd->signal(BNET_TERMINATE);
    sd->close();
    delete ua->jcr->store_bsock;
    ua->jcr->store_bsock = NULL;
@@ -782,7 +801,7 @@ void do_native_storage_status(UAContext *ua, STORERES *store, char *cmd)
 }
 
 /*
- * Ask the autochanger to move a volume from one slot to an other.
+ * Ask the autochanger to move a volume from one slot to another.
  * You have to update the database slots yourself afterwards.
  */
 bool transfer_volume(UAContext *ua, STORERES *store, int src_slot, int dst_slot)
@@ -814,7 +833,7 @@ bool transfer_volume(UAContext *ua, STORERES *store, int src_slot, int dst_slot)
          /*
           * See if this is a failure msg.
           */
-         if (sd->msg[0] == '3' && sd->msg[0] == '9')
+         if (sd->msg[1] == '9')
             retval = false;
 
          ua->send_msg("%s\n", sd->msg);   /* pass them on to user */

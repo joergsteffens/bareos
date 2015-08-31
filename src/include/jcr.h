@@ -383,7 +383,7 @@ public:
    bool job_started;                      /* Set when the job is actually started */
    bool suppress_output;                  /* Set if this JCR should not output any Jmsgs */
    JCR *cjcr;                             /* Controlling JCR when this is a slave JCR being
-                                           * controlled by an other JCR used for sending
+                                           * controlled by another JCR used for sending
                                            * normal and fatal errors.
                                            */
 
@@ -480,6 +480,7 @@ public:
    bool remote_replicate;                 /* Replicate data to remote SD */
    bool RescheduleIncompleteJobs;         /* Set if incomplete can be rescheduled */
    bool HasQuota;                         /* Client has quota limits */
+   bool HasSelectedJobs;                  /* Migration/Copy Job did actually select some JobIds */
 #endif /* DIRECTOR_DAEMON */
 
 #ifdef FILE_DAEMON

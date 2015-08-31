@@ -24,6 +24,9 @@ fd_subdirs = src scripts src/lib src/findlib @LMDB_DIR@ src/filed \
 # Non-client-only directores
 subdirs = src/cats @NDMP_DIR@ @DIRD_DIR@ @STORED_DIR@ @SD_BACKENDS_DIR@ @SD_PLUGIN_DIR@ @DIR_PLUGIN_DIR@ src/tools
 
+unittest_dirs = @UNITTEST_DIRS@
+unittest_base_dirs = $(unittest_dirs:/unittests= )
+
 all_subdirs = ${fd_subdirs} ${@ALL_DIRS@} manpages platforms
 
 DIST =	INSTALL README.configure configure Makefile Makefile.in ChangeLog
@@ -91,12 +94,13 @@ libtool: Makefile $(LIBTOOL_DEPS)
 installdirs:
 	$(MKDIR) $(DESTDIR)$(sbindir)
 	$(MKDIR) $(DESTDIR)$(sysconfdir)
-	chmod 770 $(DESTDIR)$(sysconfdir)
+	$(MKDIR) $(DESTDIR)$(confdir)
+	chmod 770 $(DESTDIR)$(confdir)
 	-if test "x$(dir_user)" != "x" ; then \
-	   chown $(dir_user) $(DESTDIR)$(sysconfdir); \
+	   chown $(dir_user) $(DESTDIR)$(confdir); \
 	fi
 	-if test "x$(dir_group)" != "x" ; then \
-	   chgrp $(dir_group) $(DESTDIR)$(sysconfdir); \
+	   chgrp $(dir_group) $(DESTDIR)$(confdir); \
 	fi
 	$(MKDIR) $(DESTDIR)$(scriptdir)
 	$(MKDIR) $(DESTDIR)$(archivedir)
@@ -206,6 +210,10 @@ distcopy:
 distrib: configure autoconf/config.h.in distdirs distcopy
 
 test:
+
+check:
+	@for I in $(unittest_base_dirs); do (cd $$I && $(MAKE) DESTDIR=$(DESTDIR) $@ || exit 1); done
+	@for I in $(unittest_dirs); do (cd $$I && $(MAKE) DESTDIR=$(DESTDIR) $@ || exit 1); done
 
 
 tar.gz:  ../$(VERNAME).tar.gz

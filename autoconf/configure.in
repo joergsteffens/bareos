@@ -264,10 +264,6 @@ dnl alone except to eval it
 dnl ------------------------------------------------------------------
 os_name=`uname -s 2>/dev/null`
 if test x${prefix} = xNONE ; then
-   if test `eval echo ${sysconfdir}` = NONE/etc ; then
-      sysconfdir=/etc/bareos
-   fi
-
    if test `eval echo ${libdir}` = NONE/lib ; then
       case ${os_name} in
       Linux)
@@ -312,7 +308,7 @@ libdir=`eval echo ${libdir}`
 includedir=`eval echo ${includedir}`
 localedir=`eval echo ${datarootdir}/locale`
 AC_DEFINE_UNQUOTED(LIBDIR, "$libdir", [Where are shared libs stored])
-AC_DEFINE_UNQUOTED(SYSCONFDIR, "$sysconfdir", [Where are config files stored])
+AC_DEFINE_UNQUOTED(SYSCONFDIR, "$sysconfdir", [Where are system config files stored])
 AC_DEFINE_UNQUOTED(LOCALEDIR, "$localedir", [Where are locale files stored])
 
 dnl ------------------------------------------------------------------
@@ -880,6 +876,45 @@ AC_CHECK_FUNCS(lstat lchown lchmod utimes lutimes futimes futimens fchmod fchown
 AC_CHECK_FUNCS(nanosleep nl_langinfo)
 AC_CHECK_HEADERS(varargs.h)
 
+
+
+dnl ---------------------------------------------------------------------------
+dnl - Check for cmocka unit test framework http://cmocka.cryptomilk.org/
+dnl ---------------------------------------------------------------------------
+AC_MSG_CHECKING(for cmocka support)
+
+AC_CHECK_HEADERS( \
+    setjmp.h \
+    cmocka.h \
+)
+
+UNITTEST_DIRS=
+
+if test "x$ac_cv_header_setjmp_h" = "xyes" && test "x$ac_cv_header_cmocka_h" = "xyes" ; then
+ AC_CHECK_LIB(cmocka, _will_return,
+     [
+         CMOCKA_LIBS="-lcmocka"
+         AC_MSG_RESULT(yes)
+         have_cmocka="yes"
+     ], [
+         AC_MSG_RESULT(no)
+         have_cmocka="no"
+     ])
+else
+    AC_MSG_RESULT(no)
+    have_cmocka="no"
+fi
+
+if test x$have_cmocka = xyes; then
+ AC_DEFINE(HAVE_CMOCKA, 1, [Define to 1 if cmocka support should be enabled])
+ UNITTEST_DIRS="src/lib/unittests src/findlib/unittests"
+fi
+
+AC_SUBST(CMOCKA_LIBS)
+AC_SUBST(CMOCKA_CFLAGS)
+AC_SUBST(UNITTEST_DIRS)
+
+
 dnl -----------------------------------------------------------------------
 dnl  Check for Python support
 dnl
@@ -1124,7 +1159,7 @@ if test "x$support_crypto" != "xno" -o "x$support_tls" != "xno"; then
 
       saved_LIBS="${LIBS}"
       saved_CFLAGS="${CFLAGS}"
-      saved_CPPFLAGS="${CFLAGS}"
+      saved_CPPFLAGS="${CPPFLAGS}"
       LIBS="${saved_LIBS} ${OPENSSL_LIBS}"
       CFLAGS="${saved_CFLAGS} ${OPENSSL_INC}"
       CPPFLAGS="${saved_CPPFLAGS} ${OPENSSL_INC}"
@@ -1256,7 +1291,7 @@ if test "x$support_crypto" != "xno" -o "x$support_tls" != "xno"; then
 
       saved_LIBS="${LIBS}"
       saved_CFLAGS="${CFLAGS}"
-      saved_CPPFLAGS="${CFLAGS}"
+      saved_CPPFLAGS="${CPPFLAGS}"
       LIBS="${saved_LIBS} ${GNUTLS_LIBS}"
       CFLAGS="${saved_CFLAGS} ${GNUTLS_INC}"
       CPPFLAGS="${saved_CPPFLAGS} ${GNUTLS_INC}"
@@ -1325,6 +1360,21 @@ dnl -----------------------------------------------------------
 dnl dlopen is needed for plugins
 dnl -----------------------------------------------------------
 AC_SEARCH_LIBS(dlopen, [dl])
+
+dnl ------------------------------------------
+dnl Where to place the Bareos configure files
+dnl ------------------------------------------
+confdir=`eval echo ${sysconfdir}/bareos`
+AC_ARG_WITH(confdir,
+   AC_HELP_STRING([--with-confdir=PATH], [specify directory for Bareos configuration files]),
+   [
+       if test "x$withval" != "xno" ; then
+	 confdir=$withval
+       fi
+   ]
+)
+AC_SUBST(confdir)
+AC_DEFINE_UNQUOTED(CONFDIR, "$confdir", [Where are Bareos config files stored])
 
 dnl ------------------------------------------
 dnl Where to place working dir
@@ -1399,7 +1449,7 @@ AC_SUBST(hostname)
 dnl ------------------------------------------
 dnl Where to place scriptdir (script files)
 dnl ------------------------------------------
-scriptdir=`eval echo ${sysconfdir}`
+scriptdir=`eval echo ${confdir}`
 AC_ARG_WITH(scriptdir,
    AC_HELP_STRING([--with-scriptdir=PATH], [specify path of Bareos scripts directory]),
    [
@@ -2958,6 +3008,8 @@ AC_SUBST(LZO_LIBS)
 AC_SUBST(LZO_LIBS_NONSHARED)
 
 
+
+
 dnl
 dnl Check for fastlz
 dnl
@@ -3023,6 +3075,46 @@ fi
 AC_SUBST(FASTLZ_INC)
 AC_SUBST(FASTLZ_LIBS)
 AC_SUBST(FASTLZ_LIBS_NONSHARED)
+
+
+dnl
+dnl Check for jansson (json library)
+dnl
+JANSSON_LIBS="-ljansson"
+JANSSON_INC=""
+have_jansson=no
+AC_ARG_WITH(jansson,
+   AC_HELP_STRING([--with-jansson@<:@=DIR@:>@], [Directory holding jansson includes/libs]),
+   with_jansson_directory=${withval}
+)
+
+if test "x${with_jansson_directory}" != "xyes" && test x"${with_jansson_directory}" != "x"; then
+   #
+   # Make sure the $with_jansson_directory also makes sense
+   #
+   if test -d "${with_jansson_directory}/lib" -a -d "${with_jansson_directory}/include"; then
+      have_jansson=yes
+      JANSSON_INC="-I${with_jansson_directory}/include ${JANSSON_INC}"
+      JANSSON_LIBS="-L${with_jansson_directory}/lib ${JANSSON_LIBS}"
+   fi
+else
+   if test x$with_jansson_directory = xyes || test x"${with_jansson_directory}" = "x" && $PKGCONFIG jansson; then
+      have_jansson=yes
+      JANSSON_INC=`$PKGCONFIG --cflags janson`
+      JANSSON_LIBS=`$PKGCONFIG --libs jansson`
+   fi
+fi
+
+if test "x${have_jansson}" = "xyes"; then
+   AC_DEFINE(HAVE_JANSSON, 1, [Define to 1 if you have jansson lib])
+else
+   JANSSON_LIBS=""
+   JANSSON_INC=""
+fi
+
+AC_SUBST(JANSSON_INC)
+AC_SUBST(JANSSON_LIBS)
+
 
 dnl
 dnl Check if we have AFS on this system
@@ -3621,6 +3713,8 @@ AC_TRY_LINK(
    ]
 )
 
+AC_CHECK_FUNCS(glfs_readdirplus)
+
 LIBS="${saved_LIBS}"
 CFLAGS="${saved_CFLAGS}"
 CPPFLAGS="${saved_CPPFLAGS}"
@@ -3741,6 +3835,18 @@ AC_TRY_LINK(
    ]
 )
 
+if test "x${have_ceph_rados}" = "xyes"; then
+   AC_CHECK_LIB(rados, rados_ioctx_set_namespace,
+      [
+         AC_DEFINE(HAVE_RADOS_NAMESPACES, 1, [Define to 1 if you have support for RADOS namespaces.])
+         AC_CHECK_LIB(rados, rados_nobjects_list_open,
+            [
+               AC_DEFINE(HAVE_RADOS_NOBJECTS_LIST, 1, [Define to 1 if you have support for RADOS NObject List API.])
+            ])
+      ]
+   )
+fi
+
 LIBS="${saved_LIBS}"
 CFLAGS="${saved_CFLAGS}"
 CPPFLAGS="${saved_CPPFLAGS}"
@@ -3754,6 +3860,68 @@ fi
 
 AC_SUBST(RADOS_INC)
 AC_SUBST(RADOS_LIBS)
+
+dnl
+dnl Check for CEPH striping via libradosstriper.
+dnl
+RADOS_STRIPER_LIBS="-lradosstriper"
+RADOS_STRIPER_INC=""
+have_ceph_rados_striper=no
+AC_ARG_WITH(rados-striper,
+   AC_HELP_STRING([--with-rados-striper@<:@=DIR@:>@], [Directory holding RADOS striper includes/libs]),
+      with_rados_striper_directory=$withval
+)
+
+if test "x${with_rados_striper_directory}" != "xyes" && test x"${with_rados_striper_directory}" != "x"; then
+   #
+   # Make sure the $with_rados_striper_directory also makes sense
+   #
+   if test -d "${with_rados_striper_directory}/lib" -a -d "${with_rados_striper_directory}/include"; then
+      RADOS_STRIPER_LIBS="-L${with_rados_striper_directory}/lib ${RADOS_STRIPER_LIBS}"
+      RADOS_STRIPER_INC="-I${with_rados_striper_directory}/include ${RADOS_STRIPER_INC}"
+   fi
+fi
+
+saved_LIBS="${LIBS}"
+saved_CFLAGS="${CFLAGS}"
+saved_CPPFLAGS="${CPPFLAGS}"
+LIBS="${saved_LIBS} ${RADOS_STRIPER_LIBS}"
+CFLAGS="${saved_CFLAGS} ${RADOS_STRIPER_INC}"
+CPPFLAGS="${saved_CPPFLAGS} ${RADOS_STRIPER_INC}"
+
+AC_CHECK_HEADER(radosstriper/libradosstriper.h)
+
+AC_MSG_CHECKING(for rados_striper_create in radosstriper library)
+AC_TRY_LINK(
+   [
+       #include <radosstriper/libradosstriper.h>
+   ], [
+      rados_ioctx_t io_ctx;
+      rados_striper_t striper;
+
+      rados_striper_create(io_ctx, &striper);
+   ], [
+       AC_MSG_RESULT(yes)
+       have_ceph_rados_striper="yes"
+   ], [
+       AC_MSG_RESULT(no)
+       have_ceph_rados_striper="no"
+   ]
+)
+
+LIBS="${saved_LIBS}"
+CFLAGS="${saved_CFLAGS}"
+CPPFLAGS="${saved_CPPFLAGS}"
+
+if test "x${have_ceph_rados_striper}" = "xyes"; then
+   AC_DEFINE(HAVE_RADOS_STRIPER, 1, [Define to 1 if you have radosstriper lib])
+else
+   RADOS_STRIPER_LIBS=""
+   RADOS_STRIPER_INC=""
+fi
+
+AC_SUBST(RADOS_STRIPER_INC)
+AC_SUBST(RADOS_STRIPER_LIBS)
 
 dnl
 dnl Check for CEPH via libcephfs.
@@ -3818,6 +3986,53 @@ fi
 
 AC_SUBST(CEPHFS_INC)
 AC_SUBST(CEPHFS_LIBS)
+
+dnl
+dnl Check for AZURE via libelasto_file.
+dnl
+ELASTO_LIBS="-lelasto_file"
+ELASTO_INC=""
+have_elasto=no
+AC_ARG_WITH(elasto,
+   AC_HELP_STRING([--with-elasto@<:@=DIR@:>@], [Directory holding ELASTO includes/libs]),
+      with_elasto_directory=$withval
+)
+
+if test "x${with_elasto_directory}" != "xyes" && test x"${with_elasto_directory}" != "x"; then
+   #
+   # Make sure the $with_elasto_directory also makes sense
+   #
+   if test -d "${with_elasto_directory}/lib" -a -d "${with_elasto_directory}/include"; then
+      ELASTO_LIBS="-L${with_elasto_directory}/lib ${ELASTO_LIBS}"
+      ELASTO_INC="-I${with_elasto_directory}/include ${ELASTO_INC}"
+   fi
+fi
+
+saved_LIBS="${LIBS}"
+saved_CFLAGS="${CFLAGS}"
+saved_CPPFLAGS="${CPPFLAGS}"
+LIBS="${saved_LIBS} ${ELASTO_LIBS}"
+CFLAGS="${saved_CFLAGS} ${ELASTO_INC}"
+CPPFLAGS="${saved_CPPFLAGS} ${ELASTO_INC}"
+
+AC_CHECK_HEADER(elasto/data.h)
+AC_CHECK_HEADER(elasto/file.h)
+
+AC_CHECK_LIB(elasto_file, elasto_fclose, have_elasto="yes")
+
+LIBS="${saved_LIBS}"
+CFLAGS="${saved_CFLAGS}"
+CPPFLAGS="${saved_CPPFLAGS}"
+
+if test "x${have_elasto}" = "xyes"; then
+   AC_DEFINE(HAVE_ELASTO, 1, [Define to 1 if you have elasto lib])
+else
+   ELASTO_LIBS=""
+   ELASTO_INC=""
+fi
+
+AC_SUBST(ELASTO_INC)
+AC_SUBST(ELASTO_LIBS)
 
 dnl
 dnl Check for pthread libraries
@@ -3967,6 +4182,7 @@ debian|ubuntu|univention)
       debian/bareos-director.install \
       debian/bareos-director.postinst \
       debian/bareos-director.preinst \
+      debian/bareos-filedaemon-ldap-python-plugin.install \
       debian/bareos-filedaemon-python-plugin.install \
       debian/bareos-filedaemon.bareos-fd.init \
       debian/bareos-filedaemon.install \
@@ -3999,7 +4215,9 @@ debian|ubuntu|univention)
             debian/univention-bareos-schema.postinst \
             debian/univention-bareos.install \
             debian/univention-bareos.postinst \
-            platforms/univention/Makefile"
+            platforms/univention/Makefile \
+            platforms/univention/AppCenter/univention-bareos.ini \
+            platforms/univention/AppCenter/LICENSE_AGREEMENT"
          ;;
    esac
    AC_SUBST_FILE(DEBIAN_CONTROL_UNIVENTION_BAREOS)
@@ -4146,8 +4364,7 @@ suse)
        platforms/suse/Makefile \
        platforms/suse/bareos-fd \
        platforms/suse/bareos-sd \
-       platforms/suse/bareos-dir \
-       platforms/suse/bareos"
+       platforms/suse/bareos-dir"
   ;;
 unknown)
    TAPEDRIVE="/dev/nst0"
@@ -4163,32 +4380,49 @@ dnl -------------------------------------------
 AC_MSG_CHECKING(for systemd support)
 AC_ARG_WITH(systemd,
    AC_HELP_STRING([--with-systemd@<:@=UNITDIR@:>@], [Include systemd support. UNITDIR is where systemd system .service files are located, default is to ask systemctl.]),
-   [
-       if test "$withval" != "no"; then
-	   if test "$withval" = "yes"; then
-	       SYSTEMD_UNITDIR="`systemctl show | grep UnitPath | cut -d " " -f2`"
-	   else
-	       SYSTEMD_UNITDIR="${withval}"
-	   fi
+    with_systemd_unitdir=${withval}
+)
 
-	   PFILES="${PFILES} \
+if test "x${with_systemd_unitdir}" != "xyes" && test x"${with_systemd_unitdir}" != "x"; then
+   #
+   # Make sure the $with_systemd_unitdir also makes sense
+   #
+   if test -d "${with_systemd_unitdir}"; then
+       SYSTEMD_UNITDIR="${with_systemd_unitdir}"
+       support_systemd=yes
+   fi
+else
+   if test "x${with_systemd_unitdir}" = xyes || test x"${with_systemd_unitdir}" = "x"; then
+        AC_CHECK_PROG(support_systemd, systemctl, yes, no)
+        if test "x${support_systemd}" = "xyes"; then
+            # SYSTEMD_UNITDIR="`systemctl show | grep UnitPath | cut -d " " -f2`"
+            if test -d "/usr/lib/systemd/system"; then
+                SYSTEMD_UNITDIR="/usr/lib/systemd/system"
+            elif test -d "/lib/systemd/system"; then
+                SYSTEMD_UNITDIR="/lib/systemd/system"
+            else
+                support_systemd=no
+            fi
+        fi
+   fi
+fi
+
+if test "x${support_systemd}" = "xyes"; then
+    AC_MSG_RESULT(yes)
+    PFILES="${PFILES} \
 		   platforms/systemd/Makefile \
 		   platforms/systemd/bareos.conf \
 		   platforms/systemd/bareos-dir.service \
 		   platforms/systemd/bareos-fd.service \
-		   platforms/systemd/bareos-sd.service"
-	   AC_DEFINE(HAVE_SYSTEMD, 1, [Define to 1 if systemd support should be enabled])
-	   AC_MSG_RESULT(yes)
-	   support_systemd="yes"
-       else
-	   AC_MSG_RESULT(no)
-	   support_systemd="no"
-       fi
-   ],[
-       support_systemd="no"
-       AC_MSG_RESULT(no)
-   ]
-)
+		   platforms/systemd/bareos-sd.service \
+		   debian/bareos-filedaemon.service \
+		   debian/bareos-storage.service \
+		   debian/bareos-director.service"
+    AC_DEFINE(HAVE_SYSTEMD, 1, [Define to 1 if systemd support should be enabled])
+else
+    AC_MSG_RESULT(no)
+fi
+
 AC_SUBST(SYSTEMD_UNITDIR)
 
 AC_SUBST(hostname)
@@ -4235,6 +4469,18 @@ if test X"$have_zlib" = "Xyes" -o \
    BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} autoxflate-sd.la"
 fi
 
+if test X"$have_ceph_rados" = "Xyes" ; then
+   BUILD_FD_PLUGINS="${BUILD_FD_PLUGINS} rados-fd.la"
+fi
+
+if test X"$have_glusterfs" = "Xyes" ; then
+   BUILD_FD_PLUGINS="${BUILD_FD_PLUGINS} gfapi-fd.la"
+fi
+
+if test X"$have_cephfs" = "Xyes" ; then
+   BUILD_FD_PLUGINS="${BUILD_FD_PLUGINS} cephfs-fd.la"
+fi
+
 AC_SUBST(BUILD_FD_PLUGINS)
 AC_SUBST(BUILD_SD_PLUGINS)
 AC_SUBST(BUILD_DIR_PLUGINS)
@@ -4260,6 +4506,10 @@ if test x$use_libtool != xno; then
 
    if test X"$have_cephfs" = "Xyes" ; then
       BUILD_SD_BACKENDS="${BUILD_SD_BACKENDS} libbareossd-cephfs.la"
+   fi
+
+   if test X"$have_elasto" = "Xyes" ; then
+      BUILD_SD_BACKENDS="${BUILD_SD_BACKENDS} libbareossd-elasto.la"
    fi
 else
    BUILD_SD_BACKENDS=""
@@ -4299,6 +4549,7 @@ fi
 AC_CONFIG_FILES([
 autoconf/Make.common \
 Makefile \
+GNUmakefile \
 manpages/Makefile \
 scripts/bareos-config \
 scripts/bareos-config-lib.sh \
@@ -4331,6 +4582,7 @@ src/qt-console/install_conf_file \
 src/dird/Makefile \
 src/dird/bareos-dir.conf \
 src/lib/Makefile \
+src/lib/unittests/Makefile \
 src/stored/Makefile \
 src/stored/bareos-sd.conf \
 src/stored/backends/Makefile \
@@ -4349,11 +4601,13 @@ src/cats/drop_bareos_database \
 src/cats/install-default-backend \
 src/cats/ddl/versions.map \
 src/findlib/Makefile \
+src/findlib/unittests/Makefile \
 src/lmdb/Makefile \
 src/ndmp/Makefile \
 src/tests/Makefile \
 src/tools/Makefile \
 src/plugins/filed/Makefile \
+src/plugins/filed/plugin-python-ldap.conf \
 src/plugins/stored/Makefile \
 src/plugins/dird/Makefile \
 po/Makefile.in \
@@ -4374,7 +4628,7 @@ if test "${support_bat}" = "yes" ; then
    touch bat
    chmod 755 bat
    rm -f Makefile
-   $QMAKE
+   $QMAKE QMAKE_CFLAGS_RELEASE="$CFLAGS $CPPFLAGS" QMAKE_CXXFLAGS_RELEASE="$CXXFLAGS $CPPFLAGS" QMAKE_LFLAGS_RELEASE="$LDFLAGS"
    ${MAKE:-make} clean
    cd ${BUILD_DIR}
 fi
@@ -4390,7 +4644,7 @@ if test "${support_traymonitor}" = "yes" ; then
    touch bareos-tray-monitor
    chmod 755 bareos-tray-monitor
    rm -f Makefile
-   $QMAKE
+   $QMAKE QMAKE_CFLAGS_RELEASE="$CFLAGS $CPPFLAGS" QMAKE_CXXFLAGS_RELEASE="$CXXFLAGS $CPPFLAGS" QMAKE_LFLAGS_RELEASE="$LDFLAGS"
    ${MAKE:-make} clean
    cd ${BUILD_DIR}
 fi
@@ -4450,88 +4704,92 @@ ${MAKE:-make} clean
 echo "
 Configuration on `date`:
 
-   Host:                    ${host}${post_host} -- ${DISTNAME} ${DISTVER}
-   Bareos version:          ${BAREOS} ${VERSION} (${DATE})
-   Distribution:            ${DISTNAME}
-   Source code location:    ${srcdir}
-   Modify package list:     ${DEBIAN_CONTROL}
-   Install binaries:        ${bindir}
-   Install system binaries: ${sbindir}
-   Install libraries:       ${libdir}
-   Install config files:    ${sysconfdir}
-   Scripts directory:       ${scriptdir}
-   Archive directory:       ${archivedir}
-   Working directory:       ${working_dir}
-   PID directory:           ${piddir}
-   Subsys directory:        ${subsysdir}
-   Man directory:           ${mandir}
-   Data directory:          ${datarootdir}
-   Backend directory:       ${backenddir}
-   Plugin directory:        ${plugindir}
-   C Compiler:              ${CC} ${CCVERSION}
-   C++ Compiler:            ${CXX} ${CXXVERSION}
-   Compiler flags:          ${WCFLAGS} ${CFLAGS}
-   Linker flags:            ${WLDFLAGS} ${LDFLAGS}
-   Libraries:               ${LIBS}
-   Statically Linked Tools: ${support_static_tools}
-   Statically Linked FD:    ${support_static_fd}
-   Statically Linked SD:    ${support_static_sd}
-   Statically Linked DIR:   ${support_static_dir}
-   Statically Linked CONS:  ${support_static_cons}
-   Database backends:       ${db_backends}
-   Database port:           ${db_port}
-   Database name:           ${db_name}
-   Database user:           ${db_user}
-   Database version:        ${BDB_VERSION}
+   Host:                         ${host}${post_host} -- ${DISTNAME} ${DISTVER}
+   Bareos version:               ${BAREOS} ${VERSION} (${DATE})
+   Distribution:                 ${DISTNAME}
+   Source code location:         ${srcdir}
+   Modify package list:          ${DEBIAN_CONTROL}
+   Install binaries:             ${bindir}
+   Install system binaries:      ${sbindir}
+   Install libraries:            ${libdir}
+   Install system config files:  ${sysconfdir}
+   Install Bareos config files:  ${confdir}
+   Scripts directory:            ${scriptdir}
+   Archive directory:            ${archivedir}
+   Working directory:            ${working_dir}
+   PID directory:                ${piddir}
+   Subsys directory:             ${subsysdir}
+   Man directory:                ${mandir}
+   Data directory:               ${datarootdir}
+   Backend directory:            ${backenddir}
+   Plugin directory:             ${plugindir}
+   C Compiler:                   ${CC} ${CCVERSION}
+   C++ Compiler:                 ${CXX} ${CXXVERSION}
+   Compiler flags:               ${WCFLAGS} ${CFLAGS}
+   Linker flags:                 ${WLDFLAGS} ${LDFLAGS}
+   Libraries:                    ${LIBS}
+   Statically Linked Tools:      ${support_static_tools}
+   Statically Linked FD:         ${support_static_fd}
+   Statically Linked SD:         ${support_static_sd}
+   Statically Linked DIR:        ${support_static_dir}
+   Statically Linked CONS:       ${support_static_cons}
+   Database backends:            ${db_backends}
+   Database port:                ${db_port}
+   Database name:                ${db_name}
+   Database user:                ${db_user}
+   Database version:             ${BDB_VERSION}
 
-   Job Output Email:        ${job_email}
-   Traceback Email:         ${dump_email}
-   SMTP Host Address:       ${smtp_host}
+   Job Output Email:             ${job_email}
+   Traceback Email:              ${dump_email}
+   SMTP Host Address:            ${smtp_host}
 
-   Director Port:           ${dir_port}
-   File daemon Port:        ${fd_port}
-   Storage daemon Port:     ${sd_port}
+   Director Port:                ${dir_port}
+   File daemon Port:             ${fd_port}
+   Storage daemon Port:          ${sd_port}
 
-   Director User:           ${dir_user}
-   Director Group:          ${dir_group}
-   Storage Daemon User:     ${sd_user}
-   Storage DaemonGroup:     ${sd_group}
-   File Daemon User:        ${fd_user}
-   File Daemon Group:       ${fd_group}
+   Director User:                ${dir_user}
+   Director Group:               ${dir_group}
+   Storage Daemon User:          ${sd_user}
+   Storage DaemonGroup:          ${sd_group}
+   File Daemon User:             ${fd_user}
+   File Daemon Group:            ${fd_group}
 
-   Large file support:      $largefile_support
-   Bareos conio support:    ${got_conio} ${CONS_LIBS}
-   readline support:        ${got_readline} ${PRTREADLINE_SRC}
-   TCP Wrappers support:    ${TCPW_MSG} ${WRAPLIBS}
-   TLS support:             ${have_tls}
-   Encryption support:      ${have_crypto}
-   OpenSSL support:         ${have_openssl}
-   GNUTLS support:          ${have_gnutls}
-   ZLIB support:            ${have_zlib}
-   LZO support:             ${have_lzo}
-   FASTLZ support:          ${have_fastlz}
-   LMDB support:            ${support_lmdb}
-   NDMP support:            ${support_ndmp}
-   enable-smartalloc:       ${support_smartalloc}
-   enable-lockmgr:          ${support_lockmgr}
-   bat support:             ${support_bat}
-   tray-monitor support:    ${support_traymonitor}
-   client-only:             ${build_client_only}
-   build-dird:              ${build_dird}
-   build-stored:            ${build_stored}
-   Plugin support:          ${have_plugins}
-   AFS support:             ${have_afs}
-   ACL support:             ${have_acl}
-   XATTR support:           ${have_xattr}
-   SCSI Crypto support:     ${have_scsi_crypto}
-   GLUSTERFS support:       ${have_glusterfs}
-   DROPLET support:         ${have_droplet}
-   CEPH RADOS support:      ${have_ceph_rados}
-   CEPHFS support:          ${have_cephfs}
-   Python support:          ${support_python} ${PYTHON_LIBS}
-   systemd support:         ${support_systemd} ${SYSTEMD_UNITDIR}
-   Batch insert enabled:    ${batch_insert_db_backends}
-
+   Large file support:           $largefile_support
+   Bareos conio support:         ${got_conio} ${CONS_LIBS}
+   readline support:             ${got_readline} ${PRTREADLINE_SRC}
+   TCP Wrappers support:         ${TCPW_MSG} ${WRAPLIBS}
+   TLS support:                  ${have_tls}
+   Encryption support:           ${have_crypto}
+   OpenSSL support:              ${have_openssl}
+   GNUTLS support:               ${have_gnutls}
+   ZLIB support:                 ${have_zlib}
+   LZO support:                  ${have_lzo}
+   FASTLZ support:               ${have_fastlz}
+   JANSSON support:              ${have_jansson}
+   LMDB support:                 ${support_lmdb}
+   NDMP support:                 ${support_ndmp}
+   enable-smartalloc:            ${support_smartalloc}
+   enable-lockmgr:               ${support_lockmgr}
+   bat support:                  ${support_bat}
+   tray-monitor support:         ${support_traymonitor}
+   client-only:                  ${build_client_only}
+   build-dird:                   ${build_dird}
+   build-stored:                 ${build_stored}
+   Plugin support:               ${have_plugins}
+   AFS support:                  ${have_afs}
+   ACL support:                  ${have_acl}
+   XATTR support:                ${have_xattr}
+   SCSI Crypto support:          ${have_scsi_crypto}
+   GLUSTERFS support:            ${have_glusterfs}
+   DROPLET support:              ${have_droplet}
+   CEPH RADOS support:           ${have_ceph_rados}
+   RADOS striping support:       ${have_ceph_rados_striper}
+   CEPHFS support:               ${have_cephfs}
+   ELASTO support:               ${have_elasto}
+   Python support:               ${support_python} ${PYTHON_LIBS}
+   systemd support:              ${support_systemd} ${SYSTEMD_UNITDIR}
+   Batch insert enabled:         ${batch_insert_db_backends}
+   cmocka support:               ${have_cmocka}
   " > config.out
 
 # create a small shell script useful for support with

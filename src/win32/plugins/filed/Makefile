@@ -29,6 +29,7 @@ INCLUDES = -I../../.. \
 	   -I../../include \
 	   -I../../compat/include
 VDI_INCLUDES = -I../../vdi/include
+PYTHON_INCLUDES = -I../python/include
 LDLIBS = ../../lib/libbareos.dll \
          $(MINGW_LIB)/libpthreadGCE2.a \
          $(MINGW_LIB)/libz.dll.a \
@@ -40,7 +41,7 @@ else
 OPT_CXXFLAGS = $(CXXFLAGS)
 endif
 
-all: bpipe-fd.dll mssqlvdi-fd.dll
+all: bpipe-fd.dll mssqlvdi-fd.dll python-fd.dll
 
 bpipe-fd.dll: DLL_USAGE = -DBUILDING_DLL
 bpipe-fd.dll: bpipe-fd.o
@@ -55,11 +56,22 @@ mssqlvdi-fd.dll: DLL_USAGE = -DBUILDING_DLL
 mssqlvdi-fd.dll: mssqlvdi-fd.o
 	$(CXX) $(LDFLAGS_DLL) -Wl,--out-implib,$@.a mssqlvdi-fd.o $(LDLIBS) -o $@
 
+ifeq ($(WIN_VERSION),64)
+python-fd.o: CXXFLAGS += -DMS_WIN64
+endif
+python-fd.o: python-fd.c
+	@echo "Compiling $<"
+	$(CXX) $(DLL_USAGE) $(OPT_CXXFLAGS) $(PYTHON_INCLUDES) -c -o $@ $<
+
+python-fd.dll: DLL_USAGE = -DBUILDING_DLL
+python-fd.dll: python-fd.o
+	$(CXX) $(LDFLAGS_DLL) -Wl,--out-implib,$@.a python-fd.o $(LDLIBS) ../python/lib/$(WIN_VERSION)/python27.dll -o $@
+
 clean:
 	rm -f *.o
 
 distclean:: clean
-	rm -f bpipe-fd.dll mssqlvdi-fd.dll
+	rm -f bpipe-fd.dll mssqlvdi-fd.dll python-fd.dll bpipe-fd.dll.a mssqlvdi-fd.dll.a python-fd.dll.a
 
 # inference rules
 .c.o:

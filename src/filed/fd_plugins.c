@@ -226,7 +226,7 @@ static inline bRC trigger_plugin_event(JCR *jcr, bEventType eventType, bEvent *e
 }
 
 /**
- * Create a plugin event When receiving bEventCancelCommand, this function is called by an other thread.
+ * Create a plugin event When receiving bEventCancelCommand, this function is called by another thread.
  */
 void generate_plugin_event(JCR *jcr, bEventType eventType, void *value, bool reverse)
 {
@@ -1140,24 +1140,22 @@ int plugin_create_file(JCR *jcr, ATTR *attr, BFILE *bfd, int replace)
       return CF_ERROR;
    }
 
-   if (rp.create_status == CF_ERROR) {
+   switch (rp.create_status) {
+   case CF_ERROR:
       Qmsg1(jcr, M_ERROR, 0, _("Plugin createFile call failed. Returned CF_ERROR file=%s\n"), attr->ofname);
-      return CF_ERROR;
-   }
-
-   if (rp.create_status == CF_SKIP) {
-      return CF_SKIP;
-   }
-
-   if (rp.create_status == CF_CORE) {
-      return CF_CORE;           /* Let Bareos core handle the file creation */
-   }
-
-   /*
-    * Created link or directory?
-    */
-   if (rp.create_status == CF_CREATED) {
-      return rp.create_status;        /* yes, no need to bopen */
+      /*
+       * FALLTHROUGH
+       */
+   case CF_SKIP:
+      /*
+       * FALLTHROUGH
+       */
+   case CF_CORE:
+      /*
+       * FALLTHROUGH
+       */
+   case CF_CREATED:
+      return rp.create_status;
    }
 
    flags =  O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
@@ -1168,6 +1166,7 @@ int plugin_create_file(JCR *jcr, ATTR *attr, BFILE *bfd, int replace)
 
    if (status < 0) {
       berrno be;
+
       be.set_errno(bfd->berrno);
       Qmsg2(jcr, M_ERROR, 0, _("Could not create %s: ERR=%s\n"),
             attr->ofname, be.bstrerror());
@@ -2090,9 +2089,9 @@ static bRC bareosRegisterEvents(bpContext *ctx, int nr_events, ...)
 static bRC bareosJobMsg(bpContext *ctx, const char *file, int line,
                         int type, utime_t mtime, const char *fmt, ...)
 {
-   va_list arg_ptr;
-   char buf[2000];
    JCR *jcr;
+   va_list arg_ptr;
+   POOL_MEM buffer(PM_MESSAGE);
 
    if (ctx) {
       jcr = ((b_plugin_ctx *)ctx->bContext)->jcr;
@@ -2101,9 +2100,9 @@ static bRC bareosJobMsg(bpContext *ctx, const char *file, int line,
    }
 
    va_start(arg_ptr, fmt);
-   bvsnprintf(buf, sizeof(buf), fmt, arg_ptr);
+   buffer.bvsprintf(fmt, arg_ptr);
    va_end(arg_ptr);
-   Jmsg(jcr, type, mtime, "%s", buf);
+   Jmsg(jcr, type, mtime, "%s", buffer.c_str());
 
    return bRC_OK;
 }
@@ -2112,12 +2111,12 @@ static bRC bareosDebugMsg(bpContext *ctx, const char *file, int line,
                           int level, const char *fmt, ...)
 {
    va_list arg_ptr;
-   char buf[2000];
+   POOL_MEM buffer(PM_MESSAGE);
 
    va_start(arg_ptr, fmt);
-   bvsnprintf(buf, sizeof(buf), fmt, arg_ptr);
+   buffer.bvsprintf(fmt, arg_ptr);
    va_end(arg_ptr);
-   d_msg(file, line, level, "%s", buf);
+   d_msg(file, line, level, "%s", buffer.c_str());
 
    return bRC_OK;
 }

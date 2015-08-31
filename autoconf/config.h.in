@@ -6,6 +6,9 @@
 /* Define to 1 if the `closedir' function returns void instead of `int'. */
 #undef CLOSEDIR_VOID
 
+/* Where are Bareos config files stored */
+#undef CONFDIR
+
 /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
    systems. This function is required for `alloca.c' support on those systems.
    */
@@ -135,6 +138,12 @@
 /* Define to 1 if you have the `closefrom' function. */
 #undef HAVE_CLOSEFROM
 
+/* Define to 1 if cmocka support should be enabled */
+#undef HAVE_CMOCKA
+
+/* Define to 1 if you have the <cmocka.h> header file. */
+#undef HAVE_CMOCKA_H
+
 /* Define to 1 if you have compressBound */
 #undef HAVE_COMPRESS_BOUND
 
@@ -224,6 +233,9 @@
 
 /* Define to 1 if dynamic loading of storage backends is enabled */
 #undef HAVE_DYNAMIC_SD_BACKENDS
+
+/* Define to 1 if you have elasto lib */
+#undef HAVE_ELASTO
 
 /* Set if you have an Embedded MySQL Database */
 #undef HAVE_EMBEDDED_MYSQL
@@ -381,6 +393,9 @@
 /* Define to 1 if you have gfapi lib */
 #undef HAVE_GFAPI
 
+/* Define to 1 if you have the `glfs_readdirplus' function. */
+#undef HAVE_GLFS_READDIRPLUS
+
 /* Define to 1 if GNUTLS library is available */
 #undef HAVE_GNUTLS
 
@@ -438,6 +453,9 @@
 
 /* Define to 1 if you are running IRIX */
 #undef HAVE_IRIX_OS
+
+/* Define to 1 if you have jansson lib */
+#undef HAVE_JANSSON
 
 /* Define if you have <langinfo.h> and nl_langinfo(CODESET). */
 #undef HAVE_LANGINFO_CODESET
@@ -659,6 +677,15 @@
 /* Define to 1 if you have rados lib */
 #undef HAVE_RADOS
 
+/* Define to 1 if you have support for RADOS namespaces. */
+#undef HAVE_RADOS_NAMESPACES
+
+/* Define to 1 if you have support for RADOS NObject List API. */
+#undef HAVE_RADOS_NOBJECTS_LIST
+
+/* Define to 1 if you have radosstriper lib */
+#undef HAVE_RADOS_STRIPER
+
 /* Define to 1 if you have the `readdir_r' function. */
 #undef HAVE_READDIR_R
 
@@ -685,6 +712,9 @@
 
 /* Define to 1 if you have the `setenv' function. */
 #undef HAVE_SETENV
+
+/* Define to 1 if you have the <setjmp.h> header file. */
+#undef HAVE_SETJMP_H
 
 /* Define to 1 if you have the `setlocale' function. */
 #undef HAVE_SETLOCALE
@@ -1123,7 +1153,7 @@
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
-/* Where are config files stored */
+/* Where are system config files stored */
 #undef SYSCONFDIR
 
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */

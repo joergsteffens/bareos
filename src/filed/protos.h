@@ -36,7 +36,7 @@ bool authenticate_storagedaemon(JCR *jcr);
 bool authenticate_with_storagedaemon(JCR *jcr);
 
 /* backup.c */
-bool blast_data_to_storage_daemon(JCR *jcr, char *addr);
+bool blast_data_to_storage_daemon(JCR *jcr, char *addr, crypto_cipher_t cipher);
 bool encode_and_send_attributes(JCR *jcr, FF_PKT *ff_pkt, int &data_stream);
 void strip_path(FF_PKT *ff_pkt);
 void unstrip_path(FF_PKT *ff_pkt);
@@ -47,7 +47,7 @@ bool adjust_decompression_buffers(JCR *jcr);
 bool setup_compression_context(b_ctx &bctx);
 
 /* crypto.c */
-bool crypto_session_start(JCR *jcr);
+bool crypto_session_start(JCR *jcr, crypto_cipher_t cipher);
 void crypto_session_end(JCR *jcr);
 bool crypto_session_send(JCR *jcr, BSOCK *sd);
 bool verify_signature(JCR *jcr, r_ctx &rctx);
@@ -59,6 +59,9 @@ bool setup_encryption_context(b_ctx &bctx);
 bool setup_decryption_context(r_ctx &rctx, RESTORE_CIPHER_CTX &rcctx);
 bool encrypt_data(b_ctx *bctx, bool *need_more_data);
 bool decrypt_data(JCR *jcr, char **data, uint32_t *length, RESTORE_CIPHER_CTX *cipher_ctx);
+
+/* dir_cmd.c */
+void *handle_director_connection(BSOCK *dir);
 
 /* estimate.c */
 int make_estimate(JCR *jcr);
@@ -89,6 +92,10 @@ bool store_data(JCR *jcr, BFILE *bfd, char *data, const int32_t length, bool win
 
 /* sd_cmds.c */
 void *handle_stored_connection(BSOCK *sd);
+
+/* socket_server.c */
+void start_socket_server(dlist *addrs);
+void stop_socket_server();
 
 /* verify.c */
 int digest_file(JCR *jcr, FF_PKT *ff_pkt, DIGEST *digest);

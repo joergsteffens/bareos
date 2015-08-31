@@ -91,6 +91,11 @@ class DEVICERES;
 class RUNSCRIPTRES;
 
 /*
+ * Print configuration file schema in json format
+ */
+bool print_config_schema_json(POOL_MEM &buff);
+
+/*
  *   Director Resource
  */
 class DIRRES: public BRSRES {
@@ -108,7 +113,8 @@ public:
    alist *backend_directories;        /* Backend Directories */
    MSGSRES *messages;                 /* Daemon message handler */
    uint32_t MaxConcurrentJobs;        /* Max concurrent jobs for whole director */
-   uint32_t MaxConsoleConnect;        /* Max concurrent console session */
+   uint32_t MaxConnections;           /* Max concurrent connections */
+   uint32_t MaxConsoleConnections;    /* Max concurrent console connections */
    utime_t FDConnectTimeout;          /* timeout for connect in seconds */
    utime_t SDConnectTimeout;          /* timeout in seconds */
    utime_t heartbeat_interval;        /* Interval to send heartbeats */
@@ -118,6 +124,7 @@ public:
    char *tls_certfile;                /* TLS Server Certificate File */
    char *tls_keyfile;                 /* TLS Server Key File */
    char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    utime_t stats_retention;           /* Statistics retention period in seconds */
@@ -210,6 +217,7 @@ public:
    char *tls_certfile;                /* TLS Server Certificate File */
    char *tls_keyfile;                 /* TLS Server Key File */
    char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    bool tls_authenticate;             /* Authenticated with TLS */
@@ -230,8 +238,10 @@ public:
    char *db_user;
    char *db_name;
    char *db_driver;                   /* Select appropriate driver */
-   uint32_t mult_db_connections;      /* set if multiple connections wanted */
-   bool disable_batch_insert;         /* set if batch inserts should be disabled */
+   uint32_t mult_db_connections;      /* Set if multiple connections wanted */
+   bool disable_batch_insert;         /* Set if batch inserts should be disabled */
+   bool try_reconnect;                /* Try to reconnect a database connection when its dropped */
+   bool exit_on_fatal;                /* Make any fatal error in the connection to the database exit the program */
    uint32_t pooling_min_connections;  /* When using sql pooling start with this number of connections to the database */
    uint32_t pooling_max_connections;  /* When using sql pooling maximum number of connections to the database */
    uint32_t pooling_increment_connections; /* When using sql pooling increment the pool with this amount when its to small */
@@ -272,14 +282,17 @@ public:
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Client Certificate File */
    char *tls_keyfile;                 /* TLS Client Key File */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    bool passive;                      /* Passive Client */
+   bool allow_client_connect;         /* Allow a client to connect to the director */
    bool enabled;                      /* Set if client is enabled */
 
    bool tls_authenticate;             /* Authenticated with TLS */
    bool tls_enable;                   /* Enable TLS */
    bool tls_require;                  /* Require TLS */
+   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
    bool AutoPrune;                    /* Do automatic pruning? */
    bool StrictQuotas;                 /* Enable strict quotas? */
    bool QuotaIncludeFailedJobs;       /* Ignore failed jobs when calculating quota */
@@ -309,10 +322,12 @@ public:
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Client Certificate File */
    char *tls_keyfile;                 /* TLS Client Key File */
+   char *tls_cipherlist;              /* TLS Cipher List */
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    bool tls_authenticate;             /* Authenticated with TLS */
    bool tls_enable;                   /* Enable TLS */
    bool tls_require;                  /* Require TLS */
+   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
    bool enabled;                      /* Set if device is enabled */
    bool autochanger;                  /* Set if autochanger */
    bool collectstats;                 /* Set if statistics should be collected of this SD */
@@ -404,7 +419,8 @@ public:
    utime_t DuplicateJobProximity;     /* Permitted time between duplicicates */
    int64_t spool_size;                /* Size of spool file for this job */
    int32_t MaxConcurrentJobs;         /* Maximum concurrent jobs */
-   int32_t NumConcurrentJobs;         /* number of concurrent jobs running */
+   int32_t NumConcurrentJobs;         /* Number of concurrent jobs running */
+   int32_t MaxConcurrentCopies;       /* Limit number of concurrent jobs one Copy Job spawns */
    bool allow_mixed_priority;         /* Allow jobs with higher priority concurrently with this */
 
    MSGSRES *messages;                 /* How and where to send messages */

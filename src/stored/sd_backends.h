@@ -1,6 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
+   Copyright (C) 2014-2014 Planets Communications B.V.
    Copyright (C) 2014-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -66,6 +67,7 @@ static struct backend_interface_mapping_t {
    { B_OBJECT_STORE_DEV, "object" },
    { B_RADOS_DEV, "rados" },
    { B_CEPHFS_DEV, "cephfs" },
+   { B_ELASTO_DEV, "elasto" },
    { 0, NULL }
 };
 #endif /* __SD_DYNAMIC_H_ */

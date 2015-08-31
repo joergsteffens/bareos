@@ -381,6 +381,7 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
                              CRYPTO_PEM_PASSWD_CB *pem_callback,
                              const void *pem_userdata,
                              const char *dhfile,
+                             const char *cipherlist,
                              bool verify_peer)
 {
    TLS_CONTEXT *ctx;
@@ -393,7 +394,11 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
     * Allocate our OpenSSL Context
     * We allow tls 1.2. 1.1 and 1.0
     */
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+   ctx->openssl = SSL_CTX_new(TLS_method());
+#else
    ctx->openssl = SSL_CTX_new(SSLv23_method());
+#endif
    if (!ctx->openssl) {
       openssl_post_errors(M_FATAL, _("Error initializing SSL context"));
       goto err;
@@ -404,10 +409,12 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
     */
    SSL_CTX_set_options(ctx->openssl, SSL_OP_ALL);
 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
    /*
     * Disallow broken sslv2 and sslv3.
     */
    SSL_CTX_set_options(ctx->openssl, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+#endif
 
    /*
     * Set up pem encryption callback
@@ -515,7 +522,11 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
       SSL_CTX_set_options(ctx->openssl, SSL_OP_SINGLE_DH_USE);
    }
 
-   if (SSL_CTX_set_cipher_list(ctx->openssl, TLS_DEFAULT_CIPHERS) != 1) {
+   if (!cipherlist) {
+      cipherlist = TLS_DEFAULT_CIPHERS;
+   }
+
+   if (SSL_CTX_set_cipher_list(ctx->openssl, cipherlist) != 1) {
       Jmsg0(NULL, M_ERROR, 0,
              _("Error setting cipher list, no valid ciphers available\n"));
       goto err;
@@ -581,6 +592,11 @@ void set_tls_enable(TLS_CONTEXT *ctx, bool value)
    if (ctx) {
       ctx->tls_enable = value;
    }
+}
+
+bool get_tls_verify_peer(TLS_CONTEXT *ctx)
+{
+   return (ctx) ? ctx->verify_peer : false;
 }
 
 /*

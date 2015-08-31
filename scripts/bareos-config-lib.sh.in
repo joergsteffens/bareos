@@ -1,7 +1,7 @@
 #!/bin/sh
 
 CONFIG_LIB=@scriptdir@/bareos-config-lib.sh
-DIR_CFG=@sysconfdir@
+DIR_CFG=@confdir@
 CFG_DIR=${DIR_CFG}/bareos-dir.conf
 DIR_SCRIPTS=@scriptdir@
 DBCHECK="@sbindir@/bareos-dbcheck -B -c ${CFG_DIR}"
@@ -135,7 +135,7 @@ get_database_version_by_release()
     fi
 
     MAP=${SQL_DDL_DIR}/versions.map
-    if ! [ -r "$MAP" ]; then
+    if [ ! -r "$MAP" ]; then
         error "failed to read Bareos database versions map file $MAP"
         return 1
     fi
@@ -312,7 +312,7 @@ get_config_param()
     # default value, if parameter is not found
     DEFAULT="${5-}"
 
-    if ! [ -r "${CFG_FILE}" ]; then
+    if [ ! -r "${CFG_FILE}" ]; then
         warn "failed to get parameter ${SECTION} ${NAME} ${PARAM}: can't read ${CFG_FILE}"
         # if default value is given, return it anyway
         [ "$DEFAULT" ] && echo "$DEFAULT"
@@ -335,8 +335,20 @@ set_config_param()
     # set parameter values to a Bareos configuration file
     #
 
+    # Limitations:
+    # - multiple directives in one line,
+    #   separated by ";"
+    #   (could by handled by RS="\n|;", but this could cause problems with other lines)
+    #   Possible workaround: get expanded config by "bareos-* -xc"
+    # - "}" must be the only character in a line
+    # - between "{" and the first directive must be a line break
+    # - Name directive must come before directive to modify,
+    #   preferably Name is the first directive of a resource
+    # - does not handle includes ("@" and include scripts)
+    #   Possible workaround: get expanded config by "bareos-* -xc"
+
     # configuration file
-    CFG_FILE="${1}"
+    FILE="${1}"
     # section, currently ignored
     SECTION="${2}"
     # name of the section, currently ignored
@@ -346,16 +358,72 @@ set_config_param()
     # value to set
     VALUE="${5}"
 
-    if ! [ -r "${CFG_FILE}" ]; then
-        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: can't read ${CFG_FILE}"
+    if [ ! -w "${FILE}" ]; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: can't access ${CFG_FILE}"
         return 1
     fi
 
-    if egrep -i "^[ 	]*${PARAM}[ 	]*=" ${CFG_FILE}; then
-        sed -r -i "s#^[ 	]*${PARAM}[ 	]*=.*#  ${PARAM} = \"${VALUE}\"#" ${CFG_FILE}
-        echo "$CFG_FILE: set ${SECTION} ${NAME} ${PARAM} = ${VALUE}"
-    else
-        echo "FAILED to set ${SECTION} ${NAME} ${PARAM} = ${VALUE} ($CFG_FILE)"
+    TEMP=`mktemp`
+    awk -v SECTION="$SECTION" -v NAME="$NAME" -v PARAM="$PARAM" -v VALUE="$VALUE" '
+  BEGIN {
+    IGNORECASE = 1;
+    FS = "=";
+    # could add ; as Record Seperator, but this may causes problems if line contains this character.
+    #RS="\n|;"
+    done = 0
+    printed = 0
+  };
+  level == 1 && /}/ && resourcetype == SECTION && name == NAME && done == 0 {
+        printf "  %s = %s\n", PARAM, VALUE
+        printf "}\n"
+        printed = 1
+        done = 1
+  };
+  /}/ {
+    resourcetype="";
+    level--;
+  };
+  /{/ {
+        level++;
+  };
+  level == 1 && /{/ {
+        resourcetype=$1;
+        gsub("[ {]","",resourcetype)
+  };
+  level == 1 && resourcetype == SECTION && $1 ~ /^[ ]*Name[ ]*$/ {
+        name = $2
+        gsub("[ \"]","",name)
+        #printf "%s: %s\n", resourcetype, name
+  };
+  level == 1 && resourcetype == SECTION && name == NAME {
+        param = $1
+        gsub("[ \"]","",param)
+        #printf "found %s => %s\n", param, $2
+  };
+  level == 1 && resourcetype == SECTION && name == NAME && param == PARAM {
+        printf "%s= %s\n", $1, VALUE
+        printed = 1
+        done = 1
+  };
+  printed == 0 {
+    print $0
+  }
+  printed == 1 {
+    printed = 0
+  }
+    ' "$FILE" > "$TEMP"
+    if [ $? -ne 0 ]; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: replace failed"
+        rm "$TEMP"
+        return 1
+    fi
+
+    chown --reference="${FILE}" "$TEMP"
+    chmod --reference="${FILE}" "$TEMP"
+
+    if ! mv "$TEMP" "$FILE"; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: replacing $FILE failed"
+        rm -f "$TEMP"
         return 1
     fi
 }
@@ -394,7 +462,7 @@ get_database_param()
     fi
 
     # if $temp_log exists, but have only size 0, remove it.
-    if [ -e $temp_log ] && ! [ -s $temp_log ]; then
+    if [ -f $temp_log ] && ! [ -s $temp_log ]; then
         rm $temp_log
     fi
 
@@ -440,9 +508,9 @@ get_database_password()
 get_databases_installed()
 {
     # manually check different backends, to get the correct order
-    [ -e ${SQL_DDL_DIR}/creates/postgresql.sql ] && echo "postgresql"
-    [ -e ${SQL_DDL_DIR}/creates/mysql.sql ] && echo "mysql"
-    [ -e ${SQL_DDL_DIR}/creates/sqlite3.sql ] && echo "sqlite3"
+    [ -f ${SQL_DDL_DIR}/creates/postgresql.sql ] && echo "postgresql"
+    [ -f ${SQL_DDL_DIR}/creates/mysql.sql ] && echo "mysql"
+    [ -f ${SQL_DDL_DIR}/creates/sqlite3.sql ] && echo "sqlite3"
     return 0
 }
 
@@ -476,7 +544,8 @@ is_template_sql_file()
         return 1
     fi
 
-    if ! egrep -q '@DB_NAME@|@DB_USER@|@DB_PASS@|@DB_VERSION@' ${input_file}; then
+    egrep '@DB_NAME@|@DB_USER@|@DB_PASS@|@DB_VERSION@' ${input_file} > /dev/null 2>&1
+    if [ $? != 0 ]; then
         # no variables found in file, this file is not a template.
         return 0
     else
@@ -631,6 +700,14 @@ apply_dbconfig_settings()
     # check if dbconfig is enabled
     [ $dbc_upgrade = 'true' ] || return 0
 
+    if [ -n "$dbc_dbuser" ]; then
+        set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbuser" "$dbc_dbuser"
+    fi
+
+    if [ -n "$dbc_dbname" ]; then
+        set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbname" "$dbc_dbname"
+    fi
+
     case "$dbc_dbtype" in
         pgsql)
             set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbdriver" "postgresql"
@@ -646,7 +723,7 @@ apply_dbconfig_settings()
             # Therefore a link is created.
             if [ -r "${dbc_basepath}/${dbc_dbname}" ]; then
                 BAREOS_SQLITE_DB="`get_working_dir`/`get_database_name`.db"
-                if ! [ -e $BAREOS_SQLITE_DB ]; then
+                if [ ! -f $BAREOS_SQLITE_DB ]; then
                     ln -s "${dbc_basepath}/${dbc_dbname}" "$BAREOS_SQLITE_DB"
                     ls -a `get_working_dir`/bareos* || true
                 fi
@@ -680,7 +757,7 @@ get_local_hostname()
 
 replace()
 {
-    if ! [ $# -eq 2 ]; then
+    if [ $# -ne 2 ]; then
         return 1
     fi
 
@@ -710,7 +787,7 @@ initialize_local_hostname()
 
 replace_password()
 {
-    if ! [ $# -eq 2 ]; then
+    if [ $# -ne 2 ]; then
         return 1
     fi
 
@@ -733,7 +810,7 @@ initialize_passwords()
     if [ ! -f ${DIR_CFG}/.rndpwd ]; then
         for string in ${PASSWORD_SUBST}
         do
-           pass=`openssl rand -base64 33`
+           pass=`RANDFILE=/dev/urandom openssl rand -base64 33`
            echo "${string}=${pass}" >> ${DIR_CFG}/.rndpwd
         done
         chmod 400 ${DIR_CFG}/.rndpwd

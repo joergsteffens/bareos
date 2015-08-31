@@ -74,18 +74,20 @@ const char *fill_jobhisto =
 /* For ua_update.c */
 const char *list_pool = "SELECT * FROM Pool WHERE PoolId=%s";
 
-/* For ua_dotcmds.c */
+/* For ua_output.c */
 const char *client_backups =
    "SELECT DISTINCT Job.JobId,Client.Name as Client,Level,StartTime,"
-   "JobFiles,JobBytes,VolumeName,MediaType,FileSet,Media.Enabled as Enabled"
+   "JobStatus,JobFiles,JobBytes,VolumeName,MediaType,FileSet,Media.Enabled as Enabled"
    " FROM Client,Job,JobMedia,Media,FileSet"
    " WHERE Client.Name='%s'"
-   " AND FileSet='%s'"
+   " AND (%s)"
+   " AND Type='B'"
    " AND Client.ClientId=Job.ClientId"
-   " AND JobStatus IN ('T','W') AND Type='B'"
    " AND JobMedia.JobId=Job.JobId AND JobMedia.MediaId=Media.MediaId"
    " AND Job.FileSetId=FileSet.FileSetId"
-   " ORDER BY Job.StartTime";
+   "%s"
+   " ORDER BY Job.StartTime"
+   "%s";
 
 /* ====== ua_prune.c */
 
@@ -95,9 +97,22 @@ const char *sel_JobMedia =
    "AND Job.JobTDate<%s";
 
 /* Delete temp tables and indexes  */
+static const char *drop_deltabs_default =
+   "DROP TABLE DelCandidates";
+
 const char *drop_deltabs[] = {
-   "DROP TABLE DelCandidates",
-   NULL};
+   /* MySQL */
+   "DROP TABLE IF EXISTS DelCandidates",
+
+   /* Postgresql */
+   "DROP TABLE IF EXISTS DelCandidates",
+
+   /* SQLite3 */
+   drop_deltabs_default,
+
+   /* Ingres */
+   drop_deltabs_default
+};
 
 const char *create_delindex = "CREATE INDEX DelInx1 ON DelCandidates (JobId)";
 

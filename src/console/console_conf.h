@@ -51,9 +51,8 @@ enum {
 /* Definition of the contents of each Resource */
 
 /* Console "globals" */
-struct CONRES {
-   RES hdr;
-
+class CONRES : public BRSRES {
+public:
    char *rc_file;                     /* startup file */
    char *history_file;                /* command history file */
    s_password password;               /* UA server password */
@@ -67,6 +66,8 @@ struct CONRES {
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Client Certificate File */
    char *tls_keyfile;                 /* TLS Client Key File */
+   char *tls_cipherlist;              /* TLS Cipher List */
+   alist *tls_allowed_cns;            /* TLS Allowed Common Names */
    char *director;                    /* bind to director */
    utime_t heartbeat_interval;        /* Interval to send heartbeats to Dir */
 
@@ -74,9 +75,8 @@ struct CONRES {
 };
 
 /* Director */
-struct DIRRES {
-   RES hdr;
-
+class DIRRES : public BRSRES {
+public:
    uint32_t DIRport;                  /* UA server port */
    char *address;                     /* UA server address */
    s_password password;               /* UA server password */
@@ -89,6 +89,8 @@ struct DIRRES {
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Client Certificate File */
    char *tls_keyfile;                 /* TLS Client Key File */
+   char *tls_cipherlist;              /* TLS Cipher List */
+   alist *tls_allowed_cns;            /* TLS Allowed Common Names */
    utime_t heartbeat_interval;        /* Interval to send heartbeats to Dir */
 
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
@@ -104,3 +106,7 @@ union URES {
 };
 
 extern CONRES *me;                    /* "Global" Client resource */
+extern CONFIG *my_config;             /* Our Global config */
+
+void init_cons_config(CONFIG *config, const char *configfile, int exit_code);
+bool print_config_schema_json(POOL_MEM &buffer);

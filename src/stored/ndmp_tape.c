@@ -98,6 +98,10 @@ struct ndmp_backup_format_option {
    bool uses_level;
 };
 
+#if HAVE_NDMP
+static workq_t ndmp_workq;         /* Queue for processing NDMP connections */
+#endif
+
 static ndmp_backup_format_option ndmp_backup_format_options[] = {
    { (char *)"dump", true },
    { (char *)"tar", false },
@@ -419,7 +423,7 @@ static inline bool bndmp_read_data_from_block(JCR *jcr,
          }
 
          rctx->records_processed = 0;
-         rctx->rec->state_bits = 0;
+         clear_all_bits(REC_STATE_MAX, rctx->rec->state_bits);
          rctx->lastFileIndex = READ_NO_FILEINDEX;
 
          if (!read_next_record_from_block(dcr, rctx, &done)) {
@@ -813,7 +817,7 @@ extern "C" ndmp9_error bndmp_tape_open(struct ndm_session *sess,
 
          read_context_set_record(dcr, rctx);
          rctx->records_processed = 0;
-         rctx->rec->state_bits = 0;
+         clear_all_bits(REC_STATE_MAX, rctx->rec->state_bits);
          rctx->lastFileIndex = READ_NO_FILEINDEX;
       }
    }
@@ -1087,65 +1091,66 @@ void end_of_ndmp_backup(JCR *jcr)
       job_elapsed = 1;
    }
 
-   Jmsg(dcr->jcr, M_INFO, 0, _("Elapsed time=%02d:%02d:%02d, Transfer rate=%s Bytes/second\n"),
+   Jmsg(jcr, M_INFO, 0, _("Elapsed time=%02d:%02d:%02d, Transfer rate=%s Bytes/second\n"),
         job_elapsed / 3600, job_elapsed % 3600 / 60, job_elapsed % 60,
         edit_uint64_with_suffix(jcr->JobBytes / job_elapsed, ec));
 
+   if (dcr) {
+      /*
+       * Check if we can still write. This may not be the case
+       *  if we are at the end of the tape or we got a fatal I/O error.
+       */
+      if (dcr->dev && dcr->dev->can_write()) {
+         Dmsg1(200, "Write EOS label JobStatus=%c\n", jcr->JobStatus);
 
-   /*
-    * Check if we can still write. This may not be the case
-    *  if we are at the end of the tape or we got a fatal I/O error.
-    */
-   if (dcr->dev->can_write()) {
-      Dmsg1(200, "Write EOS label JobStatus=%c\n", jcr->JobStatus);
-
-      if (!write_session_label(dcr, EOS_LABEL)) {
-         /*
-          * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
-          */
-         if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
-            Jmsg1(jcr, M_FATAL, 0,
-                  _("Error writing end session label. ERR=%s\n"),
-                  dcr->dev->bstrerror());
+         if (!write_session_label(dcr, EOS_LABEL)) {
+            /*
+             * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+             */
+            if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
+               Jmsg1(jcr, M_FATAL, 0,
+                     _("Error writing end session label. ERR=%s\n"),
+                     dcr->dev->bstrerror());
+            }
+            jcr->setJobStatus(JS_ErrorTerminated);
          }
-         jcr->setJobStatus(JS_ErrorTerminated);
+
+         Dmsg0(90, "back from write_end_session_label()\n");
+
+         /*
+          * Flush out final partial block of this session
+          */
+         if (!dcr->write_block_to_device()) {
+            /*
+             * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+             */
+            if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
+               Jmsg2(jcr, M_FATAL, 0,
+                     _("Fatal append error on device %s: ERR=%s\n"),
+                     dcr->dev->print_name(), dcr->dev->bstrerror());
+            }
+            jcr->setJobStatus(JS_ErrorTerminated);
+         }
       }
 
-      Dmsg0(90, "back from write_end_session_label()\n");
-
-      /*
-       * Flush out final partial block of this session
-       */
-      if (!dcr->write_block_to_device()) {
+      if (jcr->is_JobStatus(JS_Terminated)) {
          /*
-          * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+          * Note: if commit is OK, the device will remain blocked
           */
-         if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
-            Jmsg2(jcr, M_FATAL, 0,
-                  _("Fatal append error on device %s: ERR=%s\n"),
-                  dcr->dev->print_name(), dcr->dev->bstrerror());
-         }
-         jcr->setJobStatus(JS_ErrorTerminated);
+         commit_data_spool(dcr);
+      } else {
+         discard_data_spool(dcr);
       }
-   }
 
-   if (jcr->is_JobStatus(JS_Terminated)) {
       /*
-       * Note: if commit is OK, the device will remain blocked
+       * Release the device -- and send final Vol info to DIR and unlock it.
        */
-      commit_data_spool(dcr);
-   } else {
-      discard_data_spool(dcr);
-   }
-
-   /*
-    * Release the device -- and send final Vol info to DIR and unlock it.
-    */
-   if (jcr->acquired_storage) {
-      release_device(dcr);
-      jcr->acquired_storage = false;
-   } else {
-      dcr->unreserve_device();
+      if (jcr->acquired_storage) {
+         release_device(dcr);
+         jcr->acquired_storage = false;
+      } else {
+         dcr->unreserve_device();
+      }
    }
 
    jcr->sendJobStatus();              /* update director */
@@ -1558,13 +1563,13 @@ extern "C" void *ndmp_thread_server(void *arg)
    return NULL;
 }
 
-int start_ndmp_thread_server(dlist *addr_list, int max_clients, workq_t *client_wq)
+int start_ndmp_thread_server(dlist *addr_list, int max_clients)
 {
    int status;
 
    ndmp_thread_server_args.addr_list = addr_list;
    ndmp_thread_server_args.max_clients = max_clients;
-   ndmp_thread_server_args.client_wq = client_wq;
+   ndmp_thread_server_args.client_wq = &ndmp_workq;
 
    if ((status = pthread_create(&ndmp_tid, NULL, ndmp_thread_server,
                                (void *)&ndmp_thread_server_args)) != 0) {

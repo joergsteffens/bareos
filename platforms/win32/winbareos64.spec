@@ -20,9 +20,10 @@
 
 
 %define flavors "prevista postvista prevista-debug postvista-debug"
+%define dirs_with_unittests "lib findlib"
 
 Name:           mingw64-winbareos
-Version:        14.2.5
+Version:        15.2.1
 Release:        0
 Summary:        bareos
 License:        LGPLv2+
@@ -34,15 +35,14 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildArch:      noarch
 #!BuildIgnore: post-build-checks
 
+%define addonsdir /bareos-addons/
+BuildRequires:  bareos-addons
+
+%define SIGNCERT ia.p12
+%define SIGNPWFILE signpassword
+
+
 Source1:        fillup.sed
-Source2:        vss_headers.tar
-Source3:        vdi_headers.tar
-Source4:        pgsql-libpq.tar
-
-# code signing cert
-Source10:       ia.p12
-Source11:       signpassword
-
 Patch1:         tray-monitor-conf.patch
 Patch2:         tray-monitor-conf-fd-sd.patch
 
@@ -80,12 +80,14 @@ BuildRequires:  mingw64-libfastlz
 BuildRequires:  mingw64-libfastlz-devel
 BuildRequires:  mingw64-libsqlite3-0
 BuildRequires:  mingw64-libsqlite-devel
+BuildRequires:  mingw64-cmocka
+BuildRequires:  mingw64-cmocka-devel
 
 BuildRequires:  sed
 BuildRequires:  vim, procps, bc
 
 BuildRequires:  osslsigncode
-
+BuildRequires:  obs-name-resolution-settings
 %description
 bareos
 
@@ -138,9 +140,10 @@ cp src/qt-tray-monitor/tray-monitor.conf.in.orig src/qt-tray-monitor/tray-monito
 mv src/qt-tray-monitor/tray-monitor.fd-sd-dir.conf.in src/qt-tray-monitor/tray-monitor.fd-sd.conf.in
 cp src/qt-tray-monitor/tray-monitor.conf.in.orig src/qt-tray-monitor/tray-monitor.fd-sd-dir.conf.in
 
-tar xvf %SOURCE2
-tar xvf %SOURCE3
-tar xvf %SOURCE4
+# unpack addons
+for i in `ls %addonsdir`; do
+   tar xvf %addonsdir/$i
+done
 
 CONTENT=`ls`
 
@@ -155,25 +158,22 @@ done
 
 %build
 
-#cd src/win32/
-#make WIN_DEBUG=%{WIN_DEBUG} BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=%{WIN_VISTACOMPAT} %{?jobs:-j%jobs}
+DIRS_WITH_UNITESTS="lib findlib";
 
+for flavor in `echo "%flavors"`; do
+   cd $flavor/src/win32/
+   WIN_VISTACOMPAT=$(echo $flavor | grep postvista >/dev/null && echo yes || echo no)
+   WIN_DEBUG=$(echo $flavor | grep debug >/dev/null && echo yes || echo no)
+   make WIN_DEBUG=$WIN_DEBUG BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=$WIN_VISTACOMPAT %{?jobs:-j%jobs}
+   cd -
 
-cd postvista/src/win32/
-make WIN_DEBUG=no BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=yes %{?jobs:-j%jobs}
-cd -
+   for UNITTEST_DIR in `echo "%dirs_with_unittests"`; do
+      cd $flavor/src/win32/${UNITTEST_DIR}/unittests
+      make WIN_DEBUG=$WIN_DEBUG BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=$WIN_VISTACOMPAT %{?jobs:-j%jobs}
+      cd -
+   done
 
-cd postvista-debug/src/win32/
-make WIN_DEBUG=yes BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=yes %{?jobs:-j%jobs}
-cd -
-
-cd prevista/src/win32/
-make WIN_DEBUG=no BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=no %{?jobs:-j%jobs}
-cd -
-
-cd prevista-debug/src/win32/
-make WIN_DEBUG=yes BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=no %{?jobs:-j%jobs}
-cd -
+done
 
 %install
 for flavor in `echo "%flavors"`; do
@@ -181,6 +181,9 @@ for flavor in `echo "%flavors"`; do
    mkdir -p $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
    mkdir -p $RPM_BUILD_ROOT/etc/$flavor/%name
 
+   for UNITTEST_DIR in `echo "%dirs_with_unittests"`; do
+      cp $flavor/src/win32/${UNITTEST_DIR}/unittests/*.exe $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
+   done
    pushd $flavor/src/win32
 
    cp qt-tray-monitor/bareos-tray-monitor.exe \
@@ -191,9 +194,14 @@ for flavor in `echo "%flavors"`; do
       stored/btape.exe \
       stored/bls.exe \
       stored/bextract.exe \
+      stored/bscan.exe \
       dird/bareos-dir.exe \
       dird/bareos-dbcheck.exe \
       tools/bsmtp.exe \
+      tools/bregex.exe \
+      tools/bwild.exe \
+      tests/grow.exe \
+      tests/bregtest.exe \
       stored/libbareossd*.dll \
       cats/libbareoscats*.dll \
       lib/libbareos.dll \
@@ -201,7 +209,10 @@ for flavor in `echo "%flavors"`; do
       lmdb/libbareoslmdb.dll \
       plugins/filed/bpipe-fd.dll \
       plugins/filed/mssqlvdi-fd.dll \
+      plugins/filed/python-fd.dll \
       plugins/stored/autoxflate-sd.dll \
+      plugins/stored/python-sd.dll \
+      plugins/dird/python-dir.dll \
       $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
 
    for cfg in  ../qt-tray-monitor/tray-monitor.fd.conf.in \
@@ -228,6 +239,10 @@ for flavor in `echo "%flavors"`; do
       cp -av src/cats/ddl/$i/postgres* $RPM_BUILD_ROOT/etc/$flavor/%name/ddl/$i/
    done
 
+   for i in creates updates; do
+      cp -av src/cats/ddl/$i/sqlite* $RPM_BUILD_ROOT/etc/$flavor/%name/ddl/$i/
+   done
+
    for sql in $RPM_BUILD_ROOT/etc/$flavor//%name/ddl/*/*.sql;
    do
       sed -f %SOURCE1 $sql -i ;
@@ -237,10 +252,12 @@ for flavor in `echo "%flavors"`; do
    pushd $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
    for BINFILE in *; do
       mv $BINFILE $BINFILE.unsigned
-      osslsigncode -pkcs12 %SOURCE10 \
-                   -pass `cat %SOURCE11` \
+      osslsigncode sign \
+                   -pkcs12 ${OLDPWD}/%SIGNCERT \
+                   -readpass ${OLDPWD}/%SIGNPWFILE \
                    -n "${DESCRIPTION}" \
                    -i http://www.bareos.com/ \
+                   -t http://timestamp.comodoca.com/authenticode \
                    -in  $BINFILE.unsigned \
                    -out $BINFILE
       rm *.unsigned
@@ -252,12 +269,6 @@ done
 rm -rf $RPM_BUILD_ROOT
 
 %files
-#defattr(-,root,root)
-#/etc/%name/*.conf
-#/etc/%name/ddl/
-#dir %{_mingw64_bindir}
-#{_mingw64_bindir}/*.dll
-#{_mingw64_bindir}/*.exe
 
 
 %files prevista

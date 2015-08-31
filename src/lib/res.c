@@ -26,12 +26,12 @@
  * Split from parse_conf.c April MMV
  */
 
+#define NEED_JANSSON_NAMESPACE 1
 #include "bareos.h"
 #include "generic_res.h"
 
 /* Forward referenced subroutines */
 static void scan_types(LEX *lc, MSGSRES *msg, int dest, char *where, char *cmd);
-static const char *datatype_to_str(int type);
 
 extern CONFIG *my_config;             /* Our Global config */
 
@@ -593,9 +593,9 @@ static void store_alist_str(LEX *lc, RES_ITEM *item, int index, int pass)
 
    if (pass == 2) {
       if (!*(item->value)) {
-         *item->alistvalue = New(alist(10, owned_by_alist));
+         *(item->alistvalue) = New(alist(10, owned_by_alist));
       }
-      list = *item->alistvalue;
+      list = *(item->alistvalue);
 
       lex_get_token(lc, T_STRING);   /* scan next item */
       Dmsg4(900, "Append %s to alist %p size=%d %s\n",
@@ -636,10 +636,10 @@ static void store_alist_dir(LEX *lc, RES_ITEM *item, int index, int pass)
    URES *res_all = (URES *)my_config->m_res_all;
 
    if (pass == 2) {
-      if (!*item->alistvalue) {
-         *item->alistvalue = New(alist(10, owned_by_alist));
+      if (!*(item->alistvalue)) {
+         *(item->alistvalue) = New(alist(10, owned_by_alist));
       }
-      list = *item->alistvalue;
+      list = *(item->alistvalue);
 
       lex_get_token(lc, T_STRING);   /* scan next item */
       Dmsg4(900, "Append %s to alist %p size=%d %s\n",
@@ -684,10 +684,10 @@ static void store_plugin_names(LEX *lc, RES_ITEM *item, int index, int pass)
    if (pass == 2) {
       lex_get_token(lc, T_STRING);   /* scan next item */
 
-      if (!*item->alistvalue) {
+      if (!*(item->alistvalue)) {
          *(item->alistvalue) = New(alist(10, owned_by_alist));
       }
-      list = *item->alistvalue;
+      list = *(item->alistvalue);
 
       plugin_names = bstrdup(lc->str);
       plugin_name = plugin_names;
@@ -942,9 +942,9 @@ static void store_bit(LEX *lc, RES_ITEM *item, int index, int pass)
 
    lex_get_token(lc, T_NAME);
    if (bstrcasecmp(lc->str, "yes") || bstrcasecmp(lc->str, "true")) {
-      *(item->ui32value) |= item->code;
+      set_bit(item->code, item->bitvalue);
    } else if (bstrcasecmp(lc->str, "no") || bstrcasecmp(lc->str, "false")) {
-      *(item->ui32value) &= ~(item->code);
+      clear_bit(item->code, item->bitvalue);
    } else {
       scan_err2(lc, _("Expect %s, got: %s"), "YES, NO, TRUE, or FALSE", lc->str); /* YES and NO must not be translated */
       return;
@@ -1494,7 +1494,7 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
       bool print_item = false;
 
       /*
-       * If this is an alias for an other config keyword suppress it.
+       * If this is an alias for another config keyword suppress it.
        */
       if ((items[i].flags & CFG_ITEM_ALIAS)) {
          continue;
@@ -1713,8 +1713,8 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
          * One line for each member of the list
          */
          char *value;
-         alist* list;
-         list = (alist *) *(items[i].value);
+         alist *list;
+         list = *(items[i].alistvalue);
 
          if (list != NULL) {
             foreach_alist(value, list) {
@@ -1738,10 +1738,10 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
           */
          int cnt = 0;
          RES *res;
-         alist* list;
+         alist *list;
          POOL_MEM res_names;
 
-         list = (alist *) *(items[i].value);
+         list = *(items[i].alistvalue);
          if (list != NULL) {
             Mmsg(temp, "%s = ", items[i].name);
             indent_config_item(cfg_str, 1, temp.c_str());
@@ -1765,7 +1765,7 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
       case CFG_TYPE_RES: {
          RES *res;
 
-         res = (RES *)*(items[i].value);
+         res = *(items[i].resvalue);
          if (res != NULL && res->name != NULL) {
             Mmsg(temp, "%s = \"%s\"\n", items[i].name, res->name);
             indent_config_item(cfg_str, 1, temp.c_str());
@@ -1773,7 +1773,7 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
          break;
       }
       case CFG_TYPE_BIT:
-         if (*(items[i].ui32value) & items[i].code) {
+         if (bit_is_set(items[i].code, items[i].bitvalue)) {
             Mmsg(temp, "%s = %s\n", items[i].name, NT_("yes"));
          } else {
             Mmsg(temp, "%s = %s\n", items[i].name, NT_("no"));
@@ -1829,64 +1829,9 @@ bool BRSRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
    return true;
 }
 
-static void add_indent(POOL_MEM &cfg_str, int level)
-{
-   for (int i = 0; i < level; i++) {
-      pm_strcat(cfg_str, DEFAULT_INDENT_STRING);
-   }
-}
-
-void add_json_pair_plain(POOL_MEM &cfg_str, int level, const char *string, const char *value)
-{
-   POOL_MEM temp;
-
-   add_indent(cfg_str, level);
-   Mmsg(temp, "\"%s\": %s,\n", string, value);
-   pm_strcat(cfg_str, temp.c_str());
-}
-
-void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, const char *value)
-{
-   POOL_MEM temp;
-
-   Mmsg(temp, "\"%s\"", value);
-   add_json_pair_plain(cfg_str, level, string, temp.c_str());
-}
-
-void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, int value)
-{
-   POOL_MEM temp;
-
-   Mmsg(temp, "%d", value);
-   add_json_pair_plain(cfg_str, level, string, temp.c_str());
-}
-
-void add_json_object_start(POOL_MEM &cfg_str, int level, const char *string)
-{
-   add_indent(cfg_str, level);
-   POOL_MEM temp;
-   if (bstrcmp(string, "")) {
-      Mmsg(temp, "{\n");
-   } else {
-      Mmsg(temp, "\"%s\": {\n", string);
-   }
-   pm_strcat(cfg_str, temp.c_str());
-}
-
-void add_json_object_end(POOL_MEM &cfg_str, int level, const char *string)
-{
-   add_indent(cfg_str, level + 1);
-   pm_strcat(cfg_str, "\"\": null\n");
-   add_indent(cfg_str, level);
-   if (bstrcmp(string, "")) {
-      pm_strcat(cfg_str, "}\n");
-   } else {
-      pm_strcat(cfg_str, "},\n");
-   }
-}
-
+#ifdef HAVE_JANSSON
 /*
- * prints a resource item schema description in JSON format.
+ * resource item schema description in JSON format.
  * Example output:
  *
  *   "filesetacl": {
@@ -1899,65 +1844,69 @@ void add_json_object_end(POOL_MEM &cfg_str, int level, const char *string)
  *     [ "deprecated": true, ]
  *     [ "equals": true, ]
  *     ...
+ *     "type": "RES_ITEM"
  *   }
  */
-bool print_res_item_schema_json(POOL_MEM &buff, int level, RES_ITEM *item)
+json_t *json_item(RES_ITEM *item)
 {
-    add_json_object_start(buff, level, item->name);
+   json_t *json = json_object();
 
-    add_json_pair(buff, level + 1, "datatype", datatype_to_str(item->type));
-    add_json_pair(buff, level + 1, "datatype_number", item->type);
-    add_json_pair(buff, level + 1, "code", item->code);
+   json_object_set_new(json, "datatype", json_string(datatype_to_str(item->type)));
+   json_object_set_new(json, "code", json_integer(item->code));
 
-    if (item->flags & CFG_ITEM_ALIAS) {
-       add_json_pair(buff, level + 1, "alias", "true");
-    }
-    if (item->flags & CFG_ITEM_DEFAULT) {
-       add_json_pair(buff, level + 1, "default_value", item->default_value);
-    }
-    if (item->flags & CFG_ITEM_PLATFORM_SPECIFIC) {
-       add_json_pair(buff, level + 1, "platform_specific", "true");
-    }
-    if (item->flags & CFG_ITEM_DEPRECATED) {
-       add_json_pair_plain(buff, level + 1, "deprecated", "true");
-    }
-    if (item->flags & CFG_ITEM_NO_EQUALS) {
-       add_json_pair_plain(buff, level + 1, "equals", "false");
-    } else {
-       add_json_pair_plain(buff, level + 1, "equals", "true");
-    }
-    if (item->flags & CFG_ITEM_REQUIRED) {
-       add_json_pair_plain(buff, level + 1, "required", "true");
-    }
-    add_json_object_end(buff, level, item->name);
-
-   return true;
-}
-
-/*
- * Print configuration file schema in json format
- */
-bool print_config_schema_json(POOL_MEM &buffer)
-{
-   RES_TABLE *resources = my_config->m_resources;
-
-   add_json_object_start(buffer, 0, "");
-   for (int r = 0; resources[r].name; r++) {
-      RES_TABLE resource = my_config->m_resources[r];
-
-      add_json_object_start(buffer, 1, resource.name);
-      if (resource.items) {
-         RES_ITEM* items = resource.items;
-         for (int i = 0; items[i].name; i++) {
-            print_res_item_schema_json(buffer, 2, &items[i]);
-         }
-      }
-      add_json_object_end(buffer, 1, resource.name);
+   if (item->flags & CFG_ITEM_ALIAS) {
+      json_object_set_new(json, "alias", json_true());
    }
-   add_json_object_end(buffer, 0, "");
+   if (item->flags & CFG_ITEM_DEFAULT) {
+      /* FIXME? would it be better to convert it to the right type before returning? */
+      json_object_set_new(json, "default_value", json_string(item->default_value));
+   }
+   if (item->flags & CFG_ITEM_PLATFORM_SPECIFIC) {
+      json_object_set_new(json, "platform_specific", json_true());
+   }
+   if (item->flags & CFG_ITEM_DEPRECATED) {
+      json_object_set_new(json, "deprecated", json_true());
+   }
+   if (item->flags & CFG_ITEM_NO_EQUALS) {
+      json_object_set_new(json, "equals", json_false());
+   } else {
+      json_object_set_new(json, "equals", json_true());
+   }
+   if (item->flags & CFG_ITEM_REQUIRED) {
+      json_object_set_new(json, "required", json_true());
+   }
+   if (item->versions) {
+      json_object_set_new(json, "versions", json_string(item->versions));
+   }
+   if (item->description) {
+      json_object_set_new(json, "description", json_string(item->description));
+   }
 
-   return true;
+   return json;
 }
+
+json_t *json_item(s_kw *item)
+{
+   json_t *json = json_object();
+
+   json_object_set_new(json, "token", json_integer(item->token));
+
+   return json;
+}
+
+json_t *json_items(RES_ITEM items[])
+{
+   json_t *json = json_object();
+
+   if (items) {
+      for (int i = 0; items[i].name; i++) {
+         json_object_set_new(json, items[i].name, json_item(&items[i]));
+      }
+   }
+
+   return json;
+}
+#endif
 
 static DATATYPE_NAME datatype_names[] = {
    /*
@@ -2046,13 +1995,38 @@ static DATATYPE_NAME datatype_names[] = {
    { 0, NULL, NULL }
 };
 
-static const char *datatype_to_str(int type)
+DATATYPE_NAME *get_datatype(int number)
 {
-   for (int i=0; datatype_names[i].name; i++) {
+   int size = sizeof(datatype_names) / sizeof(datatype_names[0]);
+
+   if (number >= size) {
+      /*
+       * Last entry of array is a dummy entry
+       */
+      number=size - 1;
+   }
+
+   return &(datatype_names[number]);
+}
+
+const char *datatype_to_str(int type)
+{
+   for (int i = 0; datatype_names[i].name; i++) {
       if (datatype_names[i].number == type) {
          return datatype_names[i].name;
       }
    }
 
    return "unknown";
+}
+
+const char *datatype_to_description(int type)
+{
+   for (int i = 0; datatype_names[i].name; i++) {
+      if (datatype_names[i].number == type) {
+         return datatype_names[i].description;
+      }
+   }
+
+   return NULL;
 }

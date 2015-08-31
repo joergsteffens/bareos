@@ -1,6 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
+   Copyright (C) 2014-2014 Planets Communications B.V.
    Copyright (C) 2014-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -33,6 +34,7 @@
 class object_store_device: public DEVICE {
 private:
    char *m_object_configstring;
+   char *m_profile;
    char *m_object_bucketname;
    dpl_ctx_t *m_ctx;
    dpl_vfile_t *m_vfd;

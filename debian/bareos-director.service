@@ -1,0 +1,45 @@
+# This file is part of package Bareos Director Daemon
+#
+# Copyright (c) 2011 Free Software Foundation Europe e.V.
+# Bareos Community
+# Author: Bruno Friedmann
+# Description:
+#    Used to start the bareos director daemon service (bareos-dir)
+#     will be installed as /lib/systemd/system/bareos-dir.service
+#    enable : systemctl enable bareos-dir.service
+#	 start : systemctl start bareos-dir.service
+#
+# Bareos Director Daemon service
+#
+[Unit]
+Description=Bareos Director Daemon service
+Documentation=man:bareos-dir(8)
+Requires=nss-lookup.target network.target remote-fs.target time-sync.target
+After=nss-lookup.target network.target remote-fs.target time-sync.target postgresql.service mysql.service
+# Dependency about the database
+# We let administrators decide if they need it (if local db instance)
+# Wants=@DEFAULT_DB_TYPE@.service
+# Check if working dir exist and is a directory
+ConditionPathIsDirectory=/var/lib/bareos
+# Before=
+# Conflicts=
+
+[Service]
+Type=forking
+User=bareos
+Group=bareos
+WorkingDirectory=/var/lib/bareos
+PIDFile=/var/lib/bareos/bareos-dir.9101.pid
+# EnvironmentFile=-/etc/sysconfig/bareos-dir
+# StandardOutput=syslog
+ExecStartPre=/usr/sbin/bareos-dir -c /etc/bareos/bareos-dir.conf -t -f
+ExecStart=/usr/sbin/bareos-dir -c /etc/bareos/bareos-dir.conf
+SuccessExitStatus=0 1 15
+# This daemon should be able to reload the conf file
+#ExecReload=/sbin/killproc -p /var/lib/bareos/bareos-dir.pid -HUP /usr/sbin/bareos-dir
+#Restart=on-failure
+
+[Install]
+Alias=bareos-dir.service
+Alias=bareos-director.service
+WantedBy=multi-user.target

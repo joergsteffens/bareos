@@ -47,7 +47,7 @@ static POOLMEM *substitute_prompts(UAContext *ua,
  *   SQL statement possibly terminated by ;
  *   :next query prompt
  */
-int query_cmd(UAContext *ua, const char *cmd)
+bool query_cmd(UAContext *ua, const char *cmd)
 {
    FILE *fd = NULL;
    POOLMEM *query = get_pool_memory(PM_MESSAGE);
@@ -126,8 +126,8 @@ int query_cmd(UAContext *ua, const char *cmd)
          query = substitute_prompts(ua, query, prompt, nprompt);
          Dmsg1(100, "Query2=%s\n", query);
          if (query[0] == '!') {
-            db_list_sql_query(ua->jcr, ua->db, query+1, printit, ua, false, VERT_LIST);
-         } else if (!db_list_sql_query(ua->jcr, ua->db, query, printit, ua, true, HORZ_LIST)) {
+            db_list_sql_query(ua->jcr, ua->db, query+1, ua->send, VERT_LIST, false);
+         } else if (!db_list_sql_query(ua->jcr, ua->db, query, ua->send, HORZ_LIST, true)) {
             ua->send_msg("%s\n", query);
          }
          query[0] = 0;
@@ -138,8 +138,8 @@ int query_cmd(UAContext *ua, const char *cmd)
       query = substitute_prompts(ua, query, prompt, nprompt);
       Dmsg1(100, "Query2=%s\n", query);
          if (query[0] == '!') {
-            db_list_sql_query(ua->jcr, ua->db, query+1, printit, ua, false, VERT_LIST);
-         } else if (!db_list_sql_query(ua->jcr, ua->db, query, printit, ua, true, HORZ_LIST)) {
+            db_list_sql_query(ua->jcr, ua->db, query+1, ua->send, VERT_LIST, false);
+         } else if (!db_list_sql_query(ua->jcr, ua->db, query, ua->send, HORZ_LIST, true)) {
             ua->error_msg("%s\n", query);
          }
    }
@@ -152,7 +152,7 @@ bail_out:
    for (i=0; i<nprompt; i++) {
       free(prompt[i]);
    }
-   return 1;
+   return true;
 }
 
 static POOLMEM *substitute_prompts(UAContext *ua,
@@ -243,14 +243,14 @@ static POOLMEM *substitute_prompts(UAContext *ua,
 /*
  * Get general SQL query for Catalog
  */
-int sqlquery_cmd(UAContext *ua, const char *cmd)
+bool sqlquery_cmd(UAContext *ua, const char *cmd)
 {
    POOL_MEM query(PM_MESSAGE);
    int len;
    const char *msg;
 
    if (!open_client_db(ua, true)) {
-      return 1;
+      return true;
    }
    *query.c_str() = 0;
 
@@ -271,7 +271,7 @@ int sqlquery_cmd(UAContext *ua, const char *cmd)
       if (ua->cmd[len-1] == ';') {
          ua->cmd[len-1] = 0;          /* zap ; */
          /* Submit query */
-         db_list_sql_query(ua->jcr, ua->db, query.c_str(), printit, ua, true, HORZ_LIST);
+         db_list_sql_query(ua->jcr, ua->db, query.c_str(), ua->send, HORZ_LIST, true);
          *query.c_str() = 0;         /* start new query */
          msg = _("Enter SQL query: ");
       } else {
@@ -279,5 +279,5 @@ int sqlquery_cmd(UAContext *ua, const char *cmd)
       }
    }
    ua->send_msg(_("End query mode.\n"));
-   return 1;
+   return true;
 }

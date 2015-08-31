@@ -60,7 +60,7 @@ bool bnet_sig(BSOCK *bs, int sig);
 bool bnet_tls_server(TLS_CONTEXT *ctx, BSOCK *bsock,
                      alist *verify_list);
 bool bnet_tls_client(TLS_CONTEXT *ctx, BSOCK *bsock,
-                     alist *verify_list);
+                     bool verify_peer, alist *verify_list);
 int bnet_get_peer(BSOCK *bs, char *buf, socklen_t buflen);
 BSOCK *dup_bsock(BSOCK *bsock);
 const char *bnet_strerror(BSOCK *bsock);
@@ -133,6 +133,7 @@ void stack_trace();
 int safer_unlink(const char *pathname, const char *regex);
 
 /* compression.c */
+const char *cmprs_algo_to_text(uint32_t compression_algorithm);
 bool setup_compression_buffers(JCR *jcr, bool compatible,
                                uint32_t compression_algorithm,
                                uint32_t *compress_buf_size);
@@ -242,6 +243,9 @@ void remove_jcr_from_tsd(JCR *jcr);
 uint32_t get_jobid_from_tsd();
 uint32_t get_jobid_from_tid(pthread_t tid);
 
+/* json.c */
+void initialize_json();
+
 /* lex.c */
 LEX *lex_close_file(LEX *lf);
 LEX *lex_open_file(LEX *lf,
@@ -279,6 +283,12 @@ void register_message_callback(void msg_callback(int type, char *msg));
 
 /* passphrase.c */
 char *generate_crypto_passphrase(int length);
+
+/* path_list.c */
+htable *path_list_init();
+bool path_list_lookup(htable *path_list, const char *fname);
+bool path_list_add(htable *path_list, uint32_t len, const char *fname);
+void free_path_list(htable *path_list);
 
 /* poll.c */
 int wait_for_readable_fd(int fd, int sec, bool ignore_interupts);
@@ -347,6 +357,7 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
                              CRYPTO_PEM_PASSWD_CB *pem_callback,
                              const void *pem_userdata,
                              const char *dhfile,
+                             const char *cipherlist,
                              bool verify_peer);
 void free_tls_context(TLS_CONTEXT *ctx);
 #ifdef HAVE_TLS
@@ -366,6 +377,7 @@ bool get_tls_require(TLS_CONTEXT *ctx);
 void set_tls_require(TLS_CONTEXT *ctx, bool value);
 bool get_tls_enable(TLS_CONTEXT *ctx);
 void set_tls_enable(TLS_CONTEXT *ctx, bool value);
+bool get_tls_verify_peer(TLS_CONTEXT *ctx);
 
 /* util.c */
 void escape_string(char *snew, char *old, int len);

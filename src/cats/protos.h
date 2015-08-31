@@ -81,7 +81,7 @@ bool db_delete_media_record(JCR *jcr, B_DB *mdb, MEDIA_DBR *mr);
 bool db_find_last_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM **stime, char *job, int JobLevel);
 bool db_find_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM **stime, char *job);
 bool db_find_last_jobid(JCR *jcr, B_DB *mdb, const char *Name, JOB_DBR *jr);
-int db_find_next_volume(JCR *jcr, B_DB *mdb, int index, bool InChanger, MEDIA_DBR *mr);
+int db_find_next_volume(JCR *jcr, B_DB *mdb, int index, bool InChanger, MEDIA_DBR *mr, const char *unwanted_volumes);
 bool db_find_failed_job_since(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM *stime, int &JobLevel);
 
 /* sql_get.c */
@@ -115,20 +115,38 @@ bool db_get_quota_record(JCR *jcr, B_DB *mdb, CLIENT_DBR *cr);
 bool db_get_quota_jobbytes(JCR *jcr, B_DB *mdb, JOB_DBR *jr, utime_t JobRetention);
 bool db_get_quota_jobbytes_nofailed(JCR *jcr, B_DB *mdb, JOB_DBR *jr, utime_t JobRetention);
 int db_get_ndmp_level_mapping(JCR *jcr, B_DB *mdb, JOB_DBR *jr, char *filesystem);
-bool db_get_ndmp_environment_string(JCR *jcr, B_DB *mdb, JOB_DBR *jr, DB_RESULT_HANDLER *result_handler, void *ctx);
+bool db_get_ndmp_environment_string(JCR *jcr, B_DB *mdb, JOB_DBR *jr,
+                                    DB_RESULT_HANDLER *result_handler, void *ctx);
 
 /* sql_list.c */
-void db_list_pool_records(JCR *jcr, B_DB *db, POOL_DBR *pr, DB_LIST_HANDLER sendit, void *ctx, e_list_type type);
-void db_list_job_records(JCR *jcr, B_DB *db, JOB_DBR *jr, DB_LIST_HANDLER sendit, void *ctx, e_list_type type);
-void db_list_job_totals(JCR *jcr, B_DB *db, JOB_DBR *jr, DB_LIST_HANDLER sendit, void *ctx);
-void db_list_files_for_job(JCR *jcr, B_DB *db, uint32_t jobid, DB_LIST_HANDLER sendit, void *ctx);
-void db_list_media_records(JCR *jcr, B_DB *mdb, MEDIA_DBR *mdbr, DB_LIST_HANDLER *sendit, void *ctx, e_list_type type);
-void db_list_jobmedia_records(JCR *jcr, B_DB *mdb, JobId_t JobId, DB_LIST_HANDLER *sendit, void *ctx, e_list_type type);
-void db_list_joblog_records(JCR *jcr, B_DB *mdb, JobId_t JobId, DB_LIST_HANDLER *sendit, void *ctx, e_list_type type);
-bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query, DB_LIST_HANDLER *sendit, void *ctx, bool verbose, e_list_type type);
-void db_list_client_records(JCR *jcr, B_DB *mdb, DB_LIST_HANDLER *sendit, void *ctx, e_list_type type);
-void db_list_copies_records(JCR *jcr, B_DB *mdb, uint32_t limit, char *jobids, DB_LIST_HANDLER *sendit, void *ctx, e_list_type type);
-void db_list_base_files_for_job(JCR *jcr, B_DB *mdb, JobId_t jobid, DB_LIST_HANDLER *sendit, void *ctx);
+void db_list_pool_records(JCR *jcr, B_DB *db, POOL_DBR *pr,
+                          OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_job_records(JCR *jcr, B_DB *db, JOB_DBR *jr, const char *range,
+                         OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_job_totals(JCR *jcr, B_DB *db, JOB_DBR *jr,
+                        OUTPUT_FORMATTER *sendit);
+void db_list_files_for_job(JCR *jcr, B_DB *db, uint32_t jobid,
+                           OUTPUT_FORMATTER *sendit);
+void db_list_filesets(JCR *jcr, B_DB *mdb, JOB_DBR *jr, const char *range,
+                      OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_media_records(JCR *jcr, B_DB *mdb, MEDIA_DBR *mdbr,
+                           OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_jobmedia_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
+                              OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_joblog_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
+                            OUTPUT_FORMATTER *sendit, e_list_type type);
+bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
+                       OUTPUT_FORMATTER *sendit, e_list_type type,
+                       bool verbose);
+bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
+                       OUTPUT_FORMATTER *sendit, e_list_type type,
+                       const char *description, bool verbose=false);
+void db_list_client_records(JCR *jcr, B_DB *mdb,
+                            OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_copies_records(JCR *jcr, B_DB *mdb, const char *range, char *jobids,
+                            OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_base_files_for_job(JCR *jcr, B_DB *mdb, JobId_t jobid,
+                                OUTPUT_FORMATTER *sendit);
 
 /* sql_pooling.c */
 bool db_sql_pool_initialize(const char *db_drivername,
@@ -139,6 +157,8 @@ bool db_sql_pool_initialize(const char *db_drivername,
                             int db_port,
                             const char *db_socket,
                             bool disable_batch_insert,
+                            bool try_reconnect,
+                            bool exit_on_fatal,
                             int min_connections,
                             int max_connections,
                             int increment_connections,
@@ -156,7 +176,9 @@ B_DB *db_sql_get_non_pooled_connection(JCR *jcr,
                                        const char *db_socket,
                                        bool mult_db_connections = false,
                                        bool disable_batch_insert = false,
-                                       bool need_private = false);
+                                       bool need_private = false,
+                                       bool try_reconnect = false,
+                                       bool exit_on_fatal = false);
 B_DB *db_sql_get_pooled_connection(JCR *jcr,
                                    const char *db_drivername,
                                    const char *db_name,
@@ -167,7 +189,9 @@ B_DB *db_sql_get_pooled_connection(JCR *jcr,
                                    const char *db_socket,
                                    bool mult_db_connections = false,
                                    bool disable_batch_insert = false,
-                                   bool need_private = false);
+                                   bool need_private = false,
+                                   bool try_reconnect = false,
+                                   bool exit_on_fatal = false);
 void db_sql_close_pooled_connection(JCR *jcr, B_DB *mdb, bool abort=false);
 
 /* sql_update.c */

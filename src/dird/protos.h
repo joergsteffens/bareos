@@ -30,8 +30,9 @@ bool do_admin(JCR *jcr);
 void admin_cleanup(JCR *jcr, int TermCode);
 
 /* authenticate.c */
-bool authenticate_storage_daemon(JCR *jcr, STORERES *store);
-bool authenticate_file_daemon(JCR *jcr);
+bool authenticate_with_storage_daemon(JCR *jcr, STORERES *store);
+bool authenticate_with_file_daemon(JCR *jcr);
+bool authenticate_file_daemon(JCR *jcr, char *client_name);
 bool authenticate_user_agent(UAContext *ua);
 
 /* autoprune.c */
@@ -40,11 +41,11 @@ void prune_volumes(JCR *jcr, bool InChanger, MEDIA_DBR *mr,
                    STORERES *store);
 
 /* autorecycle.c */
-bool recycle_oldest_purged_volume(JCR *jcr, bool InChanger,
-                                  MEDIA_DBR *mr, STORERES *store);
-int recycle_volume(JCR *jcr, MEDIA_DBR *mr);
-bool find_recycled_volume(JCR *jcr, bool InChanger,
-                          MEDIA_DBR *mr, STORERES *store);
+bool find_recycled_volume(JCR *jcr, bool InChanger, MEDIA_DBR *mr,
+                          STORERES *store, const char *unwanted_volumes);
+bool recycle_oldest_purged_volume(JCR *jcr, bool InChanger, MEDIA_DBR *mr,
+                                  STORERES *store, const char *unwanted_volumes);
+bool recycle_volume(JCR *jcr, MEDIA_DBR *mr);
 
 /* backup.c */
 int wait_for_job_termination(JCR *jcr, int timeout = 0);
@@ -55,11 +56,6 @@ void update_bootstrap_file(JCR *jcr);
 bool send_accurate_current_files(JCR *jcr);
 void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type,
                              const char *term_msg);
-
-/* vbackup.c */
-bool do_native_vbackup_init(JCR *jcr);
-bool do_native_vbackup(JCR *jcr);
-void native_vbackup_cleanup(JCR *jcr, int TermCode);
 
 /* bsr.c */
 RBSR *new_bsr();
@@ -83,10 +79,15 @@ void catalog_update(JCR *jcr, BSOCK *bs);
 bool despool_attributes_from_file(JCR *jcr, const char *file);
 
 /* dird_conf.c */
+bool print_datatype_schema_json(POOL_MEM &buffer, int level, const int type,
+                                RES_ITEM items[], const bool last = false);
+#ifdef HAVE_JANSSON
+json_t *json_datatype(const int type, RES_ITEM items[]);
+#endif
 const char *auth_protocol_to_str(uint32_t auth_protocol);
 const char *level_to_str(int level);
 extern "C" char *job_code_callback_director(JCR *jcr, const char*);
-bool populate_jobdefs();
+bool populate_defs();
 
 /* expand.c */
 int variable_expansion(JCR *jcr, char *inp, POOLMEM **exp);
@@ -109,12 +110,22 @@ bool send_restore_objects(JCR *jcr, JobId_t JobId, bool send_global);
 bool cancel_file_daemon_job(UAContext *ua, JCR *jcr);
 void do_native_client_status(UAContext *ua, CLIENTRES *client, char *cmd);
 void do_client_resolve(UAContext *ua, CLIENTRES *client);
+void *handle_filed_connection(BSOCK *fd, char *client_name);
 
 /* getmsg.c */
 bool response(JCR *jcr, BSOCK *fd, char *resp, const char *cmd, e_prtmsg prtmsg);
 
 /* inc_conf.c */
 void find_used_compressalgos(POOL_MEM* compressalgos, JCR* jcr);
+bool print_incexc_schema_json(POOL_MEM &buffer, int level,
+                              const int type, const bool last = false);
+bool print_options_schema_json(POOL_MEM &buffer, int level,
+                               const int type, const bool last = false);
+#ifdef HAVE_JANSSON
+json_t *json_incexc(const int type);
+json_t *json_options(const int type);
+#endif
+
 
 /* job.c */
 bool allow_duplicate_job(JCR *jcr);
@@ -186,7 +197,7 @@ void do_ndmp_client_status(UAContext *ua, CLIENTRES *client, char *cmd);
 /* next_vol.c */
 void set_storageid_in_mr(STORERES *store, MEDIA_DBR *mr);
 int find_next_volume_for_append(JCR *jcr, MEDIA_DBR *mr, int index,
-                                bool create, bool purge);
+                                const char *unwanted_volumes, bool create, bool purge);
 bool has_volume_expired(JCR *jcr, MEDIA_DBR *mr);
 void check_if_volume_valid_or_recyclable(JCR *jcr, MEDIA_DBR *mr, const char **reason);
 bool get_scratch_volume(JCR *jcr, bool InChanger, MEDIA_DBR *mr,
@@ -232,6 +243,10 @@ JCR *wait_for_next_job(char *one_shot_job_to_run);
 bool is_doy_in_last_week(int year, int doy);
 void term_scheduler();
 
+/* socket_server.c */
+void start_socket_server(dlist *addrs);
+void stop_socket_server();
+
 /* stats.c */
 int start_statistics_thread(void);
 void stop_statistics_thread();
@@ -250,7 +265,7 @@ void log_audit_event_cmdline(UAContext *ua);
 /* ua_cmds.c */
 bool do_a_command(UAContext *ua);
 bool do_a_dot_command(UAContext *ua);
-int qmessages_cmd(UAContext *ua, const char *cmd);
+bool dot_messages_cmd(UAContext *ua, const char *cmd);
 bool open_client_db(UAContext *ua, bool use_private = false);
 bool open_db(UAContext *ua, bool use_private = false);
 void close_db(UAContext *ua);
@@ -261,15 +276,15 @@ void set_pooldbr_from_poolres(POOL_DBR *pr, POOLRES *pool, e_pool_op op);
 int update_pool_references(JCR *jcr, B_DB *db, POOLRES *pool);
 
 /* ua_impexp.c */
-int import_cmd(UAContext *ua, const char *cmd);
-int export_cmd(UAContext *ua, const char *cmd);
-int move_cmd(UAContext *ua, const char *cmd);
+bool import_cmd(UAContext *ua, const char *cmd);
+bool export_cmd(UAContext *ua, const char *cmd);
+bool move_cmd(UAContext *ua, const char *cmd);
 
 /* ua_input.c */
-int get_cmd(UAContext *ua, const char *prompt, bool subprompt = false);
+bool get_cmd(UAContext *ua, const char *prompt, bool subprompt = false);
 bool get_pint(UAContext *ua, const char *prompt);
 bool get_yesno(UAContext *ua, const char *prompt);
-bool is_yesno(char *val, int *ret);
+bool is_yesno(char *val, bool *ret);
 int get_enabled(UAContext *ua, const char *val);
 void parse_ua_args(UAContext *ua);
 bool is_comment_legal(UAContext *ua, const char *name);
@@ -283,6 +298,7 @@ void update_slots_from_vol_list(UAContext *ua, STORERES *store, dlist *vol_list,
 void update_inchanger_for_export(UAContext *ua, STORERES *store, dlist *vol_list, char *slot_list);
 
 /* ua_output.c */
+void bsendmsg(void *ua_ctx, const char *fmt, ...);
 void printit(void *ctx, const char *msg);
 bool complete_jcr_for_job(JCR *jcr, JOBRES *job, POOLRES *pool);
 RUNRES *find_next_run(RUNRES *run, JOBRES *job, utime_t &runtime, int ndays);
@@ -291,10 +307,7 @@ RUNRES *find_next_run(RUNRES *run, JOBRES *job, utime_t &runtime, int ndays);
 void find_storage_resource(UAContext *ua, RESTORE_CTX &rx, char *Storage, char *MediaType);
 
 /* ua_server.c */
-void bsendmsg(void *ua_ctx, const char *fmt, ...);
-void berrormsg(void *ua_ctx, const char *fmt, ...);
-void bwarningmsg(void *ua_ctx, const char *fmt, ...);
-void binfomsg(void *ua_ctx, const char *fmt, ...);
+void *handle_UA_client_request(BSOCK *user);
 UAContext *new_ua_context(JCR *jcr);
 JCR *new_control_jcr(const char *base_name, int job_type);
 void free_ua_context(UAContext *ua);
@@ -308,8 +321,8 @@ CLIENTRES *select_client_resource(UAContext *ua);
 CLIENTRES *select_enable_disable_client_resource(UAContext *ua, bool enable);
 FILESETRES *select_fileset_resource(UAContext *ua);
 SCHEDRES *select_enable_disable_schedule_resource(UAContext *ua, bool enable);
-int select_pool_and_media_dbr(UAContext *ua, POOL_DBR *pr, MEDIA_DBR *mr);
-int select_media_dbr(UAContext *ua, MEDIA_DBR *mr);
+bool select_pool_and_media_dbr(UAContext *ua, POOL_DBR *pr, MEDIA_DBR *mr);
+bool select_media_dbr(UAContext *ua, MEDIA_DBR *mr);
 bool select_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk = "pool");
 bool select_client_dbr(UAContext *ua, CLIENT_DBR *cr);
 
@@ -336,7 +349,7 @@ int find_arg_keyword(UAContext *ua, const char **list);
 int find_arg(UAContext *ua, const char *keyword);
 int find_arg_with_value(UAContext *ua, const char *keyword);
 int do_keyword_prompt(UAContext *ua, const char *msg, const char **list);
-int confirm_retention(UAContext *ua, utime_t *ret, const char *msg);
+bool confirm_retention(UAContext *ua, utime_t *ret, const char *msg);
 bool get_level_from_name(JCR *jcr, const char *level_name);
 
 /* ua_status.c */
@@ -367,8 +380,14 @@ void purge_job_list_from_catalog(UAContext *ua, del_ctx &del);
 void purge_files_from_job_list(UAContext *ua, del_ctx &del);
 
 /* ua_run.c */
-int rerun_cmd(UAContext *ua, const char *cmd);
-int run_cmd(UAContext *ua, const char *cmd);
+bool rerun_cmd(UAContext *ua, const char *cmd);
+bool run_cmd(UAContext *ua, const char *cmd);
+int do_run_cmd(UAContext *ua, const char *cmd);
+
+/* vbackup.c */
+bool do_native_vbackup_init(JCR *jcr);
+bool do_native_vbackup(JCR *jcr);
+void native_vbackup_cleanup(JCR *jcr, int TermCode);
 
 /* verify.c */
 bool do_verify(JCR *jcr);

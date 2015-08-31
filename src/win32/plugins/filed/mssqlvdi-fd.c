@@ -2,6 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2010 Zilvinas Krapavickas <zkrapavickas@gmail.com>
+   Copyright (C) 2013-2014 Planets Communications B.V.
    Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -1439,7 +1440,7 @@ static inline bool setup_vdi_device(bpContext *ctx, struct io_pkt *io)
    }
 
    /*
-    * Ask the database server to start a backup or restore via an other thread.
+    * Ask the database server to start a backup or restore via another thread.
     * We create a new thread that handles the connection to the database.
     */
    status = pthread_create(&p_ctx->ADOThread, NULL, adoThread, (void *)ctx);
