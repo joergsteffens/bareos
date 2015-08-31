@@ -1,0 +1,55 @@
+commit 0615dc375525fa11d780e94623a1d717eb705f6d
+Author: Philipp Storz <philipp.storz@bareos.com>
+Date:   Tue Aug 25 15:47:22 2015 +0200
+
+    Fix detection of cmocka
+
+diff --git a/autoconf/configure.in b/autoconf/configure.in
+index 7c5fa1d..5c90396 100644
+--- a/autoconf/configure.in
++++ b/autoconf/configure.in
+@@ -883,10 +883,14 @@ dnl - Check for cmocka unit test framework http://cmocka.cryptomilk.org/
+ dnl ---------------------------------------------------------------------------
+ AC_MSG_CHECKING(for cmocka support)
+ 
+-AC_CHECK_HEADERS( \
+-    setjmp.h \
+-    cmocka.h \
+-)
++AC_CHECK_HEADERS(
++    [ setjmp.h cmocka.h ],,,
++    [#include <stdarg.h>
++     #include <stddef.h>
++     #ifdef HAVE_SETJMP_H
++     #include <setjmp.h>
++     #endif
++    ])
+ 
+ UNITTEST_DIRS=
+ 
+diff --git a/configure b/configure
+index 7eecf50..0329c61 100755
+--- a/configure
++++ b/configure
+@@ -22979,13 +22979,16 @@ done
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for cmocka support" >&5
+ $as_echo_n "checking for cmocka support... " >&6; }
+ 
+-for ac_header in \
+-    setjmp.h \
+-    cmocka.h \
+-
++for ac_header in  setjmp.h cmocka.h
+ do :
+   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
++ac_fn_c_check_header_compile "$LINENO" "$ac_header" "$as_ac_Header" "#include <stdarg.h>
++     #include <stddef.h>
++     #ifdef HAVE_SETJMP_H
++     #include <setjmp.h>
++     #endif
++
++"
+ if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
+   cat >>confdefs.h <<_ACEOF
+ #define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
