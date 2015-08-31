@@ -121,8 +121,7 @@ override_dh_makeshlibs:
 %:
 	PARALLEL="--parallel"; \
 	if [ "`lsb_release --short  --id`" = "Ubuntu" ] && [ "`lsb_release --short  --release`" = "8.04" ]; then PARALLEL=""; fi; \
-	if dh --list | grep -q systemd; then WITH="--with"; SYSTEMD="systemd"; fi; \
-	dh $@ $$PARALLEL $$WITH $$SYSTEMD
+	dh $@ $$PARALLEL --with systemd
 
 gen-debian-copyright:
 	(cd debian; make copyright)
