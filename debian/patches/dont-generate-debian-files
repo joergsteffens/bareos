@@ -5,10 +5,10 @@ Date:   Wed Jul 22 17:57:03 2015 +0200
     do not try to generate debian/ files via automake
 
 diff --git a/autoconf/configure.in b/autoconf/configure.in
-index e0e054c..3f006dc 100644
+index 7c5fa1d..61ab8a4 100644
 --- a/autoconf/configure.in
 +++ b/autoconf/configure.in
-@@ -3947,43 +3947,6 @@ debian|ubuntu|univention)
+@@ -4162,44 +4162,6 @@ debian|ubuntu|univention)
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
     DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
@@ -32,6 +32,7 @@ index e0e054c..3f006dc 100644
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
@@ -52,11 +53,23 @@ index e0e054c..3f006dc 100644
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
+@@ -4414,10 +4376,7 @@ if test "x${support_systemd}" = "xyes"; then
+ 		   platforms/systemd/bareos.conf \
+ 		   platforms/systemd/bareos-dir.service \
+ 		   platforms/systemd/bareos-fd.service \
+-		   platforms/systemd/bareos-sd.service \
+-		   debian/bareos-filedaemon.service \
+-		   debian/bareos-storage.service \
+-		   debian/bareos-director.service"
++		   platforms/systemd/bareos-sd.service"
+     AC_DEFINE(HAVE_SYSTEMD, 1, [Define to 1 if systemd support should be enabled])
+ else
+     AC_MSG_RESULT(no)
 diff --git a/configure b/configure
-index 9952a62..a1e97dd 100755
+index 7eecf50..5e73170 100755
 --- a/configure
 +++ b/configure
-@@ -32153,43 +32153,6 @@ debian|ubuntu|univention)
+@@ -32616,44 +32616,6 @@ debian|ubuntu|univention)
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
     DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
@@ -80,6 +93,7 @@ index 9952a62..a1e97dd 100755
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
@@ -100,3 +114,15 @@ index 9952a62..a1e97dd 100755
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
+@@ -32921,10 +32883,7 @@ $as_echo "yes" >&6; }
+ 		   platforms/systemd/bareos.conf \
+ 		   platforms/systemd/bareos-dir.service \
+ 		   platforms/systemd/bareos-fd.service \
+-		   platforms/systemd/bareos-sd.service \
+-		   debian/bareos-filedaemon.service \
+-		   debian/bareos-storage.service \
+-		   debian/bareos-director.service"
++		   platforms/systemd/bareos-sd.service"
+ 
+ $as_echo "#define HAVE_SYSTEMD 1" >>confdefs.h
+ 
