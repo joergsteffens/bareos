@@ -45,14 +45,8 @@ BuildRequires:  sed
 BuildRequires:  vim, procps, bc
 
 
-BuildRequires:  mingw32-winbareos-prevista = %{version}
-BuildRequires:  mingw64-winbareos-prevista = %{version}
-
 BuildRequires:  mingw32-winbareos-postvista = %{version}
 BuildRequires:  mingw64-winbareos-postvista = %{version}
-
-BuildRequires:  mingw32-winbareos-prevista-debug = %{version}
-BuildRequires:  mingw64-winbareos-prevista-debug = %{version}
 
 BuildRequires:  mingw32-winbareos-postvista-debug = %{version}
 BuildRequires:  mingw64-winbareos-postvista-debug = %{version}
@@ -90,6 +84,9 @@ BuildRequires:  obs-name-resolution-settings
 BuildRequires:  mingw32-cmocka
 BuildRequires:  mingw64-cmocka
 
+BuildRequires:  mingw32-libjansson
+BuildRequires:  mingw64-libjansson
+
 Source1:         winbareos.nsi
 Source2:         clientdialog.ini
 Source3:         directordialog.ini
@@ -121,7 +118,7 @@ done
 
 
 %build
-for flavor in postvista postvista-debug prevista prevista-debug;
+for flavor in postvista postvista-debug;
 do
    mkdir -p $RPM_BUILD_ROOT/$flavor/nsisplugins
    for dll in %NSISDLLS; do
@@ -201,6 +198,7 @@ do
       QtGui4.dll \
       liblzo2-2.dll \
       libfastlz.dll \
+      libjansson-4.dll \
       libpng*.dll \
       openssl.exe \
       libcmocka.dll \
@@ -228,7 +226,7 @@ done
 
 %install
 
-for flavor in postvista postvista-debug prevista prevista-debug;
+for flavor in postvista postvista-debug;
 do
    mkdir -p $RPM_BUILD_ROOT%{_mingw32_bindir}
    mkdir -p $RPM_BUILD_ROOT%{_mingw64_bindir}

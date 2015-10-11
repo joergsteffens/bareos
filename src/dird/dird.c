@@ -106,8 +106,7 @@ static bool dir_db_log_insert(JCR *jcr, utime_t mtime, char *msg)
    if (!jcr || !jcr->db || !jcr->db->is_connected()) {
       return false;
    }
-
-   length = strlen(msg) + 1;
+   length = strlen(msg);
    esc_msg.check_size(length * 2 + 1);
    db_escape_string(jcr, jcr->db, esc_msg.c_str(), msg, length);
 
@@ -1000,7 +999,10 @@ static bool check_resources()
    UnlockRes();
    if (OK) {
       close_msg(NULL);                    /* close temp message handler */
-      init_msg(NULL, me->messages); /* open daemon message handler */
+      init_msg(NULL, me->messages);       /* open daemon message handler */
+      if (me->secure_erase_cmdline) {
+         set_secure_erase_cmdline(me->secure_erase_cmdline);
+      }
    }
 
 bail_out:
@@ -1278,7 +1280,7 @@ static void cleanup_old_files()
          pm_strcpy(cleanup, basename);
          pm_strcat(cleanup, result->d_name);
          Dmsg1(100, "Unlink: %s\n", cleanup);
-         unlink(cleanup);
+         secure_erase(NULL, cleanup);
       }
    }
 

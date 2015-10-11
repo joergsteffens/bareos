@@ -555,6 +555,7 @@ SectionIn 1 2 3 4
   File "zlib1.dll"
   File "liblzo2-2.dll"
   File "libfastlz.dll"
+  File "libjansson-4.dll"
 
   # for password generation
   File "openssl.exe"
@@ -1289,6 +1290,8 @@ done:
   ${GetOptions} $cmdLineParams "/DBDRIVER=" $DbDriver
   ClearErrors
 
+  strcmp $DbDriver "" +1 +2
+  StrCpy $DbDriver "postgresql"
 
   StrCpy $WriteLogs "yes"
   ${GetOptions} $cmdLineParams "/WRITELOGS" $R0
@@ -1524,10 +1527,6 @@ ${EndIf}
 
   strcmp $StorageAddress "" +1 +2
   StrCpy $StorageAddress "$HostName"
-
-  strcmp $DbDriver "" +1 +2
-  StrCpy $DbDriver "postgresql"
-
 
   strcmp $DbPassword "" +1 +2
   StrCpy $DbPassword "bareos"
@@ -1892,6 +1891,7 @@ ConfDeleteSkip:
   Delete "$INSTDIR\QtGui4.dll"
   Delete "$INSTDIR\liblzo2-2.dll"
   Delete "$INSTDIR\libfastlz.dll"
+  Delete "$INSTDIR\libjansson-4.dll"
   Delete "$INSTDIR\libpng*.dll"
   Delete "$INSTDIR\openssl.exe"
   Delete "$INSTDIR\sed.exe"

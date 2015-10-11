@@ -143,30 +143,41 @@ static struct cmdstruct commands[] = {
          "backups client=<client-name> [fileset=<fileset-name>] [jobstatus=<status>] [level=<level>] [order=<asc|desc>] [limit=<number>] |\n"
          "clients | copies jobid=<jobid> |\n"
          "files jobid=<jobid> | files ujobid=<complete_name> |\n"
+         "filesets |\n"
          "fileset [ jobid=<jobid> ] | fileset [ ujobid=<complete_name> ] |\n"
+         "fileset [ filesetid=<filesetid> ] | fileset [ jobid=<jobid> ] |\n"
          "jobs | jobid=<jobid> | ujobid=<complete_name> | job=<job-name> |\n"
          "joblog jobid=<jobid> | joblog ujobid=<complete_name> |\n"
          "jobmedia jobid=<jobid> | jobmedia ujobid=<complete_name> |\n"
          "jobtotals |\n"
-         "media [ jobid=<jobid> ujobid=<complete_name> pool=<pool-name> ] |\n"
+         "media [ jobid=<jobid> | ujobid=<complete_name> | pool=<pool-name> | all ] |\n"
+         "media=<media-name> |\n"
          "nextvol job=<job-name> | nextvolume ujobid=<complete_name> |\n"
          "pools |\n"
-         "volumes [ jobid=<jobid> ujobid=<complete_name> pool=<pool-name> ] |\n"
+         "pool=<pool-name> |\n"
+         "storages |\n"
+         "volumes [ jobid=<jobid> | ujobid=<complete_name> | pool=<pool-name> | all ] |\n"
+         "volume=<volume-name> |\n"
          "[ limit=<number> [ offset=<number> ] ]"), true, true },
    { NT_("llist"), llist_cmd, _("Full or long list like list command"),
      NT_("basefiles jobid=<jobid> | basefiles ujobid=<complete_name> |\n"
-         "backups client=<client-name> [fileset=<fileset-name>] [jobstatus=<status>] [level=<level>] [order=<asc|desc>] [limit=<number>] |\n"
+         "backups client=<client-name> [fileset=<fileset-name>] [jobstatus=<status>] [level=<level>] [order=<asc|desc>] [limit=<number>] [days=<number>] [hours=<number>]|\n"
          "clients | copies jobid=<jobid> |\n"
          "files jobid=<jobid> | files ujobid=<complete_name> |\n"
+         "filesets |\n"
          "fileset jobid=<jobid> | fileset ujobid=<complete_name> |\n"
-         "jobs | jobid=<jobid> | ujobid=<complete_name> | job=<job-name> |\n"
+         "fileset [ filesetid=<filesetid> ] | fileset [ jobid=<jobid> ] |\n"
+         "jobs | jobid=<jobid> | ujobid=<complete_name> | job=<job-name> [jobstatus=<status>] [days=<number>] [hours=<number>] |\n"
          "joblog jobid=<jobid> | joblog ujobid=<complete_name> |\n"
          "jobmedia jobid=<jobid> | jobmedia ujobid=<complete_name> |\n"
          "jobtotals |\n"
-         "media [ jobid=<jobid> ujobid=<complete_name> pool=<pool-name> ] |\n"
+         "media [ jobid=<jobid> | ujobid=<complete_name> | pool=<pool-name> | all ] |\n"
+         "media=<media-name> |\n"
          "nextvol job=<job-name> | nextvolume ujobid=<complete_name> |\n"
          "pools |\n"
-         "volumes [ jobid=<jobid> ujobid=<complete_name> pool=<pool-name> ] |\n"
+         "pool=<pool-name> |\n"
+         "volumes [ jobid=<jobid> | ujobid=<complete_name> | pool=<pool-name> | all ] |\n"
+         "volume=<volume-name> |\n"
          "[ limit=<num> [ offset=<number> ] ]"), true, true },
    { NT_("messages"), messages_cmd, _("Display pending messages"),
      NT_(""), false, false },
@@ -215,7 +226,7 @@ static struct cmdstruct commands[] = {
          "\tmigrationjob=<complete_name> yes"), false, true },
    { NT_("status"), status_cmd, _("Report status"),
      NT_("all | dir=<dir-name> | director | scheduler | schedule=<schedule-name> | client=<client-name> |\n"
-         "\tstorage=<storage-name> slots | days=<nr_days> | job=<job-name> | schedule=<schedule-name> |\n"
+         "\tstorage=<storage-name> slots | days=<nr_days> | job=<job-name> |\n"
          "\tsubscriptions"), true, true },
    { NT_("setbandwidth"), setbwlimit_cmd,  _("Sets bandwidth"),
      NT_("client=<client-name> | storage=<storage-name> | jobid=<jobid> |\n"
@@ -1177,7 +1188,7 @@ static void do_client_setdebug(UAContext *ua, CLIENTRES *client, int level, int 
    Dmsg0(120, "Connected to file daemon\n");
    fd = ua->jcr->file_bsock;
    if (ua->jcr->FDVersion >= FD_VERSION_53) {
-      fd->fsend("setdebug=%d trace=%d hangup=%d timestamp=%d\n", level, trace_flag, hangup_flag);
+      fd->fsend("setdebug=%d trace=%d hangup=%d timestamp=%d\n", level, trace_flag, hangup_flag, timestamp_flag);
    } else {
       fd->fsend("setdebug=%d trace=%d hangup=%d\n", level, trace_flag, hangup_flag);
    }

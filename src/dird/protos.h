@@ -228,7 +228,7 @@ void free_vol_list(dlist *vol_list);
 int get_num_slots_from_SD(UAContext *ua);
 int get_num_drives_from_SD(UAContext *ua);
 bool cancel_storage_daemon_job(UAContext *ua, STORERES *store, char *JobId);
-bool cancel_storage_daemon_job(UAContext *ua, JCR *jcr, bool silent = false);
+bool cancel_storage_daemon_job(UAContext *ua, JCR *jcr, bool interactive = true);
 void cancel_storage_daemon_job(JCR *jcr);
 void do_native_storage_status(UAContext *ua, STORERES *store, char *cmd);
 bool transfer_volume(UAContext *ua, STORERES *store, int src_slot, int dst_slot);
@@ -344,6 +344,8 @@ alist *select_jobs(UAContext *ua, const char *reason);
 CLIENTRES *get_client_resource(UAContext *ua);
 int get_job_dbr(UAContext *ua, JOB_DBR *jr);
 bool get_user_slot_list(UAContext *ua, char *slot_list, const char *argument, int num_slots);
+bool get_user_job_type_selection(UAContext *ua, int *jobtype);
+bool get_user_job_status_selection(UAContext *ua, int *jobstatus);
 
 int find_arg_keyword(UAContext *ua, const char **list);
 int find_arg(UAContext *ua, const char *keyword);

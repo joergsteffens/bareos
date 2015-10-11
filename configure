@@ -810,6 +810,10 @@ MSGFMT
 USE_NLS
 MKINSTALLDIRS
 SET_MAKE
+OBS_SRCMD5
+OBS_ARCH
+OBS_DISTRIBUTION
+OBS_PROJECT
 HAVE_DARWIN_OS_FALSE
 HAVE_DARWIN_OS_TRUE
 HAVE_IRIX_OS_FALSE
@@ -979,6 +983,8 @@ PATH_SEPARATOR
 SHELL'
 ac_subst_files='DEBIAN_CONTROL_BAT
 DEBIAN_CONTROL_TRAYMONITOR
+DEBIAN_CONTROL_FILEDAEMON_CEPH_PLUGIN
+DEBIAN_CONTROL_STORAGE_CEPH
 DEBIAN_CONTROL_UNIVENTION_BAREOS
 DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA
 MCOMMON
@@ -17398,6 +17404,31 @@ fi
 $as_echo "done" >&6; }
 
 
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for OBS OS Distribution" >&5
+$as_echo_n "checking for OBS OS Distribution... " >&6; }
+if test "x$OBS_DISTRIBUTION" != "x"
+then
+   echo "obsdistname set to $OBS_DISTRIBUTION"
+else
+   if test -e /.build.log; then
+      OBS_PROJECT=`grep 'Building bareos for project' /.build.log | cut -d' ' -f10 | sed "s#'##g"`
+      OBS_DISTRIBUTION=`grep 'Building bareos for project' /.build.log | cut -d' ' -f12 | sed "s#'##g"`
+      OBS_ARCH=`grep 'Building bareos for project' /.build.log | cut -d' ' -f14 | sed "s#'##g"`
+      OBS_SRCMD5=`grep 'Building bareos for project' /.build.log | cut -d' ' -f16 | sed "s#'##g"`
+
+$as_echo "#define IS_BUILD_ON_OBS 1" >>confdefs.h
+
+   fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: done" >&5
+$as_echo "done" >&6; }
+
+
+
+
+
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether ${MAKE-make} sets \$(MAKE)" >&5
 $as_echo_n "checking whether ${MAKE-make} sets \$(MAKE)... " >&6; }
 set x ${MAKE-make}
@@ -22979,13 +23010,16 @@ done
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for cmocka support" >&5
 $as_echo_n "checking for cmocka support... " >&6; }
 
-for ac_header in \
-    setjmp.h \
-    cmocka.h \
-
+for ac_header in  setjmp.h cmocka.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+ac_fn_c_check_header_compile "$LINENO" "$ac_header" "$as_ac_Header" "#include <stdarg.h>
+     #include <stddef.h>
+     #ifdef HAVE_SETJMP_H
+     #include <setjmp.h>
+     #endif
+
+"
 if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
   cat >>confdefs.h <<_ACEOF
 #define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
@@ -32012,14 +32046,21 @@ LIBS="${saved_LIBS}"
 CFLAGS="${saved_CFLAGS}"
 CPPFLAGS="${saved_CPPFLAGS}"
 
+
+DEBIAN_CONTROL_FILEDAEMON_CEPH_PLUGIN=/dev/null
+DEBIAN_CONTROL_STORAGE_CEPH=/dev/null
 if test "x${have_ceph_rados}" = "xyes"; then
 
 $as_echo "#define HAVE_RADOS 1" >>confdefs.h
 
+   DEBIAN_CONTROL_FILEDAEMON_CEPH_PLUGIN=./debian/control.bareos-filedaemon-ceph-plugin
+   DEBIAN_CONTROL_STORAGE_CEPH=./debian/control.bareos-storage-ceph
 else
    RADOS_LIBS=""
    RADOS_INC=""
 fi
+
+
 
 
 
@@ -32636,12 +32677,15 @@ debian|ubuntu|univention)
       debian/bareos-director.install \
       debian/bareos-director.postinst \
       debian/bareos-director.preinst \
+      debian/bareos-filedaemon-ceph-plugin.install \
       debian/bareos-filedaemon-ldap-python-plugin.install \
       debian/bareos-filedaemon-python-plugin.install \
       debian/bareos-filedaemon.bareos-fd.init \
       debian/bareos-filedaemon.install \
       debian/bareos-filedaemon.postinst \
       debian/bareos-filedaemon.preinst \
+      debian/bareos-storage-ceph.install \
+      debian/bareos-storage-ceph.postinst \
       debian/bareos-storage-fifo.postinst \
       debian/bareos-storage-fifo.install \
       debian/bareos-storage-python-plugin.install \
