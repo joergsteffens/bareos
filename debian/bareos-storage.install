@@ -1,5 +1,6 @@
+#! /usr/bin/dh-exec
 /usr/sbin/bscrypto
-/usr/lib/bareos/plugins/scsicrypto-sd.so
+[linux-any] /usr/lib/bareos/plugins/scsicrypto-sd.so
 /usr/lib/bareos/scripts/disk-changer
 /etc/bareos/bareos-sd.conf     /usr/lib/bareos/defaultconfigs
 /usr/sbin/bareos-sd

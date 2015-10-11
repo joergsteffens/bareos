@@ -1,9 +1,10 @@
-/usr/lib/bareos/libbareos-[0-9]*.so
-/usr/lib/bareos/libbareoscfg-[0-9]*.so
-/usr/lib/bareos/libbareosfind-[0-9]*.so
-/usr/lib/bareos/libbareoslmdb-[0-9]*.so
-/usr/lib/bareos/libbareosndmp-[0-9]*.so
-/usr/lib/bareos/libbareossd-[0-9]*.so
+#! /usr/bin/dh-exec
+/usr/lib/bareos/libbareos-*.so
+/usr/lib/bareos/libbareoscfg-*.so
+/usr/lib/bareos/libbareosfind-*.so
+/usr/lib/bareos/libbareoslmdb-*.so
+[linux-any] /usr/lib/bareos/libbareosndmp-*.so
+/usr/lib/bareos/libbareossd-*.so
 /usr/lib/bareos/scripts/bareos-config
 /usr/lib/bareos/scripts/bareos-config-lib.sh
 /usr/lib/bareos/scripts/bareos-explorer

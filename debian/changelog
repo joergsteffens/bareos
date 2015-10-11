@@ -1,3 +1,21 @@
+bareos (14.2.5-2) unstable; urgency=medium
+
+  * call openssl rand with an excplicit RANDFILE=/dev/urandom
+  * call the main license "Bareos" instead of "AGPL with exceptions"
+  * exclude plugins and backends from shlibs
+  * re-order files sections in d/copyright to fix "unused file" warning
+  * explicitly install only /usr/share/doc/bareos/html/bat/ in bareos-bat
+  * add doc-base integration for bareos-bat docs
+  * build-depend on libcap-dev only on linux-any
+  * disable acl, xattr, scsi-crpyto and ndmp on kFreeBSD
+  * add gbp.conf
+  * build-depend on dh-exec
+  * only install ndmp and scsi-crypto files on linux-any
+  * try to compile on GNU/Hurd too
+  * don't use [0-9] in debian/*.install
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 11 Oct 2015 18:01:16 +0200
+
 bareos (14.2.5-1) unstable; urgency=medium
 
   * New upstream release.
