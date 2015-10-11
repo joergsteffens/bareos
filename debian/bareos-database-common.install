@@ -1,4 +1,4 @@
-/usr/lib/bareos/libbareoscats-[0-9]*.so
+/usr/lib/bareos/libbareoscats-*.so
 /usr/lib/bareos/libbareossql-*.so
 /usr/lib/bareos/scripts/create_bareos_database
 /usr/lib/bareos/scripts/drop_bareos_database
