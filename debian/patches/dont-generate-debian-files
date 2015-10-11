@@ -5,10 +5,10 @@ Date:   Wed Jul 22 17:57:03 2015 +0200
     do not try to generate debian/ files via automake
 
 diff --git a/autoconf/configure.in b/autoconf/configure.in
-index 7c5fa1d..61ab8a4 100644
+index 6ae9136..90c068c 100644
 --- a/autoconf/configure.in
 +++ b/autoconf/configure.in
-@@ -4162,44 +4162,6 @@ debian|ubuntu|univention)
+@@ -4182,47 +4182,6 @@ debian|ubuntu|univention)
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
     DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
@@ -32,12 +32,15 @@ index 7c5fa1d..61ab8a4 100644
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ceph-plugin.install \
 -      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
 -      debian/bareos-filedaemon.postinst \
 -      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-ceph.install \
+-      debian/bareos-storage-ceph.postinst \
 -      debian/bareos-storage-fifo.postinst \
 -      debian/bareos-storage-fifo.install \
 -      debian/bareos-storage-python-plugin.install \
@@ -53,7 +56,7 @@ index 7c5fa1d..61ab8a4 100644
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
-@@ -4414,10 +4376,7 @@ if test "x${support_systemd}" = "xyes"; then
+@@ -4437,10 +4396,7 @@ if test "x${support_systemd}" = "xyes"; then
  		   platforms/systemd/bareos.conf \
  		   platforms/systemd/bareos-dir.service \
  		   platforms/systemd/bareos-fd.service \
@@ -66,10 +69,10 @@ index 7c5fa1d..61ab8a4 100644
  else
      AC_MSG_RESULT(no)
 diff --git a/configure b/configure
-index 7eecf50..5e73170 100755
+index f78469d..5c54068 100755
 --- a/configure
 +++ b/configure
-@@ -32616,44 +32616,6 @@ debian|ubuntu|univention)
+@@ -32657,47 +32657,6 @@ debian|ubuntu|univention)
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
     DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
@@ -93,12 +96,15 @@ index 7eecf50..5e73170 100755
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ceph-plugin.install \
 -      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
 -      debian/bareos-filedaemon.postinst \
 -      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-ceph.install \
+-      debian/bareos-storage-ceph.postinst \
 -      debian/bareos-storage-fifo.postinst \
 -      debian/bareos-storage-fifo.install \
 -      debian/bareos-storage-python-plugin.install \
@@ -114,7 +120,7 @@ index 7eecf50..5e73170 100755
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
-@@ -32921,10 +32883,7 @@ $as_echo "yes" >&6; }
+@@ -32965,10 +32924,7 @@ $as_echo "yes" >&6; }
  		   platforms/systemd/bareos.conf \
  		   platforms/systemd/bareos-dir.service \
  		   platforms/systemd/bareos-fd.service \
