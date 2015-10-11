@@ -13,6 +13,8 @@ Build-Depends: acl-dev,
  dpkg-dev (>= 1.13.19),
  libacl1-dev,
  libcap-dev [linux-any],
+ libcephfs-dev,
+ librados-dev,
  libcmocka-dev (>= 1.0.1),
  libjansson-dev,
  liblzo2-dev,
@@ -363,3 +365,23 @@ Description: Backup Archiving Recovery Open Sourced - tray monitor
  GNOME.
  .
  The monitor constantly displays Bareos's status.
+
+Package:        bareos-filedaemon-ceph-plugin
+Architecture:   any
+Pre-Depends:    debconf (>= 1.4.30) | debconf-2.0
+Depends:        bareos-filedaemon (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Backup Archiving Recovery Open Sourced - filedaemon-ceph-plugin
+ Bareos is a set of programs to manage backup, recovery and verification of
+ data across a network of computers of different kinds.
+ .
+ This package provides the CEPH plugins for the file daemon.
+
+Package:        bareos-storage-ceph
+Architecture:   any
+Pre-Depends:    debconf (>= 1.4.30) | debconf-2.0
+Depends:        bareos-storage (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Backup Archiving Recovery Open Sourced - storage-ceph
+ Bareos is a set of programs to manage backup, recovery and verification of
+ data across a network of computers of different kinds.
+ .
+ This package provides the CEPH backend for the storage daemon.
