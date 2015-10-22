@@ -3,7 +3,9 @@
 /etc/bareos/bareos-sd.d/device-tape-with-autoloader.conf
 /usr/lib/bareos/backends/libbareossd-gentape*.so
 /usr/lib/bareos/backends/libbareossd-tape*.so
+[linux-any] /usr/lib/bareos/plugins/scsicrypto-sd.so
 [linux-any] /usr/lib/bareos/plugins/scsitapealert-sd.so
 /usr/lib/bareos/scripts/mtx-changer
+/usr/share/man/man8/bscrypto.8.gz
 /usr/share/man/man8/btape.8.gz
 /usr/sbin/btape
