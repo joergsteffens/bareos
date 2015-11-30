@@ -173,15 +173,23 @@ bool start_storage_daemon_message_thread(JCR *jcr);
 int bget_dirmsg(BSOCK *bs, bool allow_any_msg = false);
 void wait_for_storage_daemon_termination(JCR *jcr);
 
-/* ndmp_dma.c */
+/* ndmp_dma_backup.c */
 bool do_ndmp_backup_init(JCR *jcr);
 bool do_ndmp_backup(JCR *jcr);
 void ndmp_backup_cleanup(JCR *jcr, int TermCode);
+
+/* ndmp_dma_generic.c */
+bool ndmp_validate_client(JCR *jcr);
+bool ndmp_validate_storage(JCR *jcr);
+void do_ndmp_client_status(UAContext *ua, CLIENTRES *client, char *cmd);
+
+/* ndmp_dma_restore.c */
 bool do_ndmp_restore_init(JCR *jcr);
 bool do_ndmp_restore(JCR *jcr);
 void ndmp_restore_cleanup(JCR *jcr, int TermCode);
+
+/* ndmp_dma_storage.c */
 void do_ndmp_storage_status(UAContext *ua, STORERES *store, char *cmd);
-void do_ndmp_client_status(UAContext *ua, CLIENTRES *client, char *cmd);
 
 /* next_vol.c */
 void set_storageid_in_mr(STORERES *store, MEDIA_DBR *mr);
@@ -217,7 +225,7 @@ void free_vol_list(dlist *vol_list);
 int get_num_slots_from_SD(UAContext *ua);
 int get_num_drives_from_SD(UAContext *ua);
 bool cancel_storage_daemon_job(UAContext *ua, STORERES *store, char *JobId);
-bool cancel_storage_daemon_job(UAContext *ua, JCR *jcr, bool silent = false);
+bool cancel_storage_daemon_job(UAContext *ua, JCR *jcr, bool interactive = true);
 void cancel_storage_daemon_job(JCR *jcr);
 void do_native_storage_status(UAContext *ua, STORERES *store, char *cmd);
 bool transfer_volume(UAContext *ua, STORERES *store, int src_slot, int dst_slot);

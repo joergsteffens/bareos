@@ -171,8 +171,8 @@ char *encode_time(utime_t utime, char *buf)
 #if defined(HAVE_WIN32)
    /*
     * Avoid a seg fault in Microsoft's CRT localtime_r(),
-    *  which incorrectly references a NULL returned from gmtime() if
-    *  time is negative before or after the timezone adjustment.
+    * which incorrectly references a NULL returned from gmtime() if
+    * time is negative before or after the timezone adjustment.
     */
    struct tm *gtm;
 
@@ -185,11 +185,11 @@ char *encode_time(utime_t utime, char *buf)
    }
 #endif
 
-   if (localtime_r(&time, &tm)) {
-      n = sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
-                   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                   tm.tm_hour, tm.tm_min, tm.tm_sec);
-   }
+   blocaltime(&time, &tm);
+   n = sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
+                tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                tm.tm_hour, tm.tm_min, tm.tm_sec);
+
    return buf+n;
 }
 
@@ -220,6 +220,8 @@ void jobstatus_to_ascii(int JobStatus, char *msg, int maxlen)
       jobstat = _("Error: incomplete job");
       break;
    case JS_FatalError:
+      jobstat = _("Fatal Error");
+      break;
    case JS_ErrorTerminated:
       jobstat = _("Error");
       break;
@@ -277,7 +279,6 @@ void jobstatus_to_ascii(int JobStatus, char *msg, int maxlen)
    case JS_AttrInserting:
       jobstat = _("Dir inserting Attributes");
       break;
-
    default:
       if (JobStatus == 0) {
          buf[0] = 0;
@@ -737,6 +738,7 @@ void decode_session_key(char *decode, char *session, char *key, int maxlen)
 /*
  * Edit job codes into main command line
  *  %% = %
+ *  %B = Job Bytes in human readable format
  *  %F = Job Files
  *  %P = Pid of daemon
  *  %b = Job Bytes
@@ -771,6 +773,9 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
          switch (*++p) {
          case '%':
             str = "%";
+            break;
+         case 'B':                    /* Job Bytes in human readable format */
+            str = edit_uint64_with_suffix(jcr->JobBytes, add);
             break;
          case 'F':                    /* Job Files */
             str = edit_uint64(jcr->JobFiles, add);

@@ -96,6 +96,22 @@
 #define _NDMOS_H
 
 /*
+ * Silence compiler for known warnings.
+ */
+#if ((__GNUC__ * 100) + __GNUC_MINOR__) >= 402
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wenum-compare"
+#if ((__GNUC__ * 100) + __GNUC_MINOR__) >= 460
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#endif
+
+#if defined(__SUNPRO_C)
+#pragma error_messages (off, E_ENUM_TYPE_MISMATCH_OP, E_ENUM_TYPE_MISMATCH_ARG, E_STATEMENT_NOT_REACHED )
+#endif
+
+/*
  * Operating system idents
  */
 #define NDMOS_IDENT(A,B,C,D)	(((A)<<24)+((B)<<16)+((C)<<8)+(D))
@@ -202,6 +218,8 @@
  *				   around NDMOS_API_MALLOC() with casts
  * NDMOS_MACRO_NEWN		-- allocate a vector of data structs
  * NDMOS_MACRO_ZEROFILL		-- zero-fill data structure, wrapper
+ *				   around NDMOS_API_BZERO()
+ * NDMOS_MACRO_ZEROFILL_SIZE	-- zero-fill data structure, wrapper
  *				   around NDMOS_API_BZERO()
  * NDMOS_MACRO_SRAND		-- wrapper around srand(3), for MD5
  * NDMOS_MACRO_RAND		-- wrapper around rand(3), for MD5
@@ -310,7 +328,7 @@
  * Constants
  */
 #ifndef NDMOS_CONST_ALIGN
-#define NDMOS_CONST_ALIGN		sizeof(unsigned long long)
+#define NDMOS_CONST_ALIGN		sizeof(uint64_t)
 #endif /* !NDMOS_CONST_ALIGN */
 
 #ifndef NDMOS_CONST_TAPE_REC_MIN
@@ -318,7 +336,7 @@
 #endif /* !NDMOS_CONST_TAPE_REC_MIN */
 
 #ifndef NDMOS_CONST_TAPE_REC_MAX
-#define NDMOS_CONST_TAPE_REC_MAX	(256*1024)
+#define NDMOS_CONST_TAPE_REC_MAX	(1024*1024)
 #endif /* !NDMOS_CONST_TAPE_REC_MAX */
 
 #ifndef NDMOS_CONST_PATH_MAX
@@ -420,6 +438,10 @@ extern char *ndml_strend(char *s);	/* ndml_util.c */
 #define NDMOS_MACRO_ZEROFILL(P)	NDMOS_API_BZERO(P,sizeof *(P))
 #endif /* !NDMOS_MACRO_ZEROFILL */
 
+#ifndef NDMOS_MACRO_ZEROFILL_SIZE
+#define NDMOS_MACRO_ZEROFILL_SIZE(P, N)	NDMOS_API_BZERO(P, N)
+#endif /* !NDMOS_MACRO_ZEROFILL_SIZE */
+
 #ifndef NDMOS_MACRO_SRAND
 #define NDMOS_MACRO_SRAND() srand(time(0))
 #endif /* !NDMOS_MACRO_SRAND */
@@ -488,10 +510,10 @@ extern char *ndml_strend(char *s);	/* ndml_util.c */
 
 #ifdef NDMOS_OPTION_TAPE_SIMULATOR
 #define NDMOS_MACRO_TAPE_AGENT_ADDITIONS \
-	int			tape_fd; \
+	int32_t			tape_fd; \
 	char *			drive_name; \
-	int			weof_on_close; \
-	int			sent_leom;
+	int32_t			weof_on_close; \
+	int32_t			sent_leom;
 #endif /* NDMOS_OPTION_TAPE_SIMULATOR */
 
 #ifdef NDMOS_OPTION_ROBOT_SIMULATOR

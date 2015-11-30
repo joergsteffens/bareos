@@ -206,7 +206,7 @@ uint32_t serialize_xattr_stream(JCR *jcr,
          ser_bytes(current_xattr->value, current_xattr->value_length);
 
          Dmsg3(100, "Backup xattr named %s, value %*s\n",
-               current_xattr->name, current_xattr->value, current_xattr->value);
+               current_xattr->name, current_xattr->value_length, current_xattr->value);
       } else {
          Dmsg1(100, "Backup empty xattr named %s\n", current_xattr->name);
       }
@@ -290,7 +290,7 @@ bxattr_exit_code unserialize_xattr_stream(JCR *jcr,
          unser_bytes(current_xattr->value, current_xattr->value_length);
 
          Dmsg3(100, "Restoring xattr named %s, value %*s\n",
-               current_xattr->name, current_xattr->value, current_xattr->value);
+               current_xattr->name, current_xattr->value_length, current_xattr->value);
       } else {
          current_xattr->value = NULL;
          Dmsg1(100, "Restoring empty xattr named %s\n", current_xattr->name);

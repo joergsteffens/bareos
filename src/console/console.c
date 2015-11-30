@@ -482,7 +482,7 @@ void init_items()
 static void match_kw(regex_t *preg, const char *what, int len, POOLMEM **buf)
 {
    int rc, size;
-   int nmatch=20;
+   int nmatch = 20;
    regmatch_t pmatch[20];
 
    if (len <= 0) {
@@ -1653,11 +1653,9 @@ static int sleepcmd(FILE *input, BSOCK *UA_sock)
 static int timecmd(FILE *input, BSOCK *UA_sock)
 {
    char sdt[50];
-   time_t ttime = time(NULL);
-   struct tm tm;
-   (void)localtime_r(&ttime, &tm);
-   strftime(sdt, sizeof(sdt), "%d-%b-%Y %H:%M:%S", &tm);
-   sendit("\n");
+
+   bstrftimes(sdt, sizeof(sdt), time(NULL));
+   senditf("%s\n", sdt);
    return 1;
 }
 

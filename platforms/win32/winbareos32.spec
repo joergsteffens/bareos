@@ -22,7 +22,7 @@
 %define flavors "prevista postvista prevista-debug postvista-debug"
 
 Name:           mingw32-winbareos
-Version:        14.2.5
+Version:        14.2.6
 Release:        0
 Summary:        bareos
 License:        LGPLv2+
@@ -34,15 +34,14 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildArch:      noarch
 #!BuildIgnore: post-build-checks
 
+%define addonsdir /bareos-addons/
+BuildRequires:  bareos-addons
+
+%define SIGNCERT ia.p12
+%define SIGNPWFILE signpassword
+
+
 Source1:        fillup.sed
-Source2:        vss_headers.tar
-Source3:        vdi_headers.tar
-Source4:        pgsql-libpq.tar
-
-# code signing cert
-Source10:       ia.p12
-Source11:       signpassword
-
 Patch1:         tray-monitor-conf.patch
 Patch2:         tray-monitor-conf-fd-sd.patch
 
@@ -85,6 +84,7 @@ BuildRequires:  sed
 BuildRequires:  vim, procps, bc
 
 BuildRequires:  osslsigncode
+BuildRequires:  obs-name-resolution-settings
 
 %description
 bareos
@@ -138,9 +138,10 @@ cp src/qt-tray-monitor/tray-monitor.conf.in.orig src/qt-tray-monitor/tray-monito
 mv src/qt-tray-monitor/tray-monitor.fd-sd-dir.conf.in src/qt-tray-monitor/tray-monitor.fd-sd.conf.in
 cp src/qt-tray-monitor/tray-monitor.conf.in.orig src/qt-tray-monitor/tray-monitor.fd-sd-dir.conf.in
 
-tar xvf %SOURCE2
-tar xvf %SOURCE3
-tar xvf %SOURCE4
+# unpack addons
+for i in `ls %addonsdir`; do
+   tar xvf %addonsdir/$i
+done
 
 CONTENT=`ls`
 
@@ -237,10 +238,12 @@ for flavor in `echo "%flavors"`; do
    pushd $RPM_BUILD_ROOT%{_mingw32_bindir}/$flavor
    for BINFILE in *; do
       mv $BINFILE $BINFILE.unsigned
-      osslsigncode -pkcs12 %SOURCE10 \
-                   -pass `cat %SOURCE11` \
+      osslsigncode  sign \
+                   -pkcs12 ${OLDPWD}/%SIGNCERT \
+                   -readpass ${OLDPWD}/%SIGNPWFILE \
                    -n "${DESCRIPTION}" \
                    -i http://www.bareos.com/ \
+                   -t http://timestamp.comodoca.com/authenticode \
                    -in  $BINFILE.unsigned \
                    -out $BINFILE
       rm *.unsigned
@@ -252,12 +255,6 @@ done
 rm -rf $RPM_BUILD_ROOT
 
 %files
-#defattr(-,root,root)
-#/etc/%name/*.conf
-#/etc/%name/ddl/
-#dir %{_mingw32_bindir}
-#{_mingw32_bindir}/*.dll
-#{_mingw32_bindir}/*.exe
 
 
 %files prevista

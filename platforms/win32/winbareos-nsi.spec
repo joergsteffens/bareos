@@ -12,7 +12,7 @@
 
 #!BuildIgnore: post-build-checks
 Name:           winbareos-nsi
-Version:        14.2.5
+Version:        14.2.6
 Release:        0
 Summary:        bareos
 License:        LGPLv2+
@@ -21,6 +21,14 @@ URL:            http://bareos.org
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildArch:      noarch
+
+%define addonsdir /bareos-addons/
+BuildRequires:  bareos-addons
+
+%define SIGNCERT ia.p12
+%define SIGNPWFILE signpassword
+
+
 BuildRequires:  mingw32-filesystem
 BuildRequires:  mingw64-filesystem
 BuildRequires:  mingw64-cross-nsis
@@ -76,20 +84,17 @@ BuildRequires:  mingw32-libfastlz
 BuildRequires:  mingw64-libfastlz
 
 BuildRequires:  osslsigncode
+BuildRequires:  obs-name-resolution-settings
 
 Source1:         winbareos.nsi
 Source2:         clientdialog.ini
 Source3:         directordialog.ini
 Source4:         storagedialog.ini
-Source5:         KillProcWMI.dll
 Source6:         bareos.ico
-Source7:         AccessControl.dll
-Source8:         LogEx.dll
 Source9:         databasedialog.ini
 
-# code signing cert
-Source10:        ia.p12
-Source11:        signpassword
+%define NSISDLLS KillProcWMI.dll AccessControl.dll LogEx.dll
+
 %description
 bareos
 
@@ -105,15 +110,19 @@ bareos
 
 %prep
 
+# unpack addons
+for i in `ls %addonsdir`; do
+   tar xvf %addonsdir/$i
+done
+
 
 %build
 for flavor in postvista postvista-debug prevista prevista-debug;
 do
    mkdir -p $RPM_BUILD_ROOT/$flavor/nsisplugins
-
-   cp %SOURCE5 $RPM_BUILD_ROOT/$flavor/nsisplugins  #  KillProcWMI
-   cp %SOURCE7 $RPM_BUILD_ROOT/$flavor/nsisplugins  #  AccessControl
-   cp %SOURCE8 $RPM_BUILD_ROOT/$flavor/nsisplugins  #  LogEx
+   for dll in %NSISDLLS; do
+      cp $dll $RPM_BUILD_ROOT/$flavor/nsisplugins
+   done
 
    for BITS in 32 64; do
       mkdir -p $RPM_BUILD_ROOT/$flavor/release${BITS}
@@ -209,7 +218,12 @@ do
       cp $RPM_BUILD_ROOT/$flavor/release${BITS}/Bareos*.exe \
            $RPM_BUILD_ROOT/winbareos-%version-$flavor-${BITS}-bit-r%release-unsigned.exe
 
-      osslsigncode  -pkcs12 %SOURCE10 -pass `cat %SOURCE11` -n "${DESCRIPTION}" -i http://www.bareos.com/ \
+      osslsigncode  sign \
+                    -pkcs12 %SIGNCERT \
+                    -readpass %SIGNPWFILE \
+                    -n "${DESCRIPTION}" \
+                    -i http://www.bareos.com/ \
+                    -t http://timestamp.comodoca.com/authenticode \
                     -in  $RPM_BUILD_ROOT/winbareos-%version-$flavor-${BITS}-bit-r%release-unsigned.exe \
                     -out $RPM_BUILD_ROOT/winbareos-%version-$flavor-${BITS}-bit-r%release.exe
 

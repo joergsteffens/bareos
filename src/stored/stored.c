@@ -39,6 +39,9 @@
 extern bool parse_sd_config(CONFIG *config, const char *configfile, int exit_code);
 
 /* Forward referenced functions */
+#if !defined(HAVE_WIN32)
+static
+#endif
 void terminate_stored(int sig);
 static int check_resources();
 static void cleanup_old_files();
@@ -503,8 +506,6 @@ static void cleanup_old_files()
    POOLMEM *basename = get_pool_memory(PM_MESSAGE);
    regex_t preg1;
    char prbuf[500];
-   const int nmatch = 30;
-   regmatch_t pmatch[nmatch];
    berrno be;
 
    /* Look for .spool files but don't allow spaces */
@@ -550,7 +551,7 @@ static void cleanup_old_files()
       }
 
       /* Unlink files that match regex */
-      if (regexec(&preg1, result->d_name, nmatch, pmatch,  0) == 0) {
+      if (regexec(&preg1, result->d_name, 0, NULL, 0) == 0) {
          pm_strcpy(cleanup, basename);
          pm_strcat(cleanup, result->d_name);
          Dmsg1(500, "Unlink: %s\n", cleanup);
@@ -667,6 +668,9 @@ void *device_initialization(void *arg)
 /*
  * Clean up and then exit
  */
+#if !defined(HAVE_WIN32)
+static
+#endif
 void terminate_stored(int sig)
 {
    static bool in_here = false;

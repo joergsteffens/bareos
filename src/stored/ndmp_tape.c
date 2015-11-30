@@ -103,6 +103,8 @@ static ndmp_backup_format_option ndmp_backup_format_options[] = {
    { (char *)"tar", false },
    { (char *)"smtape", true },
    { (char *)"zfs", true },
+   { (char *)"vbb", true },
+   { (char *)"image", true },
    { NULL, false }
 };
 
@@ -335,7 +337,7 @@ extern "C" int bndmp_auth_md5(struct ndm_session *sess, char *name, char digest[
 static inline bool bndmp_write_data_to_block(JCR *jcr,
                                              int stream,
                                              char *data,
-                                             u_long data_length)
+                                             uint32_t data_length)
 {
    bool retval = false;
    DCR *dcr = jcr->dcr;
@@ -376,8 +378,8 @@ bail_out:
  */
 static inline bool bndmp_read_data_from_block(JCR *jcr,
                                               char *data,
-                                              u_long wanted_data_length,
-                                              u_long *data_length)
+                                              uint32_t wanted_data_length,
+                                              uint32_t *data_length)
 {
    DCR *dcr = jcr->read_dcr;
    READ_CTX *rctx = jcr->rctx;
@@ -889,8 +891,8 @@ extern "C" ndmp9_error bndmp_tape_close(struct ndm_session *sess)
 
 extern "C" ndmp9_error bndmp_tape_mtio(struct ndm_session *sess,
                                        ndmp9_tape_mtio_op op,
-                                       u_long count,
-                                       u_long *resid)
+                                       uint32_t count,
+                                       uint32_t *resid)
 {
    struct ndm_tape_agent *ta = sess->tape_acb;
 
@@ -938,8 +940,8 @@ extern "C" ndmp9_error bndmp_tape_mtio(struct ndm_session *sess,
 
 extern "C" ndmp9_error bndmp_tape_write(struct ndm_session *sess,
                                         char *buf,
-                                        u_long count,
-                                        u_long *done_count)
+                                        uint32_t count,
+                                        uint32_t *done_count)
 {
    JCR *jcr;
    ndmp9_error err;
@@ -1004,8 +1006,8 @@ extern "C" ndmp9_error bndmp_tape_wfm(struct ndm_session *sess)
 
 extern "C" ndmp9_error bndmp_tape_read(struct ndm_session *sess,
                                        char *buf,
-                                       u_long count,
-                                       u_long *done_count)
+                                       uint32_t count,
+                                       uint32_t *done_count)
 {
    JCR *jcr;
    ndmp9_error err;
@@ -1042,7 +1044,7 @@ extern "C" ndmp9_error bndmp_tape_read(struct ndm_session *sess,
    return err;
 }
 
-static inline void register_callback_hooks(void)
+static inline void register_callback_hooks(struct ndm_session *sess)
 {
    struct ndm_auth_callbacks auth_callbacks;
    struct ndm_tape_simulator_callbacks tape_callbacks;
@@ -1052,7 +1054,7 @@ static inline void register_callback_hooks(void)
     */
    auth_callbacks.validate_password = bndmp_auth_clear;
    auth_callbacks.validate_md5 = bndmp_auth_md5;
-   ndmos_auth_register_callbacks(&auth_callbacks);
+   ndmos_auth_register_callbacks(sess, &auth_callbacks);
 
    /*
     * Register the tape simulator callbacks.
@@ -1063,13 +1065,13 @@ static inline void register_callback_hooks(void)
    tape_callbacks.tape_write = bndmp_tape_write;
    tape_callbacks.tape_wfm = bndmp_tape_wfm;
    tape_callbacks.tape_read = bndmp_tape_read;
-   ndmos_tape_register_callbacks(&tape_callbacks);
+   ndmos_tape_register_callbacks(sess, &tape_callbacks);
 }
 
-static inline void unregister_callback_hooks(void)
+static inline void unregister_callback_hooks(struct ndm_session *sess)
 {
-   ndmos_tape_unregister_callbacks();
-   ndmos_auth_unregister_callbacks();
+   ndmos_tape_unregister_callbacks(sess);
+   ndmos_auth_unregister_callbacks(sess);
 }
 
 void end_of_ndmp_backup(JCR *jcr)
@@ -1087,65 +1089,66 @@ void end_of_ndmp_backup(JCR *jcr)
       job_elapsed = 1;
    }
 
-   Jmsg(dcr->jcr, M_INFO, 0, _("Elapsed time=%02d:%02d:%02d, Transfer rate=%s Bytes/second\n"),
+   Jmsg(jcr, M_INFO, 0, _("Elapsed time=%02d:%02d:%02d, Transfer rate=%s Bytes/second\n"),
         job_elapsed / 3600, job_elapsed % 3600 / 60, job_elapsed % 60,
         edit_uint64_with_suffix(jcr->JobBytes / job_elapsed, ec));
 
+   if (dcr) {
+      /*
+       * Check if we can still write. This may not be the case
+       *  if we are at the end of the tape or we got a fatal I/O error.
+       */
+      if (dcr->dev && dcr->dev->can_write()) {
+         Dmsg1(200, "Write EOS label JobStatus=%c\n", jcr->JobStatus);
 
-   /*
-    * Check if we can still write. This may not be the case
-    *  if we are at the end of the tape or we got a fatal I/O error.
-    */
-   if (dcr->dev->can_write()) {
-      Dmsg1(200, "Write EOS label JobStatus=%c\n", jcr->JobStatus);
-
-      if (!write_session_label(dcr, EOS_LABEL)) {
-         /*
-          * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
-          */
-         if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
-            Jmsg1(jcr, M_FATAL, 0,
-                  _("Error writing end session label. ERR=%s\n"),
-                  dcr->dev->bstrerror());
+         if (!write_session_label(dcr, EOS_LABEL)) {
+            /*
+             * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+             */
+            if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
+               Jmsg1(jcr, M_FATAL, 0,
+                     _("Error writing end session label. ERR=%s\n"),
+                     dcr->dev->bstrerror());
+            }
+            jcr->setJobStatus(JS_ErrorTerminated);
          }
-         jcr->setJobStatus(JS_ErrorTerminated);
+
+         Dmsg0(90, "back from write_end_session_label()\n");
+
+         /*
+          * Flush out final partial block of this session
+          */
+         if (!dcr->write_block_to_device()) {
+            /*
+             * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+             */
+            if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
+               Jmsg2(jcr, M_FATAL, 0,
+                     _("Fatal append error on device %s: ERR=%s\n"),
+                     dcr->dev->print_name(), dcr->dev->bstrerror());
+            }
+            jcr->setJobStatus(JS_ErrorTerminated);
+         }
       }
 
-      Dmsg0(90, "back from write_end_session_label()\n");
-
-      /*
-       * Flush out final partial block of this session
-       */
-      if (!dcr->write_block_to_device()) {
+      if (jcr->is_JobStatus(JS_Terminated)) {
          /*
-          * Print only if JobStatus JS_Terminated and not cancelled to avoid spurious messages
+          * Note: if commit is OK, the device will remain blocked
           */
-         if (jcr->is_JobStatus(JS_Terminated) && !jcr->is_job_canceled()) {
-            Jmsg2(jcr, M_FATAL, 0,
-                  _("Fatal append error on device %s: ERR=%s\n"),
-                  dcr->dev->print_name(), dcr->dev->bstrerror());
-         }
-         jcr->setJobStatus(JS_ErrorTerminated);
+         commit_data_spool(dcr);
+      } else {
+         discard_data_spool(dcr);
       }
-   }
 
-   if (jcr->is_JobStatus(JS_Terminated)) {
       /*
-       * Note: if commit is OK, the device will remain blocked
+       * Release the device -- and send final Vol info to DIR and unlock it.
        */
-      commit_data_spool(dcr);
-   } else {
-      discard_data_spool(dcr);
-   }
-
-   /*
-    * Release the device -- and send final Vol info to DIR and unlock it.
-    */
-   if (jcr->acquired_storage) {
-      release_device(dcr);
-      jcr->acquired_storage = false;
-   } else {
-      dcr->unreserve_device();
+      if (jcr->acquired_storage) {
+         release_device(dcr);
+         jcr->acquired_storage = false;
+      } else {
+         dcr->unreserve_device();
+      }
    }
 
    jcr->sendJobStatus();              /* update director */
@@ -1194,6 +1197,8 @@ extern "C" void *handle_ndmp_client_request(void *arg)
    sess->param->log.ctx = nis;
    sess->param->log_level = native_to_ndmp_loglevel(debug_level, nis);
    sess->param->log_tag = bstrdup("SD-NDMP");
+
+   register_callback_hooks(sess);
 
    /*
     * We duplicate some of the code from the ndma server session handling available
@@ -1264,6 +1269,8 @@ extern "C" void *handle_ndmp_client_request(void *arg)
    ndma_session_decommission(sess);
 
 bail_out:
+   unregister_callback_hooks(sess);
+
    free(sess->param->log.ctx);
    free(sess->param->log_tag);
    free(sess->param);
@@ -1423,8 +1430,6 @@ extern "C" void *ndmp_thread_server(void *arg)
    }
 #endif
 
-   register_callback_hooks();
-
    /*
     * Wait for a connection from the client process.
     */
@@ -1552,8 +1557,6 @@ extern "C" void *ndmp_thread_server(void *arg)
             _("Could not destroy ndmp client queue: ERR=%s\n"),
             be.bstrerror());
    }
-
-   unregister_callback_hooks();
 
    return NULL;
 }

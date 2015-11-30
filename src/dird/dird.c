@@ -42,6 +42,9 @@ int readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result);
 #endif
 
 /* Forward referenced subroutines */
+#if !defined(HAVE_WIN32)
+static
+#endif
 void terminate_dird(int sig);
 static bool check_resources();
 static bool initialize_sql_pooling(void);
@@ -66,6 +69,7 @@ void init_device_resources();
 
 static char *runjob = NULL;
 static bool background = true;
+static bool test_config = false;
 static void init_reload(void);
 
 /* Globals Exported */
@@ -103,8 +107,7 @@ static bool dir_db_log_insert(JCR *jcr, utime_t mtime, char *msg)
    if (!jcr || !jcr->db || !jcr->db->is_connected()) {
       return false;
    }
-
-   length = strlen(msg) + 1;
+   length = strlen(msg);
    esc_msg.check_size(length * 2 + 1);
    db_escape_string(jcr, jcr->db, esc_msg.c_str(), msg, length);
 
@@ -155,7 +158,6 @@ int main (int argc, char *argv[])
    JCR *jcr;
    cat_op mode;
    bool no_signals = false;
-   bool test_config = false;
    bool export_config_schema = false;
    char *uid = NULL;
    char *gid = NULL;
@@ -388,6 +390,9 @@ bail_out:
 }
 
 /* Cleanup and then exit */
+#if !defined(HAVE_WIN32)
+static
+#endif
 void terminate_dird(int sig)
 {
    static bool already_here = false;
@@ -405,8 +410,10 @@ void terminate_dird(int sig)
    db_sql_pool_destroy();
    db_flush_backends();
    unload_dir_plugins();
-   write_state_file(me->working_directory, "bareos-dir", get_first_port_host_order(me->DIRaddrs));
-   delete_pid_file(me->pid_directory, "bareos-dir", get_first_port_host_order(me->DIRaddrs));
+   if (!test_config) {                /* we don't need to do this block in test mode */
+      write_state_file(me->working_directory, "bareos-dir", get_first_port_host_order(me->DIRaddrs));
+      delete_pid_file(me->pid_directory, "bareos-dir", get_first_port_host_order(me->DIRaddrs));
+   }
    term_scheduler();
    term_job_server();
 
@@ -1170,8 +1177,6 @@ static void cleanup_old_files()
    POOLMEM *basename = get_pool_memory(PM_MESSAGE);
    regex_t preg1;
    char prbuf[500];
-   const int nmatch = 30;
-   regmatch_t pmatch[nmatch];
    berrno be;
 
    /* Exclude spaces and look for .mail or .restore.xx.bsr files */
@@ -1218,7 +1223,7 @@ static void cleanup_old_files()
       }
 
       /* Unlink files that match regexes */
-      if (regexec(&preg1, result->d_name, nmatch, pmatch,  0) == 0) {
+      if (regexec(&preg1, result->d_name, 0, NULL, 0) == 0) {
          pm_strcpy(cleanup, basename);
          pm_strcat(cleanup, result->d_name);
          Dmsg1(100, "Unlink: %s\n", cleanup);

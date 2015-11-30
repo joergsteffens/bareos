@@ -27,7 +27,7 @@
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 
 Name: 		bareos
-Version: 	14.2.5
+Version: 	14.2.6
 Release: 	0
 Group: 		Productivity/Archiving/Backup
 License: 	AGPL-3.0
@@ -36,7 +36,7 @@ URL: 		http://www.bareos.org/
 Vendor: 	The Bareos Team
 #Packager: 	{_packager}
 
-%define _libversion    14.2.5
+%define _libversion    14.2.6
 
 %define library_dir    %{_libdir}/bareos
 %define backend_dir    %{_libdir}/bareos/backends
@@ -423,11 +423,10 @@ Group:      Productivity/Archiving/Backup
 Summary:    Devel headers
 Group:      Development/Languages/C and C++
 Requires:   %{name}-common = %{version}
-Requires:   tcpd-devel
 Requires:   zlib-devel
 Requires:   libacl-devel
-Requires:   libmysqlclient-devel
 Requires:   postgresql-devel
+Requires:   libcap-devel
 %if 0%{?build_sqlite3}
 %if 0%{?suse_version}
 Requires:   sqlite3-devel
@@ -435,8 +434,29 @@ Requires:   sqlite3-devel
 Requires:   sqlite-devel
 %endif
 %endif
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora_version}
+Requires:   openssl-devel
+%else
 Requires:   libopenssl-devel
-Requires:   libcap-devel
+%endif
+%if 0%{?rhel_version} >= 600 || 0%{?centos_version} >= 600 || 0%{?fedora_version}
+Requires:   tcp_wrappers-devel
+%else
+%if 0%{?rhel_version} || 0%{?centos_version}
+Requires:   tcp_wrappers
+%else
+Requires:   tcpd-devel
+%endif
+%endif
+%if 0%{?rhel_version} >= 700 || 0%{?centos_version} >= 700 || 0%{?fedora_version} >= 19
+Requires:   mariadb-devel
+%else
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora_version}
+Requires:   mysql-devel
+%else
+Requires:   libmysqlclient-devel
+%endif
+%endif
 
 %if 0%{?python_plugins}
 %package    director-python-plugin

@@ -43,10 +43,10 @@
 #ifdef NDMOS_OPTION_TAPE_SIMULATOR
 #ifdef NDMOS_OPTION_GAP_SIMULATOR
 struct simu_gap {
-	u_long		magic;
-	u_long		rectype;
-	u_long		prev_size;
-	u_long		size;
+	uint32_t	magic;
+	uint32_t	rectype;
+	uint32_t	prev_size;
+	uint32_t	size;
 };
 
 #define SIMU_GAP_MAGIC		0x0BEEFEE0
@@ -363,7 +363,7 @@ ndmjob_tape_close (struct ndm_session *sess)
 	simu_flush_weof(sess);
 
 #if 0
-	u_long			resid;
+	uint32_t		resid;
 	ndmos_tape_mtio (sess, NDMP9_MTIO_REW, 1, &resid);
 #endif
 
@@ -391,7 +391,7 @@ ndmjob_tape_close (struct ndm_session *sess)
 
 static ndmp9_error
 ndmjob_tape_mtio (struct ndm_session *sess,
-                ndmp9_tape_mtio_op op, u_long count, u_long *resid)
+                ndmp9_tape_mtio_op op, uint32_t count, uint32_t *resid)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	int			rc;
@@ -491,14 +491,14 @@ ndmjob_tape_mtio (struct ndm_session *sess,
 
 static ndmp9_error
 ndmjob_tape_write (struct ndm_session *sess,
-                char *buf, u_long count, u_long *done_count)
+                char *buf, uint32_t count, uint32_t *done_count)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	int			rc;
 	struct simu_gap		gap;
 	off_t			cur_pos;
 	ndmp9_error		err;
-	u_long			prev_size;
+	uint32_t		prev_size;
 
 	if (ta->tape_fd < 0) {
 		return NDMP9_DEV_NOT_OPEN_ERR;
@@ -541,7 +541,7 @@ ndmjob_tape_write (struct ndm_session *sess,
 	lseek (ta->tape_fd, cur_pos, 0);
 
 	if (write (ta->tape_fd, &gap, sizeof gap) == sizeof gap
-	 && (u_long)write (ta->tape_fd, buf, count) == count) {
+	 && (uint32_t)write (ta->tape_fd, buf, count) == count) {
 		cur_pos += count + sizeof gap;
 
 		prev_size = count;
@@ -586,7 +586,7 @@ ndmjob_tape_wfm (struct ndm_session *sess)
 	struct simu_gap		gap;
 	off_t			cur_pos;
 	ndmp9_error		err;
-	u_long			prev_size;
+	uint32_t		prev_size;
 
 	ta->weof_on_close = 0;
 
@@ -660,7 +660,7 @@ ndmjob_tape_wfm (struct ndm_session *sess)
 
 static ndmp9_error
 ndmjob_tape_read (struct ndm_session *sess,
-                char *buf, u_long count, u_long *done_count)
+                char *buf, uint32_t count, uint32_t *done_count)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	int			rc;
@@ -791,7 +791,7 @@ ndmjob_tape_close (struct ndm_session *sess)
 	simu_flush_weof(sess);
 
 #if 0
-	u_long			resid;
+	uint32_t		resid;
 	ndmos_tape_mtio (sess, NDMP9_MTIO_REW, 1, &resid);
 #endif
 
@@ -805,7 +805,7 @@ ndmjob_tape_close (struct ndm_session *sess)
 
 static ndmp9_error
 ndmjob_tape_mtio (struct ndm_session *sess,
-                ndmp9_tape_mtio_op op, u_long count, u_long *resid)
+                ndmp9_tape_mtio_op op, uint32_t count, uint32_t *resid)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	int			rc;
@@ -855,12 +855,12 @@ ndmjob_tape_mtio (struct ndm_session *sess,
 
 static ndmp9_error
 ndmjob_tape_write (struct ndm_session *sess,
-                char *buf, u_long count, u_long *done_count)
+                char *buf, uint32_t count, uint32_t *done_count)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	off_t			cur_pos;
 	ndmp9_error		err;
-	u_long			prev_size;
+	uint32_t		prev_size;
 	int			rc;
 
 	if (ta->tape_fd < 0) {
@@ -874,7 +874,7 @@ ndmjob_tape_write (struct ndm_session *sess,
 	cur_pos = lseek (ta->tape_fd, (off_t)0, 1);
 	lseek (ta->tape_fd, cur_pos, 0);
 
-	if ((u_long)write (ta->tape_fd, buf, count) == count) {
+	if ((uint32_t)write (ta->tape_fd, buf, count) == count) {
 		cur_pos += count;
 
 		prev_size = count;
@@ -932,7 +932,7 @@ ndmjob_tape_wfm (struct ndm_session *sess)
 
 static ndmp9_error
 ndmjob_tape_read (struct ndm_session *sess,
-                char *buf, u_long count, u_long *done_count)
+                char *buf, uint32_t count, uint32_t *done_count)
 {
 	struct ndm_tape_agent *	ta = sess->tape_acb;
 	size_t rc, nb;
@@ -1639,7 +1639,7 @@ ndmjob_validate_md5 (struct ndm_session *sess, char *name, char digest[16])
 }
 
 void
-ndmjob_register_callbacks (void)
+ndmjob_register_callbacks (struct ndm_session *sess, struct ndmlog *ixlog)
 {
 #ifdef NDMOS_OPTION_TAPE_SIMULATOR
 	struct ndm_tape_simulator_callbacks tape_callbacks;
@@ -1658,7 +1658,7 @@ ndmjob_register_callbacks (void)
 	tape_callbacks.tape_wfm = ndmjob_tape_wfm;
 	tape_callbacks.tape_read = ndmjob_tape_read;
 
-	ndmos_tape_register_callbacks (&tape_callbacks);
+	ndmos_tape_register_callbacks (sess, &tape_callbacks);
 #endif /* NDMOS_OPTION_TAPE_SIMULATOR */
 
 #ifdef NDMOS_OPTION_ROBOT_SIMULATOR
@@ -1667,31 +1667,31 @@ ndmjob_register_callbacks (void)
 	robot_callbacks.scsi_reset = ndmjob_scsi_reset;
 	robot_callbacks.scsi_execute_cdb = ndmjob_scsi_execute_cdb;
 
-	ndmos_scsi_register_callbacks (&robot_callbacks);
+	ndmos_scsi_register_callbacks (sess, &robot_callbacks);
 #endif /* NDMOS_OPTION_ROBOT_SIMULATOR */
 
 	auth_callbacks.validate_password = ndmjob_validate_password;
 	auth_callbacks.validate_md5 = ndmjob_validate_md5;
 
-	ndmos_auth_register_callbacks (&auth_callbacks);
+	ndmos_auth_register_callbacks (sess, &auth_callbacks);
 
 	fhdb_callbacks.add_file = ndmjobfhdb_add_file;
 	fhdb_callbacks.add_dir = ndmjobfhdb_add_dir;
 	fhdb_callbacks.add_node = ndmjobfhdb_add_node;
 	fhdb_callbacks.add_dirnode_root = ndmjobfhdb_add_dirnode_root;
 
-	ndmfhdb_register_callbacks (&fhdb_callbacks);
+	ndmfhdb_register_callbacks (ixlog, &fhdb_callbacks);
 }
 
 void
-ndmjob_unregister_callbacks (void)
+ndmjob_unregister_callbacks (struct ndm_session *sess, struct ndmlog *ixlog)
 {
-	ndmfhdb_unregister_callbacks ();
-	ndmos_auth_unregister_callbacks ();
+	ndmfhdb_unregister_callbacks (ixlog);
+	ndmos_auth_unregister_callbacks (sess);
 #ifdef NDMOS_OPTION_ROBOT_SIMULATOR
-	ndmos_scsi_unregister_callbacks ();
+	ndmos_scsi_unregister_callbacks (sess);
 #endif /* NDMOS_OPTION_ROBOT_SIMULATOR */
 #ifdef NDMOS_OPTION_TAPE_SIMULATOR
-	ndmos_auth_unregister_callbacks ();
+	ndmos_auth_unregister_callbacks (sess);
 #endif /* NDMOS_OPTION_TAPE_SIMULATOR */
 }

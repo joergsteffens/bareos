@@ -49,8 +49,6 @@ int safer_unlink(const char *pathname, const char *regx)
    int rc;
    regex_t preg1;
    char prbuf[500];
-   const int nmatch = 30;
-   regmatch_t pmatch[nmatch];
    int rtn;
 
    /* Name must start with working directory */
@@ -68,8 +66,10 @@ int safer_unlink(const char *pathname, const char *regx)
       return ENOENT;
    }
 
-   /* Unlink files that match regexes */
-   if (regexec(&preg1, pathname, nmatch, pmatch,  0) == 0) {
+   /*
+    * Unlink files that match regexes
+    */
+   if (regexec(&preg1, pathname, 0, NULL, 0) == 0) {
       Dmsg1(100, "safe_unlink unlinking: %s\n", pathname);
       rtn = unlink(pathname);
    } else {
@@ -420,7 +420,6 @@ int bvsnprintf(char *str, int32_t size, const char  *format, va_list ap)
 #endif /* USE_BSNPRINTF */
 
 #ifndef HAVE_LOCALTIME_R
-
 struct tm *localtime_r(const time_t *timep, struct tm *tm)
 {
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
