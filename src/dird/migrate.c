@@ -662,16 +662,13 @@ static bool regex_find_jobids(JCR *jcr, idpkt *ids,
        * Now apply the regex to the names and remove any item not matched
        */
       foreach_dlist(item, item_chain) {
-         const int nmatch = 30;
-
-         regmatch_t pmatch[nmatch];
          if (last_item) {
             Dmsg1(dbglevel, "Remove item %s\n", last_item->item);
             free(last_item->item);
             item_chain->remove(last_item);
          }
          Dmsg1(dbglevel, "get name Item=%s\n", item->item);
-         rc = regexec(&preg, item->item, nmatch, pmatch,  0);
+         rc = regexec(&preg, item->item, 0, NULL, 0);
          if (rc == 0) {
             last_item = NULL;   /* keep this one */
          } else {
@@ -1174,6 +1171,12 @@ bool do_migration_init(JCR *jcr)
        */
       mig_jcr->IgnoreDuplicateJobChecking = true;
 
+      /*
+       * Copy some overwrites back from the Control Job to the migration and copy job.
+       */
+      mig_jcr->spool_data = jcr->spool_data;
+      mig_jcr->spool_size = jcr->spool_size;
+
       if (!setup_job(mig_jcr, true)) {
          Jmsg(jcr, M_FATAL, 0, _("setup job failed.\n"));
          return false;
@@ -1264,6 +1267,8 @@ static inline bool do_actual_migration(JCR *jcr)
    char ed1[100];
    bool retval = false;
    JCR *mig_jcr = jcr->mig_jcr;
+
+   ASSERT(mig_jcr);
 
    /*
     * Make sure this job was not already migrated
@@ -1657,7 +1662,7 @@ static inline void generate_migrate_summary(JCR *jcr, MEDIA_DBR *mr, int msg_typ
            HOST_OS, DISTNAME, DISTVER,
            edit_uint64(jcr->previous_jr.JobId, ec6),
            jcr->previous_jr.Job,
-           mig_jcr ? edit_uint64(mig_jcr->jr.JobId, ec7) : 0,
+           mig_jcr ? edit_uint64(mig_jcr->jr.JobId, ec7) : _("*None*"),
            edit_uint64(jcr->jr.JobId, ec8),
            jcr->jr.Job,
            level_to_str(jcr->getJobLevel()),
@@ -1680,7 +1685,7 @@ static inline void generate_migrate_summary(JCR *jcr, MEDIA_DBR *mr, int msg_typ
            edit_uint64_with_commas(jcr->SDJobBytes, ec2),
            edit_uint64_with_suffix(jcr->SDJobBytes, ec3),
            (float)kbps,
-           mig_jcr ? mig_jcr->VolumeName : "",
+           mig_jcr ? mig_jcr->VolumeName : _("*None*"),
            jcr->VolSessionId,
            jcr->VolSessionTime,
            edit_uint64_with_commas(mr->VolBytes, ec4),

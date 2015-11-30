@@ -52,41 +52,98 @@ const char *cleanup_running_job =
 
 /* For sql_update.c db_update_stats */
 const char *fill_jobhisto =
-        "INSERT INTO JobHisto ("
-           "JobId, Job, Name, Type, Level, ClientId, JobStatus, "
-           "SchedTime, StartTime, EndTime, RealEndTime, JobTDate, "
-           "VolSessionId, VolSessionTime, JobFiles, JobBytes, ReadBytes, "
-           "JobErrors, JobMissingFiles, PoolId, FileSetId, PriorJobId, "
-           "PurgedFiles, HasBase, Reviewed, Comment ) "
-        "SELECT "
-           "JobId, Job, Name, Type, Level, ClientId, JobStatus, "
-           "SchedTime, StartTime, EndTime, RealEndTime, JobTDate, "
-           "VolSessionId, VolSessionTime, JobFiles, JobBytes, ReadBytes, "
-           "JobErrors, JobMissingFiles, PoolId, FileSetId, PriorJobId, "
-           "PurgedFiles, HasBase, Reviewed, Comment "
-          "FROM Job "
-         "WHERE JobStatus IN ('T','W','f','A','E') "
-           "AND NOT EXISTS "
-                "(SELECT JobHisto.JobId "
-                   "FROM JobHisto WHERE JobHisto.Jobid=Job.JobId) "
-           "AND JobTDate < %s ";
+   "INSERT INTO JobHisto ("
+      "JobId, Job, Name, Type, Level, ClientId, JobStatus, "
+      "SchedTime, StartTime, EndTime, RealEndTime, JobTDate, "
+      "VolSessionId, VolSessionTime, JobFiles, JobBytes, ReadBytes, "
+      "JobErrors, JobMissingFiles, PoolId, FileSetId, PriorJobId, "
+      "PurgedFiles, HasBase, Reviewed, Comment ) "
+   "SELECT "
+      "JobId, Job, Name, Type, Level, ClientId, JobStatus, "
+      "SchedTime, StartTime, EndTime, RealEndTime, JobTDate, "
+      "VolSessionId, VolSessionTime, JobFiles, JobBytes, ReadBytes, "
+      "JobErrors, JobMissingFiles, PoolId, FileSetId, PriorJobId, "
+      "PurgedFiles, HasBase, Reviewed, Comment "
+     "FROM Job "
+    "WHERE JobStatus IN ('T','W','f','A','E') "
+      "AND NOT EXISTS "
+           "(SELECT JobHisto.JobId "
+              "FROM JobHisto WHERE JobHisto.Jobid=Job.JobId) "
+      "AND JobTDate < %s ";
 
 /* For ua_update.c */
 const char *list_pool = "SELECT * FROM Pool WHERE PoolId=%s";
 
-/* For ua_output.c */
-const char *client_backups =
-   "SELECT DISTINCT Job.JobId,Client.Name as Client,Level,StartTime,"
-   "JobStatus,JobFiles,JobBytes,VolumeName,MediaType,FileSet,Media.Enabled as Enabled"
-   " FROM Client,Job,JobMedia,Media,FileSet"
-   " WHERE Client.Name='%s'"
-   " AND (%s)"
-   " AND Type='B'"
-   " AND Client.ClientId=Job.ClientId"
-   " AND JobMedia.JobId=Job.JobId AND JobMedia.MediaId=Media.MediaId"
-   " AND Job.FileSetId=FileSet.FileSetId"
-   "%s"
-   " ORDER BY Job.StartTime"
+/*
+ * For sql_list.c and ua_output.c
+ *
+ * "WHERE JobId > 0" is a dummy where clause,
+ *                   to make it easier to extend the filter
+ *                   (all filters starts with "AND ...")
+ * JOIN with Media is required for filter to Media.Volumename.
+ */
+const char *list_jobs =
+   "SELECT DISTINCT "
+   "Job.JobId,Job.Name, "
+   "Client.Name as Client, "
+   "Job.StartTime,Job.Type,Job.Level,Job.JobFiles,Job.JobBytes,Job.JobStatus "
+   "FROM Job "
+   "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+   "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+   "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+   "WHERE Job.JobId > 0 "
+   "%s "
+   "ORDER BY StartTime%s";
+
+const char *list_jobs_count =
+   "SELECT DISTINCT "
+   "COUNT(DISTINCT Job.JobId) as count "
+   "FROM Job "
+   "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+   "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+   "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+   "WHERE Job.JobId > 0 "
+   "%s "
+   "%s";
+
+const char *list_jobs_long =
+   "SELECT DISTINCT "
+   "Job.JobId, Job.Job, Job.Name, "
+   "Job.PurgedFiles, Job.Type, Job.Level, "
+   "Job.ClientId, Client.Name as Client, "
+   "Job.JobStatus,"
+   "Job.SchedTime, Job.StartTime, Job.EndTime, Job.RealEndTime, Job.JobTDate, "
+   "Job.VolSessionId, Job.VolSessionTime, "
+   "Job.JobFiles, Job.JobBytes, Job.JobErrors, Job.JobMissingFiles, "
+   "Job.PoolId, Pool.Name as PoolName,"
+   "Job.PriorJobId, "
+   "Job.FileSetId, FileSet.FileSet "
+   "FROM Job "
+   "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN Pool ON Pool.PoolId=Job.PoolId "
+   "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+   "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+   "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+   "WHERE Job.JobId > 0 "
+   "%s "
+   "ORDER BY StartTime%s";
+
+/*
+ * Get the last JobId of each Job.Name matching the given criteria.
+ */
+const char *list_jobs_last =
+   "SELECT DISTINCT "
+   "MAX(DISTINCT Job.JobId) as MaxJobId "
+   "FROM Job "
+   "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+   "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+   "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+   "WHERE Job.JobId > 0 "
+   "%s "
+   "GROUP BY Job.Name "
    "%s";
 
 /* ====== ua_prune.c */
@@ -292,31 +349,31 @@ const char *uar_jobid_fileindex_from_table =
  * we need an extra join using JobTDate.
  */
 static const char *select_recent_version_with_basejob_default =
-"SELECT FileId, Job.JobId AS JobId, FileIndex, File.PathId AS PathId, "
-       "File.FilenameId AS FilenameId, LStat, MD5, DeltaSeq, "
-       "Job.JobTDate AS JobTDate "
-"FROM Job, File, ( "
-    "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
-      "FROM ( "
-        "SELECT JobTDate, PathId, FilenameId "   /* Get all normal files */
-          "FROM File JOIN Job USING (JobId) "    /* from selected backup */
-         "WHERE File.JobId IN (%s) "
-          "UNION ALL "
-        "SELECT JobTDate, PathId, FilenameId "   /* Get all files from */
-          "FROM BaseFiles "                      /* BaseJob */
-               "JOIN File USING (FileId) "
-               "JOIN Job  ON    (BaseJobId = Job.JobId) "
-         "WHERE BaseFiles.JobId IN (%s) "        /* Use Max(JobTDate) to find */
-       ") AS tmp "
-       "GROUP BY PathId, FilenameId "            /* the latest file version */
-    ") AS T1 "
-"WHERE (Job.JobId IN ( "  /* Security, we force JobId to be valid */
-        "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
-        "OR Job.JobId IN (%s)) "
-  "AND T1.JobTDate = Job.JobTDate " /* Join on JobTDate to get the orginal */
-  "AND Job.JobId = File.JobId "     /* Job/File record */
-  "AND T1.PathId = File.PathId "
-  "AND T1.FilenameId = File.FilenameId";
+   "SELECT FileId, Job.JobId AS JobId, FileIndex, File.PathId AS PathId, "
+          "File.FilenameId AS FilenameId, LStat, MD5, DeltaSeq, "
+          "Job.JobTDate AS JobTDate "
+   "FROM Job, File, ( "
+       "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
+         "FROM ( "
+           "SELECT JobTDate, PathId, FilenameId "   /* Get all normal files */
+             "FROM File JOIN Job USING (JobId) "    /* from selected backup */
+            "WHERE File.JobId IN (%s) "
+             "UNION ALL "
+           "SELECT JobTDate, PathId, FilenameId "   /* Get all files from */
+             "FROM BaseFiles "                      /* BaseJob */
+                  "JOIN File USING (FileId) "
+                  "JOIN Job  ON    (BaseJobId = Job.JobId) "
+            "WHERE BaseFiles.JobId IN (%s) "        /* Use Max(JobTDate) to find */
+          ") AS tmp "
+          "GROUP BY PathId, FilenameId "            /* the latest file version */
+       ") AS T1 "
+   "WHERE (Job.JobId IN ( "  /* Security, we force JobId to be valid */
+           "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
+           "OR Job.JobId IN (%s)) "
+     "AND T1.JobTDate = Job.JobTDate " /* Join on JobTDate to get the orginal */
+     "AND Job.JobId = File.JobId "     /* Job/File record */
+     "AND T1.PathId = File.PathId "
+     "AND T1.FilenameId = File.FilenameId";
 
 const char *select_recent_version_with_basejob[] = {
    /* MySQL */
@@ -359,31 +416,31 @@ const char *select_recent_version_with_basejob[] = {
  * This control should be reset for each new file
  */
 static const char *select_recent_version_with_basejob_and_delta_default =
-"SELECT FileId, Job.JobId AS JobId, FileIndex, File.PathId AS PathId, "
-       "File.FilenameId AS FilenameId, LStat, MD5, File.DeltaSeq AS DeltaSeq, "
-       "Job.JobTDate AS JobTDate "
-"FROM Job, File, ( "
-    "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId, DeltaSeq "
-      "FROM ( "
-       "SELECT JobTDate, PathId, FilenameId, DeltaSeq " /*Get all normal files*/
-         "FROM File JOIN Job USING (JobId) "          /* from selected backup */
-        "WHERE File.JobId IN (%s) "
-         "UNION ALL "
-       "SELECT JobTDate, PathId, FilenameId, DeltaSeq " /*Get all files from */
-         "FROM BaseFiles "                            /* BaseJob */
-              "JOIN File USING (FileId) "
-              "JOIN Job  ON    (BaseJobId = Job.JobId) "
-        "WHERE BaseFiles.JobId IN (%s) "        /* Use Max(JobTDate) to find */
-       ") AS tmp "
-       "GROUP BY PathId, FilenameId, DeltaSeq "    /* the latest file version */
-    ") AS T1 "
-"WHERE (Job.JobId IN ( "  /* Security, we force JobId to be valid */
-        "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
-        "OR Job.JobId IN (%s)) "
-  "AND T1.JobTDate = Job.JobTDate " /* Join on JobTDate to get the orginal */
-  "AND Job.JobId = File.JobId "     /* Job/File record */
-  "AND T1.PathId = File.PathId "
-  "AND T1.FilenameId = File.FilenameId";
+   "SELECT FileId, Job.JobId AS JobId, FileIndex, File.PathId AS PathId, "
+          "File.FilenameId AS FilenameId, LStat, MD5, File.DeltaSeq AS DeltaSeq, "
+          "Job.JobTDate AS JobTDate "
+   "FROM Job, File, ( "
+       "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId, DeltaSeq "
+         "FROM ( "
+          "SELECT JobTDate, PathId, FilenameId, DeltaSeq " /*Get all normal files*/
+            "FROM File JOIN Job USING (JobId) "          /* from selected backup */
+           "WHERE File.JobId IN (%s) "
+            "UNION ALL "
+          "SELECT JobTDate, PathId, FilenameId, DeltaSeq " /*Get all files from */
+            "FROM BaseFiles "                            /* BaseJob */
+                 "JOIN File USING (FileId) "
+                 "JOIN Job  ON    (BaseJobId = Job.JobId) "
+           "WHERE BaseFiles.JobId IN (%s) "        /* Use Max(JobTDate) to find */
+          ") AS tmp "
+          "GROUP BY PathId, FilenameId, DeltaSeq "    /* the latest file version */
+       ") AS T1 "
+   "WHERE (Job.JobId IN ( "  /* Security, we force JobId to be valid */
+           "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
+           "OR Job.JobId IN (%s)) "
+     "AND T1.JobTDate = Job.JobTDate " /* Join on JobTDate to get the orginal */
+     "AND Job.JobId = File.JobId "     /* Job/File record */
+     "AND T1.PathId = File.PathId "
+     "AND T1.FilenameId = File.FilenameId";
 
 const char *select_recent_version_with_basejob_and_delta[] = {
    /* MySQL */
@@ -414,20 +471,20 @@ const char *select_recent_version_with_basejob_and_delta[] = {
  * We don't handle Delta with BaseJobs, they have only Full files
  */
 static const char *select_recent_version_default =
-  "SELECT j1.JobId AS JobId, f1.FileId AS FileId, f1.FileIndex AS FileIndex, "
-          "f1.PathId AS PathId, f1.FilenameId AS FilenameId, "
-          "f1.LStat AS LStat, f1.MD5 AS MD5, j1.JobTDate "
-     "FROM ( "     /* Choose the last version for each Path/Filename */
-       "SELECT max(JobTDate) AS JobTDate, PathId, FilenameId "
-         "FROM File JOIN Job USING (JobId) "
-        "WHERE File.JobId IN (%s) "
-       "GROUP BY PathId, FilenameId "
-     ") AS t1, Job AS j1, File AS f1 "
-    "WHERE t1.JobTDate = j1.JobTDate "
-      "AND j1.JobId IN (%s) "
-      "AND t1.FilenameId = f1.FilenameId "
-      "AND t1.PathId = f1.PathId "
-      "AND j1.JobId = f1.JobId";
+   "SELECT j1.JobId AS JobId, f1.FileId AS FileId, f1.FileIndex AS FileIndex, "
+           "f1.PathId AS PathId, f1.FilenameId AS FilenameId, "
+           "f1.LStat AS LStat, f1.MD5 AS MD5, j1.JobTDate "
+      "FROM ( "     /* Choose the last version for each Path/Filename */
+        "SELECT max(JobTDate) AS JobTDate, PathId, FilenameId "
+          "FROM File JOIN Job USING (JobId) "
+         "WHERE File.JobId IN (%s) "
+        "GROUP BY PathId, FilenameId "
+      ") AS t1, Job AS j1, File AS f1 "
+     "WHERE t1.JobTDate = j1.JobTDate "
+       "AND j1.JobId IN (%s) "
+       "AND t1.FilenameId = f1.FilenameId "
+       "AND t1.PathId = f1.PathId "
+       "AND j1.JobId = f1.JobId";
 
 const char *select_recent_version[] = {
    /* MySQL */
@@ -451,14 +508,14 @@ const char *select_recent_version[] = {
  * 5.0 and 5.1 are unable to run further queries in this mode
  */
 static const char *create_temp_accurate_jobids_default =
- "CREATE TABLE btemp3%s AS "
-    "SELECT JobId, StartTime, EndTime, JobTDate, PurgedFiles "
-      "FROM Job JOIN FileSet USING (FileSetId) "
-     "WHERE ClientId = %s "
-       "AND Level='F' AND JobStatus IN ('T','W') AND Type='B' "
-       "AND StartTime<'%s' "
-       "AND FileSet.FileSet=(SELECT FileSet FROM FileSet WHERE FileSetId = %s) "
-     "ORDER BY Job.JobTDate DESC LIMIT 1";
+   "CREATE TABLE btemp3%s AS "
+      "SELECT JobId, StartTime, EndTime, JobTDate, PurgedFiles "
+        "FROM Job JOIN FileSet USING (FileSetId) "
+       "WHERE ClientId = %s "
+         "AND Level='F' AND JobStatus IN ('T','W') AND Type='B' "
+         "AND StartTime<'%s' "
+         "AND FileSet.FileSet=(SELECT FileSet FROM FileSet WHERE FileSetId = %s) "
+       "ORDER BY Job.JobTDate DESC LIMIT 1";
 
 const char *create_temp_accurate_jobids[] = {
    /* Mysql */
@@ -592,19 +649,19 @@ const char *create_deltabs[] = {
 /* Select the first available Copy Job that must be upgraded to a Backup job when the original backup job is expired. */
 
 static const char *uap_upgrade_copies_oldest_job_default =
-"CREATE TEMPORARY TABLE cpy_tmp AS "
-       "SELECT MIN(JobId) AS JobId FROM Job "     /* Choose the oldest job */
-        "WHERE Type='%c' "                        /* JT_JOB_COPY */
-          "AND ( PriorJobId IN (%s) "             /* JobId selection */
-              "OR "
-               " PriorJobId IN ( "
-                  "SELECT PriorJobId "
-                    "FROM Job "
-                   "WHERE JobId IN (%s) "         /* JobId selection */
-                    " AND Type='B' "
+   "CREATE TEMPORARY TABLE cpy_tmp AS "
+          "SELECT MIN(JobId) AS JobId FROM Job "     /* Choose the oldest job */
+           "WHERE Type='%c' "                        /* JT_JOB_COPY */
+             "AND ( PriorJobId IN (%s) "             /* JobId selection */
+                 "OR "
+                  " PriorJobId IN ( "
+                     "SELECT PriorJobId "
+                       "FROM Job "
+                      "WHERE JobId IN (%s) "         /* JobId selection */
+                       " AND Type='B' "
+                    ") "
                  ") "
-              ") "
-          "GROUP BY PriorJobId ";           /* one result per copy */
+             "GROUP BY PriorJobId ";           /* one result per copy */
 
 const char *uap_upgrade_copies_oldest_job[] = {
    /* Mysql */
@@ -844,18 +901,18 @@ const char *sql_get_max_connections[] = {
  *  version of a file in the same dataset.
  */
 const char *default_sql_bvfs_select =
-"CREATE TABLE %s AS "
-"SELECT File.JobId, File.FileIndex, File.FileId "
-"FROM Job, File, ( "
-    "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
-       "FROM btemp%s GROUP BY PathId, FilenameId "
-    ") AS T1 JOIN Filename USING (FilenameId) "
-"WHERE T1.JobTDate = Job.JobTDate "
-  "AND Job.JobId = File.JobId "
-  "AND T1.PathId = File.PathId "
-  "AND T1.FilenameId = File.FilenameId "
-  "AND File.FileIndex > 0 "
-  "AND Job.JobId IN (SELECT DISTINCT JobId FROM btemp%s) ";
+   "CREATE TABLE %s AS "
+   "SELECT File.JobId, File.FileIndex, File.FileId "
+   "FROM Job, File, ( "
+       "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
+          "FROM btemp%s GROUP BY PathId, FilenameId "
+       ") AS T1 JOIN Filename USING (FilenameId) "
+   "WHERE T1.JobTDate = Job.JobTDate "
+     "AND Job.JobId = File.JobId "
+     "AND T1.PathId = File.PathId "
+     "AND T1.FilenameId = File.FilenameId "
+     "AND File.FileIndex > 0 "
+     "AND Job.JobId IN (SELECT DISTINCT JobId FROM btemp%s) ";
 
 const char *sql_bvfs_select[] = {
    /* Mysql */
@@ -880,33 +937,33 @@ const char *sql_bvfs_select[] = {
 };
 
 static const char *sql_bvfs_list_files_default =
-"SELECT 'F', T1.PathId, T1.FilenameId, Filename.Name, "
-        "File.JobId, File.LStat, File.FileId "
-"FROM Job, File, ( "
-    "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
-      "FROM ( "
-        "SELECT JobTDate, PathId, FilenameId "
-          "FROM File JOIN Job USING (JobId) "
-         "WHERE File.JobId IN (%s) AND PathId = %s "
-          "UNION ALL "
-        "SELECT JobTDate, PathId, FilenameId "
-          "FROM BaseFiles "
-               "JOIN File USING (FileId) "
-               "JOIN Job  ON    (BaseJobId = Job.JobId) "
-         "WHERE BaseFiles.JobId IN (%s)   AND PathId = %s "
-       ") AS tmp GROUP BY PathId, FilenameId "
-     "LIMIT %lld OFFSET %lld"
-    ") AS T1 JOIN Filename USING (FilenameId) "
-"WHERE T1.JobTDate = Job.JobTDate "
-  "AND Job.JobId = File.JobId "
-  "AND T1.PathId = File.PathId "
-  "AND T1.FilenameId = File.FilenameId "
-  "AND Filename.Name != '' "
-  "AND File.FileIndex > 0 "
-  " %s "                     /* AND Name LIKE '' */
-  "AND (Job.JobId IN ( "
-        "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
-       "OR Job.JobId IN (%s)) ";
+   "SELECT 'F', T1.PathId, T1.FilenameId, Filename.Name, "
+           "File.JobId, File.LStat, File.FileId "
+   "FROM Job, File, ( "
+       "SELECT MAX(JobTDate) AS JobTDate, PathId, FilenameId "
+         "FROM ( "
+           "SELECT JobTDate, PathId, FilenameId "
+             "FROM File JOIN Job USING (JobId) "
+            "WHERE File.JobId IN (%s) AND PathId = %s "
+             "UNION ALL "
+           "SELECT JobTDate, PathId, FilenameId "
+             "FROM BaseFiles "
+                  "JOIN File USING (FileId) "
+                  "JOIN Job  ON    (BaseJobId = Job.JobId) "
+            "WHERE BaseFiles.JobId IN (%s)   AND PathId = %s "
+          ") AS tmp GROUP BY PathId, FilenameId "
+        "LIMIT %lld OFFSET %lld"
+       ") AS T1 JOIN Filename USING (FilenameId) "
+   "WHERE T1.JobTDate = Job.JobTDate "
+     "AND Job.JobId = File.JobId "
+     "AND T1.PathId = File.PathId "
+     "AND T1.FilenameId = File.FilenameId "
+     "AND Filename.Name != '' "
+     "AND File.FileIndex > 0 "
+     " %s "                     /* AND Name LIKE '' */
+     "AND (Job.JobId IN ( "
+           "SELECT DISTINCT BaseJobId FROM BaseFiles WHERE JobId IN (%s)) "
+          "OR Job.JobId IN (%s)) ";
 
 const char *sql_bvfs_list_files[] = {
    /* Mysql */
@@ -915,24 +972,24 @@ const char *sql_bvfs_list_files[] = {
 
    /* JobId PathId JobId PathId WHERE? Filename? Limit Offset*/
    /* Postgresql */
- "SELECT Type, PathId, FilenameId, Name, JobId, LStat, FileId "
-  "FROM ("
-   "SELECT DISTINCT ON (FilenameId) 'F' as Type, PathId, T.FilenameId, "
-    "Filename.Name, JobId, LStat, FileId, FileIndex "
-     "FROM "
-         "(SELECT FileId, JobId, PathId, FilenameId, FileIndex, LStat, MD5 "
-            "FROM File WHERE JobId IN (%s) AND PathId = %s "
-           "UNION ALL "
-          "SELECT File.FileId, File.JobId, PathId, FilenameId, "
-                 "File.FileIndex, LStat, MD5 "
-            "FROM BaseFiles JOIN File USING (FileId) "
-           "WHERE BaseFiles.JobId IN (%s) AND File.PathId = %s "
-          ") AS T JOIN Job USING (JobId) JOIN Filename USING (FilenameId) "
-          " WHERE Filename.Name != '' "
-          " %s "               /* AND Name LIKE '' */
-     "ORDER BY FilenameId, StartTime DESC "
-   ") AS A WHERE A.FileIndex > 0 "
-   "LIMIT %lld OFFSET %lld ",
+   "SELECT Type, PathId, FilenameId, Name, JobId, LStat, FileId "
+    "FROM ("
+     "SELECT DISTINCT ON (FilenameId) 'F' as Type, PathId, T.FilenameId, "
+      "Filename.Name, JobId, LStat, FileId, FileIndex "
+       "FROM "
+           "(SELECT FileId, JobId, PathId, FilenameId, FileIndex, LStat, MD5 "
+              "FROM File WHERE JobId IN (%s) AND PathId = %s "
+             "UNION ALL "
+            "SELECT File.FileId, File.JobId, PathId, FilenameId, "
+                   "File.FileIndex, LStat, MD5 "
+              "FROM BaseFiles JOIN File USING (FileId) "
+             "WHERE BaseFiles.JobId IN (%s) AND File.PathId = %s "
+            ") AS T JOIN Job USING (JobId) JOIN Filename USING (FilenameId) "
+            " WHERE Filename.Name != '' "
+            " %s "               /* AND Name LIKE '' */
+       "ORDER BY FilenameId, StartTime DESC "
+     ") AS A WHERE A.FileIndex > 0 "
+     "LIMIT %lld OFFSET %lld ",
 
    /* SQLite */
    sql_bvfs_list_files_default,

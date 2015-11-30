@@ -738,6 +738,7 @@ void decode_session_key(char *decode, char *session, char *key, int maxlen)
 /*
  * Edit job codes into main command line
  *  %% = %
+ *  %B = Job Bytes in human readable format
  *  %F = Job Files
  *  %P = Pid of daemon
  *  %b = Job Bytes
@@ -773,6 +774,9 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
          case '%':
             str = "%";
             break;
+         case 'B':                    /* Job Bytes in human readable format */
+            str = edit_uint64_with_suffix(jcr->JobBytes, add);
+            break;
          case 'F':                    /* Job Files */
             str = edit_uint64(jcr->JobFiles, add);
             break;
@@ -787,7 +791,7 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
             if (jcr) {
                str = jcr->client_name;
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'd':
@@ -797,7 +801,7 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
             if (jcr) {
                str = job_status_to_str(jcr->JobStatus);
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'i':
@@ -805,21 +809,21 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
                bsnprintf(add, sizeof(add), "%d", jcr->JobId);
                str = add;
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'j':                    /* Job name */
             if (jcr) {
                str = jcr->Job;
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'l':
             if (jcr) {
                str = job_level_to_str(jcr->getJobLevel());
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'n':
@@ -835,7 +839,7 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
                 }
                 str = name;
              } else {
-                str = _("*none*");
+                str = _("*None*");
              }
              break;
          case 'r':
@@ -845,14 +849,14 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
             if (jcr && jcr->stime) {
                str = jcr->stime;
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 't':
             if (jcr) {
                str = job_type_to_str(jcr->getJobType());
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          case 'v':
@@ -860,10 +864,10 @@ POOLMEM *edit_job_codes(JCR *jcr, char *omsg, char *imsg, const char *to, job_co
                if (jcr->VolumeName) {
                   str = jcr->VolumeName;
                } else {
-                  str = _("*none*");
+                  str = _("*None*");
                }
             } else {
-               str = _("*none*");
+               str = _("*None*");
             }
             break;
          default:

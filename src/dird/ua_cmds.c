@@ -146,7 +146,9 @@ static struct cmdstruct commands[] = {
          "filesets |\n"
          "fileset [ jobid=<jobid> ] | fileset [ ujobid=<complete_name> ] |\n"
          "fileset [ filesetid=<filesetid> ] | fileset [ jobid=<jobid> ] |\n"
-         "jobs | jobid=<jobid> | ujobid=<complete_name> | job=<job-name> |\n"
+         "jobs [job=<job-name>] [client=<client-name>] [jobstatus=<status>] [volume=<volumename>] [days=<number>] [hours=<number>] [last] [count] |\n"
+         "job=<job-name> [client=<client-name>] [jobstatus=<status>] [volume=<volumename>] [days=<number>] [hours=<number>] |\n"
+         "jobid=<jobid> | ujobid=<complete_name> |\n"
          "joblog jobid=<jobid> | joblog ujobid=<complete_name> |\n"
          "jobmedia jobid=<jobid> | jobmedia ujobid=<complete_name> |\n"
          "jobtotals |\n"
@@ -167,7 +169,9 @@ static struct cmdstruct commands[] = {
          "filesets |\n"
          "fileset jobid=<jobid> | fileset ujobid=<complete_name> |\n"
          "fileset [ filesetid=<filesetid> ] | fileset [ jobid=<jobid> ] |\n"
-         "jobs | jobid=<jobid> | ujobid=<complete_name> | job=<job-name> [jobstatus=<status>] [days=<number>] [hours=<number>] |\n"
+         "jobs [job=<job-name>] [client=<client-name>] [jobstatus=<status>] [volume=<volumename>] [days=<number>] [hours=<number>] [last] [count] |\n"
+         "job=<job-name> [client=<client-name>] [jobstatus=<status>] [volume=<volumename>] [days=<number>] [hours=<number>] |\n"
+         "jobid=<jobid> | ujobid=<complete_name> |\n"
          "joblog jobid=<jobid> | joblog ujobid=<complete_name> |\n"
          "jobmedia jobid=<jobid> | jobmedia ujobid=<complete_name> |\n"
          "jobtotals |\n"
@@ -1833,8 +1837,25 @@ static bool time_cmd(UAContext *ua, const char *cmd)
    char sdt[50];
    time_t ttime = time(NULL);
 
+   ua->send->object_start("time");
+
    bstrftime(sdt, sizeof(sdt), ttime, "%a %d-%b-%Y %H:%M:%S");
-   ua->send_msg("%s\n", sdt);
+   ua->send->object_key_value("full", sdt, "%s\n");
+
+   bstrftime(sdt, sizeof(sdt), ttime, "%Y");
+   ua->send->object_key_value("year", sdt);
+   bstrftime(sdt, sizeof(sdt), ttime, "%m");
+   ua->send->object_key_value("month", sdt);
+   bstrftime(sdt, sizeof(sdt), ttime, "%d");
+   ua->send->object_key_value("day", sdt);
+   bstrftime(sdt, sizeof(sdt), ttime, "%H");
+   ua->send->object_key_value("hour", sdt);
+   bstrftime(sdt, sizeof(sdt), ttime, "%M");
+   ua->send->object_key_value("minute", sdt);
+   bstrftime(sdt, sizeof(sdt), ttime, "%S");
+   ua->send->object_key_value("second", sdt);
+
+   ua->send->object_end("time");
 
    return true;
 }
@@ -2426,15 +2447,19 @@ static bool help_cmd(UAContext *ua, const char *cmd)
             ua->send->object_key_value("command", commands[i].key, "  %-13s");
             ua->send->object_key_value("description", commands[i].help, " %s\n\n");
             ua->send->object_key_value("arguments", "Arguments:\n\t", commands[i].usage, "%s\n", 40);
+            ua->send->object_key_value_bool("permission", acl_access_ok(ua, Command_ACL, commands[i].key));
             ua->send->object_end(commands[i].key);
             break;
          }
       } else {
-         ua->send->object_start(commands[i].key);
-         ua->send->object_key_value("command", commands[i].key, "  %-13s");
-         ua->send->object_key_value("description", commands[i].help, " %s\n");
-         ua->send->object_key_value("arguments", commands[i].usage, 0);
-         ua->send->object_end(commands[i].key);
+         if (acl_access_ok(ua, Command_ACL, commands[i].key)) {
+            ua->send->object_start(commands[i].key);
+            ua->send->object_key_value("command", commands[i].key, "  %-13s");
+            ua->send->object_key_value("description", commands[i].help, " %s\n");
+            ua->send->object_key_value("arguments", commands[i].usage, 0);
+            ua->send->object_key_value_bool("permission", true);
+            ua->send->object_end(commands[i].key);
+         }
       }
    }
    if (i == comsize && ua->argc == 2) {
@@ -2455,11 +2480,14 @@ bool dot_help_cmd(UAContext *ua, const char *cmd)
    j = find_arg(ua, NT_("all"));
    if (j >= 0) {
       for (i = 0; i < comsize; i++) {
-         ua->send->object_start(commands[i].key);
-         ua->send->object_key_value("command", commands[i].key, "%s\n");
-         ua->send->object_key_value("description", commands[i].help);
-         ua->send->object_key_value("arguments", commands[i].usage, NULL, 0);
-         ua->send->object_end(commands[i].key);
+         if (acl_access_ok(ua, Command_ACL, commands[i].key)) {
+            ua->send->object_start(commands[i].key);
+            ua->send->object_key_value("command", commands[i].key, "%s\n");
+            ua->send->object_key_value("description", commands[i].help);
+            ua->send->object_key_value("arguments", commands[i].usage, NULL, 0);
+            ua->send->object_key_value_bool("permission", true);
+            ua->send->object_end(commands[i].key);
+         }
       }
       return true;
    }
@@ -2475,6 +2503,7 @@ bool dot_help_cmd(UAContext *ua, const char *cmd)
             ua->send->object_key_value("command", commands[i].key);
             ua->send->object_key_value("description", commands[i].help);
             ua->send->object_key_value("arguments", commands[i].usage, "%s\n", 0);
+            ua->send->object_key_value_bool("permission", acl_access_ok(ua, Command_ACL, commands[i].key));
             ua->send->object_end(commands[i].key);
             break;
          }
@@ -2486,11 +2515,14 @@ bool dot_help_cmd(UAContext *ua, const char *cmd)
     * Want to display everything
     */
    for (i = 0; i < comsize; i++) {
-      ua->send->object_start(commands[i].key);
-      ua->send->object_key_value("command", commands[i].key, "%s ");
-      ua->send->object_key_value("description", commands[i].help, "%s -- ");
-      ua->send->object_key_value("arguments", commands[i].usage, "%s\n", 0);
-      ua->send->object_end(commands[i].key);
+      if (acl_access_ok(ua, Command_ACL, commands[i].key)) {
+         ua->send->object_start(commands[i].key);
+         ua->send->object_key_value("command", commands[i].key, "%s ");
+         ua->send->object_key_value("description", commands[i].help, "%s -- ");
+         ua->send->object_key_value("arguments", commands[i].usage, "%s\n", 0);
+         ua->send->object_key_value_bool("permission", true);
+         ua->send->object_end(commands[i].key);
+      }
    }
    return true;
 }
@@ -2498,8 +2530,16 @@ bool dot_help_cmd(UAContext *ua, const char *cmd)
 #if 1
 static bool version_cmd(UAContext *ua, const char *cmd)
 {
-   ua->send_msg(_("%s Version: %s (%s) %s %s %s %s\n"), my_name, VERSION, BDATE,
-                HOST_OS, DISTNAME, DISTVER, NPRTB(me->verid));
+   ua->send->object_start("version");
+   ua->send->object_key_value("name", my_name, "%s ");
+   ua->send->object_key_value("type", "bareos-director");
+   ua->send->object_key_value("Version", "%s: ", VERSION, "%s ");
+   ua->send->object_key_value("bdate", BDATE, "(%s) ");
+   ua->send->object_key_value("operatingsystem", HOST_OS, "%s ");
+   ua->send->object_key_value("distname", DISTNAME, "%s ");
+   ua->send->object_key_value("distversion", DISTVER, "%s ");
+   ua->send->object_key_value("CustomVersionId", NPRTB(me->verid), "%s\n");
+   ua->send->object_end("version");
 
    return true;
 }
