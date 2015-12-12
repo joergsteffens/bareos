@@ -1,5 +1,4 @@
 #! /usr/bin/dh-exec
-/usr/sbin/bscrypto
 /usr/lib/bareos/plugins/autoxflate-sd.so
 /usr/lib/bareos/scripts/disk-changer
 /etc/bareos/bareos-sd.conf     /usr/lib/bareos/defaultconfigs
