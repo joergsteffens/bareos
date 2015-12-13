@@ -25,6 +25,7 @@ bareos (15.2.2-1) experimental; urgency=medium
   * build depend on libcmocka-dev (>= 1.0.1)
   * Build-Depends on libjansson-dev
   * drop unneeded debian/bareos-filedaemon-python-plugin.dir
+  * reorder packages in d/conrol to match upstream
 
  -- Evgeni Golov <evgeni@debian.org>  Sun, 13 Dec 2015 09:13:31 +0100
 
