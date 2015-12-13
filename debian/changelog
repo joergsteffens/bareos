@@ -1,3 +1,33 @@
+bareos (15.2.2-1) experimental; urgency=medium
+
+  * New upstream release.
+
+  [ Marco van Wieringen ]
+  * First plugin for doing LDAP backups.
+
+  [ Joerg Steffens ]
+  * plugin-python-ldap: add example configuration file
+  * CEPH packages for Debian based distributions
+  * Cephfs-, Rados- and Gfapi-plugins: added examples
+
+  [ André Bauer ]
+  * build glusterfs plugins on Debian/Ubuntu
+
+  [ Evgeni Golov ]
+  * refresh patches against 15.2.1
+  * add CEPH packages
+  * improve package descriptions
+  * allign the first sentence of the metapackage description with the others
+  * indent Desciption of bareos-common as the other descriptions
+  * drop openssl-no-home-rnd, applied upstream
+  * drop set-dbuser-dbname, applied upstream
+  * use dh-systemd unconditionally
+  * build depend on libcmocka-dev (>= 1.0.1)
+  * Build-Depends on libjansson-dev
+  * drop unneeded debian/bareos-filedaemon-python-plugin.dir
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 13 Dec 2015 09:13:31 +0100
+
 bareos (14.2.6-1) unstable; urgency=medium
 
   * New upstream release.
