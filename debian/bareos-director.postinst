@@ -44,13 +44,6 @@ case "$1" in
             cat ${DEFCONFIGDIR}/${CONFIG} > ${TARGET}.dist
         fi
         permissions
-        # on Univention distributions the ucr command allows to open the firewall
-        if [ -x "/etc/init.d/univention-firewall" ] && type ucr >/dev/null 2>&1; then
-            ucr set \
-                security/packetfilter/package/bareos-director/tcp/9101/all="ACCEPT" \
-                security/packetfilter/package/bareos-director/tcp/9101/all/en="bareos-dir"
-            #invoke-rc.d univention-firewall restart
-        fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         ;;
