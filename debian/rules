@@ -89,13 +89,7 @@ CONFIGURE_CLIENT_ONLY = $(CONFIGURE_COMMON) --enable-client-only
 CONFIGURE_FULL        = $(CONFIGURE_COMMON) --with-python --enable-bat --enable-traymonitor
 
 override_dh_auto_configure:
-	@if [ "`lsb_release --short  --id`" = "Ubuntu" ] && [ "`lsb_release --short  --release`" = "8.04" ]; then \
-		echo "configure common configuration"; \
-		dh_auto_configure -- $(CONFIGURE_COMMON); \
-	else \
-		echo "configure full configuration"; \
-		dh_auto_configure -- $(CONFIGURE_FULL); \
-	fi
+	dh_auto_configure -- $(CONFIGURE_FULL)
 
 override_dh_fixperms:
 	# all files in /etc/bareos
@@ -122,9 +116,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -n -Xusr/lib/bareos/plugins/ -Xusr/lib/bareos/backends/
 
 %:
-	PARALLEL="--parallel"; \
-	if [ "`lsb_release --short  --id`" = "Ubuntu" ] && [ "`lsb_release --short  --release`" = "8.04" ]; then PARALLEL=""; fi; \
-	dh $@ $$PARALLEL --with systemd
+	dh $@ --parallel --with systemd
 
 gen-debian-copyright:
 	(cd debian; make copyright)
