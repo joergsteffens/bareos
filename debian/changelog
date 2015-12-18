@@ -1,3 +1,10 @@
+bareos (14.2.6-2) unstable; urgency=medium
+
+  * add proper breaks/conflics between bareos-storage and b-s-tape
+    (Closes: #808311)
+
+ -- Evgeni Golov <evgeni@debian.org>  Fri, 18 Dec 2015 22:53:20 +0100
+
 bareos (14.2.6-1) unstable; urgency=medium
 
   * New upstream release.
