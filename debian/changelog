@@ -1,3 +1,14 @@
+bareos (15.2.2-2) experimental; urgency=medium
+
+  * add proper breaks/conflics between bareos-storage and b-s-tape
+    (Closes: #808311)
+  * yank out univention support, upstream needs it, we do not
+  * drop most Ubuntu 8.04 workarounds
+  * only build ceph and gluster support on Linux
+  * update homepage and source repo URLs for LZ4
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 19 Dec 2015 17:17:37 +0100
+
 bareos (15.2.2-1) experimental; urgency=medium
 
   * New upstream release.
