@@ -9,3 +9,7 @@ Depends: mysql-server, bareos-database-mysql, bareos
 Test-Command: test/all
 Restrictions: needs-root allow-stderr
 Depends: bareos-database-sqlite3, bareos
+
+Tests: tls tls-passive
+Restrictions: needs-root allow-stderr
+Depends: bareos-database-sqlite3, bareos
