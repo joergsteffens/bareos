@@ -1,0 +1,76 @@
+#!/bin/bash
+
+set -e
+
+# certs generated using:
+#
+# certtool --generate-privkey --outfile tls-ca-key.pem
+# echo "cn = Bareos Debian Package Test\nca\ncert_signing_key\nexpiration_days = 36500" > template.txt
+# certtool --generate-self-signed --template template.txt --load-privkey tls-ca-key.pem --outfile tls-ca.pem
+# rm template.txt
+#
+# certtool --generate-privkey --outfile tls-key.pem
+# echo "cn = localhost\ntls_www_server\ntls_www_client\nencryption_key\nsigning_key\nexpiration_days = 36000" > template.txt
+# certtool --generate-certificate --template template.txt --load-privkey tls-key.pem --load-ca-certificate tls-ca.pem --load-ca-privkey tls-ca-key.pem --outfile tls-cert.pem
+# rm template.txt
+
+cp debian/tests/certs/*.pem /etc/bareos/
+chgrp bareos /etc/bareos/*.pem
+chmod ug+r /etc/bareos/*.pem
+
+sed -i "s#Address = .*#Address = localhost#" /etc/bareos/bareos-dir.conf
+sed -i "s#Address = .*#Address = localhost#" /etc/bareos/bareos-sd.conf
+sed -i "s#Address = .*#Address = localhost#" /etc/bareos/bareos-fd.conf
+
+sed -i "s#Client {#Client {\n  TLS Require = yes\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-dir.conf
+sed -i "s#Storage {#Storage {\n  TLS Require = yes\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-dir.conf
+
+sed -i "s#Director {#Director {\n  TLS Require = yes\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-fd.conf
+sed -i "s#FileDaemon {#FileDaemon {\n  TLS Require = yes\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-fd.conf
+
+sed -i "s#Storage {#Storage {\n  TLS Require = yes\n  TLS Verify Peer = no\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-sd.conf
+sed -i "s#Director {#Director {\n  TLS Require = yes\n  TLS Certificate = /etc/bareos/tls-cert.pem\n  TLS Key = /etc/bareos/tls-key.pem\n  TLS CA Certificate File = /etc/bareos/tls-ca.pem#" /etc/bareos/bareos-sd.conf
+
+echo "--------- config options ----------- "
+echo "/etc/bareos/bareos-dir.conf:"
+grep -3 "TLS" /etc/bareos/bareos-dir.conf
+echo
+echo "/etc/bareos/bareos-sd.conf:"
+grep -3 "TLS" /etc/bareos/bareos-sd.conf
+echo
+echo "/etc/bareos/bareos-fd.conf:"
+grep -3 "TLS" /etc/bareos/bareos-fd.conf
+echo
+
+echo "--------- restarting services ----------- "
+service bareos-dir restart
+service bareos-sd restart
+service bareos-fd restart
+sleep 10
+
+echo "--------- checking services ----------- "
+service bareos-dir status
+service bareos-sd status
+service bareos-fd status
+
+# enable bash debug
+set -v
+
+BACKUP_TEST_FILE=/usr/sbin/bareos.test
+
+echo -e "status dir" | bconsole
+echo
+echo "---- label a volume ----"
+echo -e "label volume=testvol pool=Full" | bconsole
+echo
+echo "----- create some file to test backup / restore ----"
+echo "bareos restore test" > ${BACKUP_TEST_FILE}
+echo
+echo "------ trigger backup job -----"
+echo -e "run job=BackupClient1 yes\rwait" | bconsole | grep "Job queued. JobId="
+echo "status dir" | bconsole
+echo
+echo "------ trigger restore job -----"
+echo -e "restore select current\r2\rls\rmark usr\rdone\ryes\rwait" | bconsole
+echo "status dir" | bconsole
+grep "bareos restore test" /tmp/bareos-restores/${BACKUP_TEST_FILE}
