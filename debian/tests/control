@@ -1,15 +1,15 @@
 Test-Command: test/all
-Restrictions: needs-root allow-stderr
+Restrictions: breaks-testbed needs-root allow-stderr
 Depends: postgresql, bareos-database-postgresql, bareos
 
 Test-Command: test/all
-Restrictions: needs-root allow-stderr
+Restrictions: breaks-testbed needs-root allow-stderr
 Depends: mysql-server, bareos-database-mysql, bareos
 
 Test-Command: test/all
-Restrictions: needs-root allow-stderr
+Restrictions: breaks-testbed needs-root allow-stderr
 Depends: bareos-database-sqlite3, bareos
 
 Tests: tls tls-passive
-Restrictions: needs-root allow-stderr
+Restrictions: breaks-testbed needs-root allow-stderr
 Depends: bareos-database-sqlite3, bareos
