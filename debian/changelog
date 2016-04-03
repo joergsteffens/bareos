@@ -1,3 +1,13 @@
+bareos (14.2.6-3) unstable; urgency=medium
+
+  * Team upload.
+  * Fix GnuTLS backend initialization. (Closes: #819807)
+    - Backport upstream commits in d/patches/fix-tls-backend-initalization
+  * Add autopkgtests for TLS.
+  * Add breaks-testbed to all tests.
+
+ -- Felix Geyer <fgeyer@debian.org>  Sun, 03 Apr 2016 15:52:08 +0200
+
 bareos (14.2.6-2) unstable; urgency=medium
 
   * add proper breaks/conflics between bareos-storage and b-s-tape
