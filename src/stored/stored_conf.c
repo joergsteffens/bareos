@@ -72,7 +72,8 @@ static RES_ITEM store_items[] = {
    { "PluginDirectory", CFG_TYPE_DIR, ITEM(res_store.plugin_directory), 0, 0, NULL, NULL, NULL },
    { "PluginNames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_store.plugin_names), 0, 0, NULL, NULL, NULL },
    { "ScriptsDirectory", CFG_TYPE_DIR, ITEM(res_store.scripts_directory), 0, 0, NULL, NULL, NULL },
-   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_store.max_concurrent_jobs), 0, CFG_ITEM_DEFAULT, "20", NULL, NULL },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "20", NULL, NULL },
+   { "MaximumConnections", CFG_TYPE_PINT32, ITEM(res_store.MaxConnections), 0, CFG_ITEM_DEFAULT, "42", "15.2.3-", NULL },
    { "Messages", CFG_TYPE_RES, ITEM(res_store.messages), R_MSGS, 0, NULL, NULL, NULL },
    { "SdConnectTimeout", CFG_TYPE_TIME, ITEM(res_store.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
    { "FdConnectTimeout", CFG_TYPE_TIME, ITEM(res_store.FDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
@@ -109,6 +110,7 @@ static RES_ITEM store_items[] = {
    { "DeviceReserveByMediaType", CFG_TYPE_BOOL, ITEM(res_store.device_reserve_by_mediatype), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "FileDeviceConcurrentRead", CFG_TYPE_BOOL, ITEM(res_store.filedevice_concurrent_read), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_store.secure_erase_cmdline), 0, 0, NULL, NULL, NULL },
+   { "LogTimestampFormat", CFG_TYPE_STR, ITEM(res_store.log_timestamp_format), 0, 0, NULL, "15.2.3-", NULL },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -635,6 +637,9 @@ void free_resource(RES *sres, int type)
       if (res->res_store.secure_erase_cmdline) {
          free(res->res_store.secure_erase_cmdline);
       }
+      if (res->res_store.log_timestamp_format) {
+         free(res->res_store.log_timestamp_format);
+      }
       break;
    case R_DEVICE:
       if (res->res_dev.media_type) {
@@ -683,6 +688,9 @@ void free_resource(RES *sres, int type)
       }
       if (res->res_msgs.operator_cmd) {
          free(res->res_msgs.operator_cmd);
+      }
+      if (res->res_msgs.timestamp_format) {
+         free(res->res_msgs.timestamp_format);
       }
       free_msgs_res((MSGSRES *)res);  /* free message resource */
       res = NULL;

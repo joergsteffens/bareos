@@ -340,7 +340,6 @@ public:
    uint32_t JobErrors;                    /* Number of non-fatal errors this job */
    uint32_t JobWarnings;                  /* Number of warning messages */
    uint32_t LastRate;                     /* Last sample bytes/sec */
-   uint32_t DumpLevel;                    /* Dump level when doing a NDMP backup */
    uint64_t JobBytes;                     /* Number of bytes processed this job */
    uint64_t LastJobBytes;                 /* Last sample number bytes */
    uint64_t ReadBytes;                    /* Bytes read -- before compression */
@@ -436,13 +435,12 @@ public:
    uint32_t SDErrors;                     /* Number of non-fatal errors */
    volatile int32_t SDJobStatus;          /* Storage Job Status */
    volatile int32_t FDJobStatus;          /* File daemon Job Status */
+   uint32_t DumpLevel;                    /* Dump level when doing a NDMP backup */
    uint32_t ExpectedFiles;                /* Expected restore files */
    uint32_t MediaId;                      /* DB record IDs associated with this job */
    uint32_t FileIndex;                    /* Last FileIndex processed */
    utime_t MaxRunSchedTime;               /* Max run time in seconds from Initial Scheduled time */
    POOLMEM *fname;                        /* Name to put into catalog */
-   POOLMEM *component_fname;              /* Component info file name */
-   FILE *component_fd;                    /* Component info file desc */
    JOB_DBR jr;                            /* Job DB record for current job */
    JOB_DBR previous_jr;                   /* Previous job database record */
    JCR *mig_jcr;                          /* JCR for migration/copy job */
@@ -515,11 +513,14 @@ public:
    alist *RunScripts;                     /* Commands to run before and after job */
    CRYPTO_CTX crypto;                     /* Crypto ctx */
    DIRRES *director;                      /* Director resource */
-   bool VSS;                              /* VSS used by FD */
+   bool enable_vss;                       /* VSS used by FD */
    bool got_metadata;                     /* Set when found job_metadata */
    bool multi_restore;                    /* Dir can do multiple storage restore */
    B_ACCURATE *file_list;                 /* Previous file list (accurate mode) */
    uint64_t base_size;                    /* Compute space saved with base job */
+#ifdef HAVE_WIN32
+   VSSClient *pVSSClient;                 /* VSS Client Instance */
+#endif
 #endif /* FILE_DAEMON */
 
 #ifdef STORAGE_DAEMON

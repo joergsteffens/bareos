@@ -93,42 +93,9 @@ struct ndmp_internal_state {
 };
 typedef struct ndmp_internal_state NIS;
 
-struct ndmp_backup_format_option {
-   char *format;
-   bool uses_level;
-};
-
 #if HAVE_NDMP
 static workq_t ndmp_workq;         /* Queue for processing NDMP connections */
 #endif
-
-static ndmp_backup_format_option ndmp_backup_format_options[] = {
-   { (char *)"dump", true },
-   { (char *)"tar", false },
-   { (char *)"smtape", true },
-   { (char *)"zfs", true },
-   { (char *)"vbb", true },
-   { (char *)"image", true },
-   { NULL, false }
-};
-
-static ndmp_backup_format_option *lookup_backup_format_options(const char *backup_format)
-{
-   int i = 0;
-
-   while (ndmp_backup_format_options[i].format) {
-      if (bstrcasecmp(backup_format, ndmp_backup_format_options[i].format)) {
-         break;
-      }
-      i++;
-   }
-
-   if (ndmp_backup_format_options[i].format) {
-      return &ndmp_backup_format_options[i];
-   }
-
-   return (ndmp_backup_format_option *)NULL;
-}
 
 /* Static globals */
 static bool quit = false;
@@ -347,6 +314,15 @@ static inline bool bndmp_write_data_to_block(JCR *jcr,
    DCR *dcr = jcr->dcr;
    POOLMEM *rec_data;
 
+   if (!dcr) {
+      Dmsg0(100, "No dcr defined, bailing out\n");
+      return retval;
+   }
+
+   if (!dcr->rec) {
+      Dmsg0(100, "No dcr->rec defined, bailing out\n");
+      return retval;
+   }
    /*
     * Keep track of the original data buffer and restore it on exit from this function.
     */
@@ -577,10 +553,9 @@ extern "C" ndmp9_error bndmp_tape_open(struct ndm_session *sess,
    char *filesystem;
    struct ndmp_session_handle *handle;
    struct ndm_tape_agent *ta;
-   ndmp_backup_format_option *nbf_options;
 
    /*
-    * The drive_name should be in the form <AuthKey>@<file_system>
+    * The drive_name should be in the form <AuthKey>@<file_system>%<dumplevel>
     */
    if ((filesystem = strchr(drive_name, '@')) == NULL) {
       return NDMP9_NO_DEVICE_ERR;
@@ -636,11 +611,6 @@ extern "C" ndmp9_error bndmp_tape_open(struct ndm_session *sess,
       nis = (NIS *)sess->param->log.ctx;
       nis->jcr = jcr;
    }
-
-   /*
-    * See if we know this backup format and get it options.
-    */
-   nbf_options = lookup_backup_format_options(jcr->backup_format);
 
    /*
     * Depending on the open mode select the right DCR.
@@ -743,11 +713,7 @@ extern "C" ndmp9_error bndmp_tape_open(struct ndm_session *sess,
        * Create a virtual file name @NDMP/<filesystem>%<dumplevel> or
        * @NDMP/<filesystem> and save the attributes to the director.
        */
-      if (nbf_options && nbf_options->uses_level) {
-         Mmsg(virtual_filename, "/@NDMP%s%%%d", filesystem, jcr->DumpLevel);
-      } else {
-         Mmsg(virtual_filename, "/@NDMP%s", filesystem);
-      }
+      Mmsg(virtual_filename, "/@NDMP%s", filesystem);
       if (!bndmp_create_virtual_file(jcr, virtual_filename.c_str())) {
          Jmsg0(jcr, M_FATAL, 0,
                _("Creating virtual file attributes failed.\n"));
@@ -887,7 +853,6 @@ extern "C" ndmp9_error bndmp_tape_close(struct ndm_session *sess)
 
    pthread_cond_signal(&jcr->job_end_wait); /* wake any waiting thread */
 
-   ta->tape_fd = -1;
    ndmos_tape_initialize(sess);
 
    return err;
@@ -1401,7 +1366,7 @@ extern "C" void *ndmp_thread_server(void *arg)
                   be.bstrerror());
          }
       }
-      listen(fd_ptr->fd, 50);      /* tell system we are ready */
+      listen(fd_ptr->fd, me->MaxConnections); /* tell system we are ready */
       sockfds.append(fd_ptr);
 #ifdef HAVE_POLL
       nfds++;

@@ -90,7 +90,8 @@ public:
    alist *plugin_names;
    char *scripts_directory;
    alist *backend_directories;        /* Backend Directories */
-   uint32_t max_concurrent_jobs;      /* Maximum concurrent jobs to run */
+   uint32_t MaxConcurrentJobs;        /* Maximum concurrent jobs to run */
+   uint32_t MaxConnections;           /* Maximum connections to allow */
    uint32_t ndmploglevel;             /* Initial NDMP log level */
    uint32_t jcr_watchdog_time;        /* Absolute time after which a Job gets terminated regardless of its progress */
    uint32_t stats_collect_interval;   /* Statistics collect interval in seconds */
@@ -123,7 +124,8 @@ public:
    char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Clients */
    char *verid;                       /* Custom Id to print in version command */
-   char *secure_erase_cmdline;       /* Cmdline to execute to perform secure erase of file */
+   char *secure_erase_cmdline;        /* Cmdline to execute to perform secure erase of file */
+   char *log_timestamp_format;        /* Timestamp format to use in generic logging messages */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (global) */
 
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */

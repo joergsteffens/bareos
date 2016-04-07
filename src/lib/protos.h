@@ -89,7 +89,8 @@ void bnet_thread_server_tcp(dlist *addr_list,
 void bnet_stop_thread_server_tcp(pthread_t tid);
 
 /* bpipe.c */
-BPIPE *open_bpipe(char *prog, int wait, const char *mode);
+BPIPE *open_bpipe(char *prog, int wait, const char *mode,
+                  bool dup_stderr = true);
 int close_wpipe(BPIPE *bpipe);
 int close_bpipe(BPIPE *bpipe);
 
@@ -267,7 +268,8 @@ void my_name_is(int argc, char *argv[], const char *name);
 void init_msg(JCR *jcr, MSGSRES *msg, job_code_callback_t job_code_callback = NULL);
 void term_msg(void);
 void close_msg(JCR *jcr);
-void add_msg_dest(MSGSRES *msg, int dest, int type, char *where, char *dest_code);
+void add_msg_dest(MSGSRES *msg, int dest, int type,
+                  char *where, char *mail_cmd, char *timestamp_format);
 void rem_msg_dest(MSGSRES *msg, int dest, int type, char *where);
 void Jmsg(JCR *jcr, int type, utime_t mtime, const char *fmt, ...);
 void dispatch_message(JCR *jcr, int type, utime_t mtime, char *buf);
@@ -284,7 +286,7 @@ void set_db_type(const char *name);
 void register_message_callback(void msg_callback(int type, char *msg));
 
 /* passphrase.c */
-char *generate_crypto_passphrase(int length);
+char *generate_crypto_passphrase(uint16_t length);
 
 /* path_list.c */
 htable *path_list_init();

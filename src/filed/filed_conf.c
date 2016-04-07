@@ -89,6 +89,7 @@ static RES_ITEM cli_items[] = {
    { "PluginNames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_client.plugin_names), 0, 0, NULL, NULL, NULL },
    { "ScriptsDirectory", CFG_TYPE_DIR, ITEM(res_client.scripts_directory), 0, 0, NULL, NULL, NULL },
    { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "20", NULL, NULL },
+   { "MaximumConnections", CFG_TYPE_PINT32, ITEM(res_client.MaxConnections), 0, CFG_ITEM_DEFAULT, "42", "15.2.3-", NULL },
    { "Messages", CFG_TYPE_RES, ITEM(res_client.messages), R_MSGS, 0, NULL, NULL, NULL },
    { "SdConnectTimeout", CFG_TYPE_TIME, ITEM(res_client.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
    { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
@@ -122,6 +123,7 @@ static RES_ITEM cli_items[] = {
    { "AlwaysUseLmdb", CFG_TYPE_BOOL, ITEM(res_client.always_use_lmdb), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "LmdbThreshold", CFG_TYPE_PINT32, ITEM(res_client.lmdb_threshold), 0, 0, NULL, NULL, NULL },
    { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_client.secure_erase_cmdline), 0, 0, NULL, NULL, NULL },
+   { "LogTimestampFormat", CFG_TYPE_STR, ITEM(res_client.log_timestamp_format), 0, 0, NULL, "15.2.3-", NULL },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -364,6 +366,9 @@ void free_resource(RES *sres, int type)
       if (res->res_client.secure_erase_cmdline) {
          free(res->res_client.secure_erase_cmdline);
       }
+      if (res->res_client.log_timestamp_format) {
+         free(res->res_client.log_timestamp_format);
+      }
       break;
    case R_MSGS:
       if (res->res_msgs.mail_cmd) {
@@ -371,6 +376,9 @@ void free_resource(RES *sres, int type)
       }
       if (res->res_msgs.operator_cmd) {
          free(res->res_msgs.operator_cmd);
+      }
+      if (res->res_msgs.timestamp_format) {
+         free(res->res_msgs.timestamp_format);
       }
       free_msgs_res((MSGSRES *)res);  /* free message resource */
       res = NULL;

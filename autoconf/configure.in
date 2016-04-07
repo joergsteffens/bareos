@@ -777,7 +777,6 @@ if test x$TERM_LIB = x ; then
 fi
 
 got_readline="no"
-READLINE_SRC=
 if test x$support_readline = xyes; then
    AC_ARG_WITH(readline,
       AC_HELP_STRING([--with-readline@<:@=DIR@:>@], [specify readline library directory]),
@@ -789,10 +788,10 @@ if test x$support_readline = xyes; then
 	  yes|*)
 	     if test -f ${with_readline}/readline.h; then
 		CONS_INC="-I${with_readline}"
-		CONS_LDFLAGS="-L$with_readline"
+		CONS_LIBS="-L$with_readline"
 	     elif test -f ${with_readline}/include/readline/readline.h; then
 		CONS_INC="-I${with_readline}/include/readline"
-		CONS_LDFLAGS="-L${with_readline}/lib"
+		CONS_LIBS="-L${with_readline}/lib"
 		with_readline="${with_readline}/include/readline"
 	     else
 		CONS_INC="-I/usr/include/readline"
@@ -802,7 +801,7 @@ if test x$support_readline = xyes; then
 	     AC_CHECK_HEADER(${with_readline}/readline.h,
 		[
 		    AC_DEFINE(HAVE_READLINE, 1, [Define to 1 if readline support should be enabled])
-		    CONS_LIBS="-lreadline -lhistory $TERM_LIB"
+		    CONS_LIBS="${CONS_LIBS} -lreadline -lhistory ${TERM_LIB}"
 		    got_readline="yes"
 		], [
 		    echo " "
@@ -819,24 +818,12 @@ if test x$support_readline = xyes; then
 		AC_DEFINE(HAVE_READLINE, 1, [Define to 1 if readline support should be enabled])
 		got_readline="yes"
 		CONS_INC="-I/usr/include/readline"
-		CONS_LIBS="-lreadline $TERM_LIB"
+		CONS_LIBS="${CONS_LIBS} -lreadline ${TERM_LIB}"
 	    ], [
-		dnl Did not find standard library, so try Bareos's default
-		AC_CHECK_HEADER(${TOP_DIR}/depkgs/readline/readline.h,
-		    [
-		        AC_DEFINE(HAVE_READLINE, 1, [Define to 1 if readline support should be enabled])
-			got_readline="yes"
-			CONS_INC="-I${TOP_DIR}/depkgs/readline"
-			CONS_LIBS="-lreadline -lhistory $TERM_LIB"
-			CONS_LDFLAGS="-L${TOP_DIR}/depkgs/readline"
-			PRTREADLINE_SRC="${TOP_DIR}/depkgs/readline"
-		    ], [
-			echo " "
-			echo "readline.h not found. readline turned off ..."
-			echo " "
-		    ]
-		)
-	    ]
+                echo " "
+                echo "readline.h not found. readline turned off ..."
+                echo " "
+            ]
 	 )
       ]
    )
@@ -845,8 +832,6 @@ fi
 AC_SUBST(CONS_INC)
 AC_SUBST(CONS_SRC)
 AC_SUBST(CONS_LIBS)
-AC_SUBST(CONS_LDFLAGS)
-AC_SUBST(READLINE_SRC)
 
 dnl End of readline/conio stuff
 
@@ -4203,7 +4188,6 @@ debian|ubuntu|univention)
    TAPEDRIVE="/dev/nst0"
    PSCMD="ps -e -o pid,command"
    DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
-   DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
    PFILES="${PFILES} ${DEBIAN_CONTROL} \
       debian/bareos-bat.install \
       debian/bareos-bat.postinst \
@@ -4258,10 +4242,7 @@ debian|ubuntu|univention)
          ;;
       univention)
          DEBIAN_CONTROL_UNIVENTION_BAREOS=./debian/control.univention-bareos
-         DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=./debian/control.univention-bareos-schema
          PFILES="${PFILES} \
-            debian/univention-bareos-schema.install \
-            debian/univention-bareos-schema.postinst \
             debian/univention-bareos.install \
             debian/univention-bareos.postinst \
             platforms/univention/Makefile \
@@ -4270,7 +4251,6 @@ debian|ubuntu|univention)
          ;;
    esac
    AC_SUBST_FILE(DEBIAN_CONTROL_UNIVENTION_BAREOS)
-   AC_SUBST_FILE(DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA)
   ;;
 freebsd)
    VER=`echo $DISTVER | cut -c 1`
@@ -4499,23 +4479,26 @@ DEBIAN_CONTROL_FILEDAEMON_PYTHON_PLUGIN=/dev/null
 DEBIAN_CONTROL_STORAGE_PYTHON_PLUGIN=/dev/null
 DEBIAN_CONTROL_DIRECTOR_PYTHON_PLUGIN=/dev/null
 
-if test X"$support_python" = "Xyes" ; then
-   BUILD_FD_PLUGINS="${BUILD_FD_PLUGINS} python-fd.la"
-   BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} python-sd.la"
-   BUILD_DIR_PLUGINS="${BUILD_DIR_PLUGINS} python-dir.la"
-   DEBIAN_CONTROL_FILEDAEMON_PYTHON_PLUGIN=./debian/control.bareos-filedaemon-python-plugin
-   DEBIAN_CONTROL_STORAGE_PYTHON_PLUGIN=./debian/control.bareos-storage-python-plugin
-   DEBIAN_CONTROL_DIRECTOR_PYTHON_PLUGIN=./debian/control.bareos-director-python-plugin
-fi
+dnl build a list of plugins we need to build.
+if test x$use_libtool != xno; then
+   if test X"$support_python" = "Xyes" ; then
+      BUILD_FD_PLUGINS="${BUILD_FD_PLUGINS} python-fd.la"
+      BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} python-sd.la"
+      BUILD_DIR_PLUGINS="${BUILD_DIR_PLUGINS} python-dir.la"
+      DEBIAN_CONTROL_FILEDAEMON_PYTHON_PLUGIN=./debian/control.bareos-filedaemon-python-plugin
+      DEBIAN_CONTROL_STORAGE_PYTHON_PLUGIN=./debian/control.bareos-storage-python-plugin
+      DEBIAN_CONTROL_DIRECTOR_PYTHON_PLUGIN=./debian/control.bareos-director-python-plugin
+   fi
 
-if test X"$have_scsi_crypto" = "Xyes" ; then
-   BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} scsicrypto-sd.la scsitapealert-sd.la"
-fi
+   if test X"$have_scsi_crypto" = "Xyes" ; then
+      BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} scsicrypto-sd.la scsitapealert-sd.la"
+   fi
 
-if test X"$have_zlib" = "Xyes" -o \
-        X"$have_lzo" = "Xyes" -o \
-        X"$have_fastlz" = "Xyes" ; then
-   BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} autoxflate-sd.la"
+   if test X"$have_zlib" = "Xyes" -o \
+           X"$have_lzo" = "Xyes" -o \
+           X"$have_fastlz" = "Xyes" ; then
+      BUILD_SD_PLUGINS="${BUILD_SD_PLUGINS} autoxflate-sd.la"
+   fi
 fi
 
 if test X"$have_ceph_rados" = "Xyes" ; then
@@ -4537,7 +4520,7 @@ AC_SUBST_FILE(DEBIAN_CONTROL_FILEDAEMON_PYTHON_PLUGIN)
 AC_SUBST_FILE(DEBIAN_CONTROL_STORAGE_PYTHON_PLUGIN)
 AC_SUBST_FILE(DEBIAN_CONTROL_DIRECTOR_PYTHON_PLUGIN)
 
-dnl build a list of storage backend  we need to build.
+dnl build a list of storage backends we need to build.
 if test x$use_libtool != xno; then
    BUILD_SD_BACKENDS="libbareossd-fifo.la libbareossd-gentape.la libbareossd-tape.la"
 
@@ -4805,7 +4788,7 @@ Configuration on `date`:
 
    Large file support:           $largefile_support
    Bareos conio support:         ${got_conio} ${CONS_LIBS}
-   readline support:             ${got_readline} ${PRTREADLINE_SRC}
+   readline support:             ${got_readline}
    TCP Wrappers support:         ${TCPW_MSG} ${WRAPLIBS}
    TLS support:                  ${have_tls}
    Encryption support:           ${have_crypto}

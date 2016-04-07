@@ -66,8 +66,7 @@ static bRC getAcl(bpContext *ctx, acl_pkt *ap);
 static bRC setAcl(bpContext *ctx, acl_pkt *ap);
 static bRC getXattr(bpContext *ctx, xattr_pkt *xp);
 static bRC setXattr(bpContext *ctx, xattr_pkt *xp);
-
-static bRC parse_plugin_definition(bpContext *ctx, void *value);
+static bRC parse_plugin_definition(bpContext *ctx, void *value, POOL_MEM &plugin_options);
 
 static void PyErrorHandler(bpContext *ctx, int msgtype);
 static bRC PyLoadModule(bpContext *ctx, void *value);
@@ -138,7 +137,8 @@ static pFuncs pluginFuncs = {
 struct plugin_ctx {
    int32_t backup_level;              /* Backup level e.g. Full/Differential/Incremental */
    utime_t since;                     /* Since time for Differential/Incremental */
-   bool python_loaded;                /* Plugin is loaded ? */
+   bool python_loaded;                /* Plugin has python module loaded ? */
+   bool python_path_set;              /* Python plugin search path is set ? */
    char *plugin_options;              /* Plugin Option string */
    char *module_path;                 /* Plugin Module Path */
    char *module_name;                 /* Plugin Module Name */
@@ -147,7 +147,8 @@ struct plugin_ctx {
    char *object_name;                 /* Restore Object Name */
    char *object;                      /* Restore Object Content */
    PyThreadState *interpreter;        /* Python interpreter for this instance of the plugin */
-   PyObject *pModule;                 /* Python Module pointer */
+   PyObject *pInstance;               /* Python Module instance */
+   PyObject *pModule;                 /* Python Module entry point */
    PyObject *pDict;                   /* Python Dictionary */
    PyObject *bpContext;               /* Python representation of plugin context */
 };
@@ -363,9 +364,10 @@ static bRC setPluginValue(bpContext *ctx, pVariable var, void *value)
  */
 static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
 {
-   bool event_dispatched = false;
-   plugin_ctx *p_ctx = (plugin_ctx *)ctx->pContext;
    bRC retval = bRC_Error;
+   bool event_dispatched = false;
+   POOL_MEM plugin_options(PM_FNAME);
+   plugin_ctx *p_ctx = (plugin_ctx *)ctx->pContext;
 
    if (!p_ctx) {
       goto bail_out;
@@ -396,7 +398,7 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
       */
    case bEventPluginCommand:
       event_dispatched = true;
-      retval = parse_plugin_definition(ctx, value);
+      retval = parse_plugin_definition(ctx, value, plugin_options);
       break;
    case bEventNewPluginOptions:
       /*
@@ -408,7 +410,7 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
       }
 
       event_dispatched = true;
-      retval = parse_plugin_definition(ctx, value);
+      retval = parse_plugin_definition(ctx, value, plugin_options);
 
       /*
        * Save that we got a plugin override.
@@ -427,7 +429,7 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
       if (!p_ctx->python_loaded) {
          if (rop && *rop->plugin_name) {
             event_dispatched = true;
-            retval = parse_plugin_definition(ctx, rop->plugin_name);
+            retval = parse_plugin_definition(ctx, rop->plugin_name, plugin_options);
          }
       }
       break;
@@ -471,14 +473,14 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
           * See if we already loaded the Python modules.
           */
          if (!p_ctx->python_loaded) {
-            retval = PyLoadModule(ctx, value);
+            retval = PyLoadModule(ctx, plugin_options.c_str());
          }
 
          /*
           * Only try to call when the loading succeeded.
           */
          if (retval == bRC_OK) {
-            retval = PyParsePluginDefinition(ctx, value);
+            retval = PyParsePluginDefinition(ctx, plugin_options.c_str());
          }
          break;
       case bEventRestoreObject: {
@@ -496,13 +498,13 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
              * See if we already loaded the Python modules.
              */
             if (!p_ctx->python_loaded && *rop->plugin_name) {
-               retval = PyLoadModule(ctx, rop->plugin_name);
+               retval = PyLoadModule(ctx, plugin_options.c_str());
 
                /*
                 * Only try to call when the loading succeeded.
                 */
                if (retval == bRC_OK) {
-                  retval = PyParsePluginDefinition(ctx, rop->plugin_name);
+                  retval = PyParsePluginDefinition(ctx, plugin_options.c_str());
                   if (retval == bRC_OK) {
                      retval = PyRestoreObjectData(ctx, rop);
                   }
@@ -889,11 +891,13 @@ static inline void set_string(char **destination, char *value)
  *
  * python:module_path=<path>:module_name=<python_module_name>:...
  */
-static bRC parse_plugin_definition(bpContext *ctx, void *value)
+static bRC parse_plugin_definition(bpContext *ctx, void *value, POOL_MEM &plugin_options)
 {
-   int i;
+   bool found;
+   int i, cnt;
    bool keep_existing;
-   char *plugin_definition, *bp, *argument, *argument_value;
+   POOL_MEM plugin_definition(PM_FNAME);
+   char *bp, *argument, *argument_value;
    plugin_ctx *p_ctx = (plugin_ctx *)ctx->pContext;
 
    if (!value) {
@@ -906,12 +910,42 @@ static bRC parse_plugin_definition(bpContext *ctx, void *value)
     * Parse the plugin definition.
     * Make a private copy of the whole string.
     */
-   plugin_definition = bstrdup((char *)value);
+   if (!p_ctx->python_loaded && p_ctx->plugin_options) {
+      int len;
 
-   bp = strchr(plugin_definition, ':');
+      /*
+       * We got some option string which got pushed before we actual were able to send
+       * it to the python module as the entry point was not instantiated. So we prepend
+       * that now in the option string and append the new option string with the first
+       * argument being the pluginname removed as that is already part of the other
+       * plugin option string.
+       */
+      len = strlen(p_ctx->plugin_options);
+      pm_strcpy(plugin_definition, p_ctx->plugin_options);
+
+      bp = strchr((char *)value, ':');
+      if (!bp) {
+         Jmsg(ctx, M_FATAL, "python-fd: Illegal plugin definition %s\n", (char *)value);
+         Dmsg(ctx, dbglvl, "python-fd: Illegal plugin definition %s\n", (char *)value);
+         goto bail_out;
+      }
+
+      /*
+       * See if option string end with ':'
+       */
+      if (p_ctx->plugin_options[len - 1] != ':') {
+         pm_strcat(plugin_definition, (char *)bp);
+      } else {
+         pm_strcat(plugin_definition, (char *)bp + 1);
+      }
+   } else {
+      pm_strcpy(plugin_definition, (char *)value);
+   }
+
+   bp = strchr(plugin_definition.c_str(), ':');
    if (!bp) {
-      Jmsg(ctx, M_FATAL, "Illegal plugin definition %s\n", plugin_definition);
-      Dmsg(ctx, dbglvl, "Illegal plugin definition %s\n", plugin_definition);
+      Jmsg(ctx, M_FATAL, "python-fd: Illegal plugin definition %s\n", plugin_definition.c_str());
+      Dmsg(ctx, dbglvl, "python-fd: Illegal plugin definition %s\n", plugin_definition.c_str());
       goto bail_out;
    }
 
@@ -919,6 +953,8 @@ static bRC parse_plugin_definition(bpContext *ctx, void *value)
     * Skip the first ':'
     */
    bp++;
+
+   cnt = 0;
    while (bp) {
       if (strlen(bp) == 0) {
          break;
@@ -934,8 +970,8 @@ static bRC parse_plugin_definition(bpContext *ctx, void *value)
       argument = bp;
       argument_value = strchr(bp, '=');
       if (!argument_value) {
-         Jmsg(ctx, M_FATAL, "Illegal argument %s without value\n", argument);
-         Dmsg(ctx, dbglvl, "Illegal argument %s without value\n", argument);
+         Jmsg(ctx, M_FATAL, "python-fd: Illegal argument %s without value\n", argument);
+         Dmsg(ctx, dbglvl, "python-fd: Illegal argument %s without value\n", argument);
          goto bail_out;
       }
       *argument_value++ = '\0';
@@ -956,6 +992,7 @@ static bRC parse_plugin_definition(bpContext *ctx, void *value)
          }
       } while (bp);
 
+      found = false;
       for (i = 0; plugin_arguments[i].name; i++) {
          if (bstrcasecmp(argument, plugin_arguments[i].name)) {
             char **str_destination = NULL;
@@ -993,16 +1030,35 @@ static bRC parse_plugin_definition(bpContext *ctx, void *value)
             /*
              * When we have a match break the loop.
              */
+            found = true;
             break;
          }
       }
+
+      /*
+       * If we didn't consume this parameter we add it to the plugin_options list.
+       */
+      if (!found) {
+         POOL_MEM option(PM_FNAME);
+
+         if (cnt) {
+            Mmsg(option, ":%s=%s", argument, argument_value);
+            pm_strcat(plugin_options, option.c_str());
+         } else {
+            Mmsg(option, "%s=%s", argument, argument_value);
+            pm_strcat(plugin_options, option.c_str());
+         }
+         cnt++;
+      }
    }
 
-   free(plugin_definition);
+   if (cnt > 0) {
+      pm_strcat(plugin_options, ":");
+   }
+
    return bRC_OK;
 
 bail_out:
-   free(plugin_definition);
    return bRC_Error;
 }
 
@@ -1107,9 +1163,9 @@ static void PyErrorHandler(bpContext *ctx, int msgtype)
    Py_XDECREF(value);
    Py_XDECREF(traceback);
 
-   Dmsg(ctx, dbglvl, "%s\n", error_string);
+   Dmsg(ctx, dbglvl, "python-fd: %s\n", error_string);
    if (msgtype) {
-      Jmsg(ctx, msgtype, "%s\n", error_string);
+      Jmsg(ctx, msgtype, "python-fd: %s\n", error_string);
    }
 
    free(error_string);
@@ -1129,119 +1185,129 @@ static bRC PyLoadModule(bpContext *ctx, void *value)
    PyObject *sysPath,
             *mPath,
             *pName,
-            *pFunc,
-            *module;
+            *pFunc;
 
    /*
-    * Extend the Python search path with the given module_path.
+    * See if we already setup the python search path.
     */
-   if (p_ctx->module_path) {
-      sysPath = PySys_GetObject((char *)"path");
-      mPath = PyString_FromString(p_ctx->module_path);
-      PyList_Append(sysPath, mPath);
-      Py_DECREF(mPath);
+   if (!p_ctx->python_path_set) {
+      /*
+       * Extend the Python search path with the given module_path.
+       */
+      if (p_ctx->module_path) {
+         sysPath = PySys_GetObject((char *)"path");
+         mPath = PyString_FromString(p_ctx->module_path);
+         PyList_Append(sysPath, mPath);
+         Py_DECREF(mPath);
+         p_ctx->python_path_set = true;
+      }
    }
 
    /*
-    * Make our callback methods available for Python.
+    * See if we already setup the module structure.
     */
-   module = Py_InitModule("bareosfd", BareosFDMethods);
+   if (!p_ctx->pInstance) {
+      /*
+       * Make our callback methods available for Python.
+       */
+      p_ctx->pInstance = Py_InitModule("bareosfd", BareosFDMethods);
 
-   /*
-    * Fill in the slots of PyRestoreObject
-    */
-   PyRestoreObjectType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyRestoreObjectType) < 0) {
-      goto bail_out;
+      /*
+       * Fill in the slots of PyRestoreObject
+       */
+      PyRestoreObjectType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyRestoreObjectType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PyStatPacket
+       */
+      PyStatPacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyStatPacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PySavePacket
+       */
+      PySavePacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PySavePacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PyRestorePacket
+       */
+      PyRestorePacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyRestorePacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PyIoPacketType
+       */
+      PyIoPacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyIoPacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PyAclPacketType
+       */
+      PyAclPacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyAclPacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Fill in the slots of PyXattrPacketType
+       */
+      PyXattrPacketType.tp_new = PyType_GenericNew;
+      if (PyType_Ready(&PyXattrPacketType) < 0) {
+         goto cleanup;
+      }
+
+      /*
+       * Add the types to the module
+       */
+      Py_INCREF(&PyRestoreObjectType);
+      PyModule_AddObject(p_ctx->pInstance, "RestoreObject", (PyObject *)&PyRestoreObjectType);
+
+      Py_INCREF(&PyStatPacketType);
+      PyModule_AddObject(p_ctx->pInstance, "StatPacket", (PyObject *)&PyStatPacketType);
+
+      Py_INCREF(&PySavePacketType);
+      PyModule_AddObject(p_ctx->pInstance, "SavePacket", (PyObject *)&PySavePacketType);
+
+      Py_INCREF(&PyRestorePacketType);
+      PyModule_AddObject(p_ctx->pInstance, "RestorePacket", (PyObject *)&PyRestorePacketType);
+
+      Py_INCREF(&PyIoPacketType);
+      PyModule_AddObject(p_ctx->pInstance, "IoPacket", (PyObject *)&PyIoPacketType);
+
+      Py_INCREF(&PyAclPacketType);
+      PyModule_AddObject(p_ctx->pInstance, "AclPacket", (PyObject *)&PyAclPacketType);
+
+      Py_INCREF(&PyXattrPacketType);
+      PyModule_AddObject(p_ctx->pInstance, "XattrPacket", (PyObject *)&PyXattrPacketType);
    }
-
-   /*
-    * Fill in the slots of PyStatPacket
-    */
-   PyStatPacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyStatPacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Fill in the slots of PySavePacket
-    */
-   PySavePacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PySavePacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Fill in the slots of PyRestorePacket
-    */
-   PyRestorePacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyRestorePacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Fill in the slots of PyIoPacketType
-    */
-   PyIoPacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyIoPacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Fill in the slots of PyAclPacketType
-    */
-   PyAclPacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyAclPacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Fill in the slots of PyXattrPacketType
-    */
-   PyXattrPacketType.tp_new = PyType_GenericNew;
-   if (PyType_Ready(&PyXattrPacketType) < 0) {
-      goto bail_out;
-   }
-
-   /*
-    * Add the types to the module
-    */
-   Py_INCREF(&PyRestoreObjectType);
-   PyModule_AddObject(module, "RestoreObject", (PyObject *)&PyRestoreObjectType);
-
-   Py_INCREF(&PyStatPacketType);
-   PyModule_AddObject(module, "StatPacket", (PyObject *)&PyStatPacketType);
-
-   Py_INCREF(&PySavePacketType);
-   PyModule_AddObject(module, "SavePacket", (PyObject *)&PySavePacketType);
-
-   Py_INCREF(&PyRestorePacketType);
-   PyModule_AddObject(module, "RestorePacket", (PyObject *)&PyRestorePacketType);
-
-   Py_INCREF(&PyIoPacketType);
-   PyModule_AddObject(module, "IoPacket", (PyObject *)&PyIoPacketType);
-
-   Py_INCREF(&PyAclPacketType);
-   PyModule_AddObject(module, "AclPacket", (PyObject *)&PyAclPacketType);
-
-   Py_INCREF(&PyXattrPacketType);
-   PyModule_AddObject(module, "XattrPacket", (PyObject *)&PyXattrPacketType);
 
    /*
     * Try to load the Python module by name.
     */
    if (p_ctx->module_name) {
-      Dmsg(ctx, dbglvl, "Trying to load module with name %s\n", p_ctx->module_name);
+      Dmsg(ctx, dbglvl, "python-fd: Trying to load module with name %s\n", p_ctx->module_name);
       pName = PyString_FromString(p_ctx->module_name);
       p_ctx->pModule = PyImport_Import(pName);
       Py_DECREF(pName);
 
       if (!p_ctx->pModule) {
-         Dmsg(ctx, dbglvl, "Failed to load module with name %s\n", p_ctx->module_name);
+         Dmsg(ctx, dbglvl, "python-fd: Failed to load module with name %s\n", p_ctx->module_name);
          goto bail_out;
       }
 
-      Dmsg(ctx, dbglvl, "Successfully loaded module with name %s\n", p_ctx->module_name);
+      Dmsg(ctx, dbglvl, "python-fd: Successfully loaded module with name %s\n", p_ctx->module_name);
 
       /*
        * Get the Python dictionary for lookups in the Python namespace.
@@ -1276,17 +1342,20 @@ static bRC PyLoadModule(bpContext *ctx, void *value)
             Py_DECREF(pRetVal);
          }
       } else {
-         Dmsg(ctx, dbglvl, "Failed to find function named load_bareos_plugins()\n");
+         Dmsg(ctx, dbglvl, "python-fd: Failed to find function named load_bareos_plugins()\n");
          goto bail_out;
       }
+
+      /*
+       * Keep track we successfully loaded.
+       */
+      p_ctx->python_loaded = true;
    }
 
-   /*
-    * Keep track we successfully loaded.
-    */
-   p_ctx->python_loaded = true;
-
    return retval;
+
+cleanup:
+   p_ctx->pInstance = NULL;
 
 bail_out:
    if (PyErr_Occurred()) {
@@ -1334,7 +1403,7 @@ static bRC PyParsePluginDefinition(bpContext *ctx, void *value)
 
       return retval;
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named parse_plugin_definition()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named parse_plugin_definition()\n");
       return bRC_Error;
    }
 
@@ -1382,7 +1451,7 @@ static bRC PyHandlePluginEvent(bpContext *ctx, bEvent *event, void *value)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named handle_plugin_event()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named handle_plugin_event()\n");
    }
 
    return retval;
@@ -1660,7 +1729,7 @@ static bRC PyStartBackupFile(bpContext *ctx, struct save_pkt *sp)
          Py_DECREF((PyObject *)pSavePkt);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named start_backup_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named start_backup_file()\n");
    }
 
    return retval;
@@ -1699,7 +1768,7 @@ static bRC PyEndBackupFile(bpContext *ctx)
          retval = conv_python_retval(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named end_backup_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named end_backup_file()\n");
    }
 
    return retval;
@@ -1822,7 +1891,7 @@ static bRC PyPluginIO(bpContext *ctx, struct io_pkt *io)
       }
       Py_DECREF((PyObject *)pIoPkt);
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named plugin_io()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named plugin_io()\n");
    }
 
    return retval;
@@ -1869,7 +1938,7 @@ static bRC PyStartRestoreFile(bpContext *ctx, const char *cmd)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named start_restore_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named start_restore_file()\n");
    }
 
    return retval;
@@ -1905,7 +1974,7 @@ static bRC PyEndRestoreFile(bpContext *ctx)
          retval = conv_python_retval(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named end_restore_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named end_restore_file()\n");
    }
 
    return retval;
@@ -1997,7 +2066,7 @@ static bRC PyCreateFile(bpContext *ctx, struct restore_pkt *rp)
          Py_DECREF(pRestorePacket);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named create_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named create_file()\n");
    }
 
    return retval;
@@ -2043,7 +2112,7 @@ static bRC PySetFileAttributes(bpContext *ctx, struct restore_pkt *rp)
          Py_DECREF(pRestorePacket);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named set_file_attributes()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named set_file_attributes()\n");
    }
 
    return retval;
@@ -2085,7 +2154,7 @@ static bRC PyCheckFile(bpContext *ctx, char *fname)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named check_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named check_file()\n");
    }
 
    return retval;
@@ -2177,7 +2246,7 @@ static bRC PyGetAcl(bpContext *ctx, acl_pkt *ap)
          Py_DECREF(pAclPkt);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named get_acl()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named get_acl()\n");
    }
 
    return retval;
@@ -2223,7 +2292,7 @@ static bRC PySetAcl(bpContext *ctx, acl_pkt *ap)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named set_acl()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named set_acl()\n");
    }
 
    return retval;
@@ -2340,7 +2409,7 @@ static bRC PyGetXattr(bpContext *ctx, xattr_pkt *xp)
          Py_DECREF(pXattrPkt);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named get_xattr()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named get_xattr()\n");
    }
 
    return retval;
@@ -2386,7 +2455,7 @@ static bRC PySetXattr(bpContext *ctx, xattr_pkt *xp)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named set_xattr()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named set_xattr()\n");
    }
 
    return retval;
@@ -2451,7 +2520,7 @@ static bRC PyRestoreObjectData(bpContext *ctx, struct restore_object_pkt *rop)
          Py_DECREF(pRetVal);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named start_restore_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named start_restore_file()\n");
    }
 
    return retval;
@@ -2502,7 +2571,7 @@ static bRC PyHandleBackupFile(bpContext *ctx, struct save_pkt *sp)
          Py_DECREF(pSavePkt);
       }
    } else {
-      Dmsg(ctx, dbglvl, "Failed to find function named handle_backup_file()\n");
+      Dmsg(ctx, dbglvl, "python-fd: Failed to find function named handle_backup_file()\n");
    }
 
    return retval;
@@ -2575,7 +2644,7 @@ static PyObject *PyBareosGetValue(PyObject *self, PyObject *args)
       break;                 /* a write only variable, ignore read request */
    default:
       ctx = PyGetbpContext(pyCtx);
-      Dmsg(ctx, dbglvl, "PyBareosGetValue: Unknown variable requested %d\n", var);
+      Dmsg(ctx, dbglvl, "python-fd: PyBareosGetValue unknown variable requested %d\n", var);
       break;
    }
 
@@ -2613,7 +2682,7 @@ static PyObject *PyBareosSetValue(PyObject *self, PyObject *args)
    }
    default:
       ctx = PyGetbpContext(pyCtx);
-      Dmsg(ctx, dbglvl, "PyBareosSetValue: Unknown variable requested %d\n", var);
+      Dmsg(ctx, dbglvl, "python-fd: PyBareosSetValue unknown variable requested %d\n", var);
       break;
    }
 
@@ -2638,7 +2707,7 @@ static PyObject *PyBareosDebugMessage(PyObject *self, PyObject *args)
 
    if (dbgmsg) {
       ctx = PyGetbpContext(pyCtx);
-      Dmsg(ctx, level, "%s", dbgmsg);
+      Dmsg(ctx, level, "python-fd: %s", dbgmsg);
    }
 
    Py_INCREF(Py_None);
@@ -2662,7 +2731,7 @@ static PyObject *PyBareosJobMessage(PyObject *self, PyObject *args)
 
    if (jobmsg) {
       ctx = PyGetbpContext(pyCtx);
-      Jmsg(ctx, type, "%s", jobmsg);
+      Jmsg(ctx, type, "python-fd: %s", jobmsg);
    }
 
    Py_INCREF(Py_None);
@@ -2697,7 +2766,7 @@ static PyObject *PyBareosRegisterEvents(PyObject *self, PyObject *args)
       event = PyInt_AsLong(pyEvent);
 
       if (event >= bEventJobStart && event <= bEventComponentInfo) {
-         Dmsg(ctx, dbglvl, "PyBareosRegisterEvents: registering event %d\n", event);
+         Dmsg(ctx, dbglvl, "python-fd: PyBareosRegisterEvents registering event %d\n", event);
          bfuncs->registerBareosEvents(ctx, 1, event);
       }
    }

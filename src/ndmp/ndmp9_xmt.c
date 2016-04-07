@@ -263,9 +263,7 @@ struct ndmp_xdr_message_table	ndmp9_xdr_message_table[] = {
  * same as xdr_long - open coded to save a proc call!
  */
 bool_t
-xdr_ndmp9_u_quad(xdrs, objp)
-	register XDR *xdrs;
-	ndmp9_u_quad *objp;
+xdr_ndmp9_u_quad(register XDR *xdrs, ndmp9_u_quad *objp)
 {
 	uint32_t	hi, lo;
 
@@ -302,9 +300,7 @@ xdr_ndmp9_u_quad(xdrs, objp)
 }
 
 bool_t
-xdr_ndmp9_no_arguments(xdrs, objp)
-	register XDR *xdrs;
-	ndmp9_u_quad *objp;
+xdr_ndmp9_no_arguments(register XDR *xdrs, ndmp9_u_quad *objp)
 {
 	return TRUE;
 }
