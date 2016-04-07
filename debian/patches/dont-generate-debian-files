@@ -5,12 +5,12 @@ Date:   Wed Jul 22 17:57:03 2015 +0200
     do not try to generate debian/ files via automake
 
 diff --git a/autoconf/configure.in b/autoconf/configure.in
-index 6f96dae..89c4d41 100644
+index 56b3344..9372c9c 100644
 --- a/autoconf/configure.in
 +++ b/autoconf/configure.in
-@@ -4205,50 +4205,6 @@ debian|ubuntu|univention)
+@@ -4189,50 +4189,6 @@ debian|ubuntu|univention)
+    PSCMD="ps -e -o pid,command"
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
-    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
 -      debian/bareos-bat.install \
 -      debian/bareos-bat.postinst \
@@ -59,7 +59,7 @@ index 6f96dae..89c4d41 100644
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
-@@ -4463,10 +4419,7 @@ if test "x${support_systemd}" = "xyes"; then
+@@ -4443,10 +4399,7 @@ if test "x${support_systemd}" = "xyes"; then
  		   platforms/systemd/bareos.conf \
  		   platforms/systemd/bareos-dir.service \
  		   platforms/systemd/bareos-fd.service \
@@ -72,12 +72,12 @@ index 6f96dae..89c4d41 100644
  else
      AC_MSG_RESULT(no)
 diff --git a/configure b/configure
-index f6390d0..0965116 100755
+index bdd8623..4b2f7fe 100755
 --- a/configure
 +++ b/configure
-@@ -32720,50 +32720,6 @@ debian|ubuntu|univention)
+@@ -32693,50 +32693,6 @@ debian|ubuntu|univention)
+    PSCMD="ps -e -o pid,command"
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
-    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
 -      debian/bareos-bat.install \
 -      debian/bareos-bat.postinst \
@@ -126,7 +126,7 @@ index f6390d0..0965116 100755
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
-@@ -33031,10 +32987,7 @@ $as_echo "yes" >&6; }
+@@ -33000,10 +32956,7 @@ $as_echo "yes" >&6; }
  		   platforms/systemd/bareos.conf \
  		   platforms/systemd/bareos-dir.service \
  		   platforms/systemd/bareos-fd.service \
