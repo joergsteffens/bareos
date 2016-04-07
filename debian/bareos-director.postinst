@@ -28,8 +28,10 @@ TARGET="/etc/bareos/${CONFIG}"
 permissions()
 {
   chown ${daemon_user}:${daemon_group} /etc/bareos/bareos-dir.d
-  chown ${daemon_user}:${daemon_group} $TARGET
-  chmod 640 $TARGET
+  if [ -f "$TARGET" ]; then
+    chown ${daemon_user}:${daemon_group} $TARGET
+    chmod 640 $TARGET
+  fi
 }
 
 case "$1" in

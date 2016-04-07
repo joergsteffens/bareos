@@ -32,10 +32,12 @@ TARGET="/etc/bareos/${CONFIG}"
 
 permissions()
 {
-  chown ${storage_daemon_user}:${daemon_group} $TARGET
   chown ${storage_daemon_user}:${daemon_group} /etc/bareos/bareos-sd.d
   chown ${storage_daemon_user}:${daemon_group} /var/lib/bareos/storage/
-  chmod 640 $TARGET
+  if [ -f "$TARGET" ]; then
+    chown ${storage_daemon_user}:${daemon_group} $TARGET
+    chmod 640 $TARGET
+  fi
 }
 
 case "$1" in

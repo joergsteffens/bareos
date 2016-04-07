@@ -22,7 +22,9 @@ daemon_group=bareos
 
 permissions()
 {
-  chown root:${daemon_group} /etc/bareos/bareos-sd.d/device-gluster.conf
+  if [ -f "/etc/bareos/bareos-sd.d/device-gluster.conf" ]; then
+    chown root:${daemon_group} /etc/bareos/bareos-sd.d/device-gluster.conf
+  fi
 }
 
 case "$1" in
