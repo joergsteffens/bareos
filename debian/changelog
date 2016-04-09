@@ -1,3 +1,14 @@
+bareos (14.2.1+20141017gitc6c5b56-3+deb8u2) jessie; urgency=medium
+
+  * Fix GnuTLS backend initialization. (Closes: #819807)
+    - Backport upstream commits in d/patches/fix-tls-backend-initalization
+  * Add autopkgtests for TLS.
+  * Add breaks-testbed to all tests.
+  * Fix TLS negotiation for passive filedaemons.
+    - Backport upstream commit in d/patches/fix-tls-passive-fds
+
+ -- Felix Geyer <fgeyer@debian.org>  Sat, 09 Apr 2016 16:25:33 +0200
+
 bareos (14.2.1+20141017gitc6c5b56-3+deb8u1) stable; urgency=medium
 
   [ Felix Geyer ]
