@@ -1,0 +1,38 @@
+From 2fbd7b67bc9471dadef1abbf6abf1de2d96f5eee Mon Sep 17 00:00:00 2001
+From: Marco van Wieringen <marco.van.wieringen@bareos.com>
+Date: Wed, 17 Dec 2014 14:27:57 +0100
+Subject: [PATCH] When initiating the TLS connection use tls_server.
+
+---
+ src/filed/authenticate.c | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/filed/authenticate.c b/src/filed/authenticate.c
+index ebe182c..89c2e20 100644
+--- a/src/filed/authenticate.c
++++ b/src/filed/authenticate.c
+@@ -329,13 +329,19 @@ static inline bool two_way_authenticate(BSOCK *bs, JCR *jcr, bool initiate, cons
+        */
+       if (initiate) {
+          verify_list = me->tls_allowed_cns;
++         if (!bnet_tls_server(me->tls_ctx, bs, verify_list)) {
++            Jmsg(jcr, M_FATAL, 0, _("TLS negotiation failed.\n"));
++            auth_success = false;
++            goto auth_fatal;
++         }
++      } else {
++         if (!bnet_tls_client(me->tls_ctx, bs, verify_list)) {
++            Jmsg(jcr, M_FATAL, 0, _("TLS negotiation failed.\n"));
++            auth_success = false;
++            goto auth_fatal;
++         }
+       }
+ 
+-      if (!bnet_tls_client(me->tls_ctx, bs, verify_list)) {
+-         Jmsg(jcr, M_FATAL, 0, _("TLS negotiation failed.\n"));
+-         auth_success = false;
+-         goto auth_fatal;
+-      }
+       if (me->tls_authenticate) {           /* tls authentication only? */
+          bs->free_tls();                    /* yes, shutdown tls */
+       }
