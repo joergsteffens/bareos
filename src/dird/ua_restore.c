@@ -55,8 +55,8 @@ static bool insert_file_into_findex_list(UAContext *ua, RESTORE_CTX *rx, char *f
 static bool insert_dir_into_findex_list(UAContext *ua, RESTORE_CTX *rx, char *dir,
                                         char *date);
 static void insert_one_file_or_dir(UAContext *ua, RESTORE_CTX *rx, char *date, bool dir);
-static int get_client_name(UAContext *ua, RESTORE_CTX *rx);
-static int get_restore_client_name(UAContext *ua, RESTORE_CTX &rx);
+static bool get_client_name(UAContext *ua, RESTORE_CTX *rx);
+static bool get_restore_client_name(UAContext *ua, RESTORE_CTX &rx);
 static bool get_date(UAContext *ua, char *date, int date_len);
 static int restore_count_handler(void *ctx, int num_fields, char **row);
 static bool insert_table_into_findex_list(UAContext *ua, RESTORE_CTX *rx, char *table);
@@ -65,7 +65,7 @@ static void get_and_display_basejobs(UAContext *ua, RESTORE_CTX *rx);
 /*
  * Restore files
  */
-int restore_cmd(UAContext *ua, const char *cmd)
+bool restore_cmd(UAContext *ua, const char *cmd)
 {
    RESTORE_CTX rx;                    /* restore context */
    POOL_MEM buf;
@@ -232,12 +232,16 @@ int restore_cmd(UAContext *ua, const char *cmd)
       goto bail_out;
    }
 
-   get_client_name(ua, &rx);
+   if (!get_client_name(ua, &rx)) {
+      goto bail_out;
+   }
    if (!rx.ClientName) {
       ua->error_msg(_("No Client resource found!\n"));
       goto bail_out;
    }
-   get_restore_client_name(ua, rx);
+   if (!get_restore_client_name(ua, rx)) {
+      goto bail_out;
+   }
 
    escaped_bsr_name = escape_filename(jcr->RestoreBootstrap);
 
@@ -313,7 +317,7 @@ int restore_cmd(UAContext *ua, const char *cmd)
    run_cmd(ua, ua->cmd);
    free_rx(&rx);
    garbage_collect_memory();       /* release unused memory */
-   return 1;
+   return true;
 
 bail_out:
    if (escaped_bsr_name != NULL) {
@@ -330,7 +334,7 @@ bail_out:
 
    free_rx(&rx);
    garbage_collect_memory();       /* release unused memory */
-   return 0;
+   return false;
 }
 
 /*
@@ -349,7 +353,7 @@ static void get_and_display_basejobs(UAContext *ua, RESTORE_CTX *rx)
 
       Mmsg(q, uar_print_jobs, jobids.list);
       ua->send_msg(_("The restore will use the following job(s) as Base\n"));
-      db_list_sql_query(ua->jcr, ua->db, q.c_str(), printit, ua, true, HORZ_LIST);
+      db_list_sql_query(ua->jcr, ua->db, q.c_str(), ua->send, HORZ_LIST, true);
    }
    pm_strcpy(rx->BaseJobIds, jobids.list);
 }
@@ -389,10 +393,11 @@ static bool has_value(UAContext *ua, int i)
 /*
  * This gets the client name from which the backup was made
  */
-static int get_client_name(UAContext *ua, RESTORE_CTX *rx)
+static bool get_client_name(UAContext *ua, RESTORE_CTX *rx)
 {
    int i;
    CLIENT_DBR cr;
+   memset(&cr, 0, sizeof(cr));
 
    /*
     * If no client name specified yet, get it now
@@ -408,26 +413,29 @@ static int get_client_name(UAContext *ua, RESTORE_CTX *rx)
       if (i >= 0) {
          if (!is_name_valid(ua->argv[i], &ua->errmsg)) {
             ua->error_msg("%s argument: %s", ua->argk[i], ua->errmsg);
-            return 0;
+            return false;
          }
-
+         bstrncpy(cr.Name, ua->argv[i], sizeof(cr.Name));
+         if (!db_get_client_record(ua->jcr, ua->db, &cr)) {
+            ua->error_msg("invalid %s argument: %s\n", ua->argk[i], ua->argv[i]);
+            return false;
+         }
          rx->ClientName = bstrdup(ua->argv[i]);
-         return 1;
+         return true;
       }
-      memset(&cr, 0, sizeof(cr));
       if (!get_client_dbr(ua, &cr)) {
-         return 0;
+         return false;
       }
       rx->ClientName = bstrdup(cr.Name);
    }
 
-   return 1;
+   return true;
 }
 
 /*
  * This is where we pick up a client name to restore to.
  */
-static int get_restore_client_name(UAContext *ua, RESTORE_CTX &rx)
+static bool get_restore_client_name(UAContext *ua, RESTORE_CTX &rx)
 {
    int i;
 
@@ -438,14 +446,18 @@ static int get_restore_client_name(UAContext *ua, RESTORE_CTX &rx)
    if (i >= 0) {
       if (!is_name_valid(ua->argv[i], &ua->errmsg)) {
          ua->error_msg("%s argument: %s", ua->argk[i], ua->errmsg);
-         return 0;
+         return false;
+      }
+      if (!GetClientResWithName(ua->argv[i])) {
+         ua->error_msg("invalid %s argument: %s\n", ua->argk[i], ua->argv[i]);
+         return false;
       }
       rx.RestoreClientName = bstrdup(ua->argv[i]);
-      return 1;
+      return true;
    }
 
    rx.RestoreClientName = bstrdup(rx.ClientName);
-   return 1;
+   return true;
 }
 
 /*
@@ -645,7 +657,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          }
          gui_save = ua->jcr->gui;
          ua->jcr->gui = true;
-         db_list_sql_query(ua->jcr, ua->db, uar_list_jobs, printit, ua, true, HORZ_LIST);
+         db_list_sql_query(ua->jcr, ua->db, uar_list_jobs, ua->send, HORZ_LIST, true);
          ua->jcr->gui = gui_save;
          done = false;
          break;
@@ -663,7 +675,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          free(fname);
          gui_save = ua->jcr->gui;
          ua->jcr->gui = true;
-         db_list_sql_query(ua->jcr, ua->db, rx->query, printit, ua, true, HORZ_LIST);
+         db_list_sql_query(ua->jcr, ua->db, rx->query, ua->send, HORZ_LIST, true);
          ua->jcr->gui = gui_save;
          done = false;
          break;
@@ -683,7 +695,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          }
          gui_save = ua->jcr->gui;
          ua->jcr->gui = true;
-         db_list_sql_query(ua->jcr, ua->db, ua->cmd, printit, ua, true, HORZ_LIST);
+         db_list_sql_query(ua->jcr, ua->db, ua->cmd, ua->send, HORZ_LIST, true);
          ua->jcr->gui = gui_save;
          done = false;
          break;
@@ -892,7 +904,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
    } else {
       ua->info_msg(_("You have selected the following JobId: %s\n"), rx->JobIds);
    }
-   return 1;
+   return true;
 }
 
 /*
@@ -1454,14 +1466,13 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
          /*
           * Display a list of all copies
           */
-         db_list_copies_records(ua->jcr, ua->db, 0, rx->JobIds,
-                                printit, ua, HORZ_LIST);
+         db_list_copies_records(ua->jcr, ua->db, "", rx->JobIds, ua->send, HORZ_LIST);
       }
 
       /*
        * Display a list of Jobs selected for this restore
        */
-      db_list_sql_query(ua->jcr, ua->db, uar_list_temp, printit, ua, true, HORZ_LIST);
+      db_list_sql_query(ua->jcr, ua->db, uar_list_temp, ua->send, HORZ_LIST, true);
       ok = true;
    } else {
       ua->warning_msg(_("No jobs found.\n"));
@@ -1593,6 +1604,7 @@ void find_storage_resource(UAContext *ua, RESTORE_CTX &rx, char *Storage, char *
          ua->info_msg(_("Warning default storage overridden by \"%s\" on command line.\n"),
                       store->name());
          rx.store = store;
+         bstrncpy(Storage, store->name(), MAX_NAME_LENGTH);
          Dmsg1(200, "Set store=%s\n", rx.store->name());
       }
       return;

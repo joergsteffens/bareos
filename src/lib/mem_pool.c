@@ -683,17 +683,27 @@ void POOL_MEM::realloc_pm(int32_t size)
    V(mutex);
 }
 
+int POOL_MEM::strcat(POOL_MEM &str)
+{
+   return strcat(str.c_str());
+}
+
 int POOL_MEM::strcat(const char *str)
 {
-   int pmlen = strlen(mem);
+   int pmlen = strlen();
    int len;
 
    if (!str) str = "";
 
-   len = strlen(str) + 1;
+   len = ::strlen(str) + 1;
    check_size(pmlen + len);
    memcpy(mem+pmlen, str, len);
    return pmlen + len - 1;
+}
+
+int POOL_MEM::strcpy(POOL_MEM &str)
+{
+   return strcpy(str.c_str());
 }
 
 int POOL_MEM::strcpy(const char *str)
@@ -702,10 +712,25 @@ int POOL_MEM::strcpy(const char *str)
 
    if (!str) str = "";
 
-   len = strlen(str) + 1;
+   len = ::strlen(str) + 1;
    check_size(len);
    memcpy(mem, str, len);
    return len - 1;
+}
+
+void POOL_MEM::toLower()
+{
+   lcase(mem);
+}
+
+int POOL_MEM::bsprintf(const char *fmt, ...)
+{
+   int len;
+   va_list arg_ptr;
+   va_start(arg_ptr, fmt);
+   len = bvsprintf(fmt, arg_ptr);
+   va_end(arg_ptr);
+   return len;
 }
 
 #ifdef HAVE_VA_COPY

@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -115,16 +115,18 @@ static void usage()
 PROG_COPYRIGHT
 "\nVersion: " VERSION " (" BDATE ") %s %s %s\n\n"
 "Usage: bconsole [-s] [-c config_file] [-d debug_level]\n"
-"       -D <dir>    select a Director\n"
-"       -l          list Directors defined\n"
-"       -c <file>   set configuration file to file\n"
-"       -d <nn>     set debug level to <nn>\n"
-"       -dt         print timestamp in debug output\n"
-"       -n          no conio\n"
-"       -s          no signals\n"
-"       -u <nn>     set command execution timeout to <nn> seconds\n"
-"       -t          test - read configuration and exit\n"
-"       -?          print this message.\n"
+"        -D <dir>    select a Director\n"
+"        -l          list Directors defined\n"
+"        -c <file>   set configuration file to file\n"
+"        -d <nn>     set debug level to <nn>\n"
+"        -dt         print timestamp in debug output\n"
+"        -n          no conio\n"
+"        -s          no signals\n"
+"        -u <nn>     set command execution timeout to <nn> seconds\n"
+"        -t          test - read configuration and exit\n"
+"        -xc         print configuration and exit\n"
+"        -xs         print configuration file schema in JSON format and exit\n"
+"        -?          print this message.\n"
 "\n"), 2000, HOST_OS, DISTNAME, DISTVER);
 }
 
@@ -297,8 +299,10 @@ static void read_and_process_input(FILE *input, BSOCK *UA_sock)
 
       tid = start_bsock_timer(UA_sock, timeout);
       while ((status = UA_sock->recv()) >= 0 ||
-             (status == BNET_SIGNAL && (UA_sock->msglen == BNET_START_RTREE ||
-                                        UA_sock->msglen == BNET_END_RTREE))) {
+             ((status == BNET_SIGNAL) && (
+              (UA_sock->msglen != BNET_EOD) &&
+              (UA_sock->msglen != BNET_MAIN_PROMPT) &&
+              (UA_sock->msglen != BNET_SUB_PROMPT)))) {
          if (status == BNET_SIGNAL) {
             if (UA_sock->msglen == BNET_START_RTREE) {
                file_selection = true;
@@ -319,7 +323,9 @@ static void read_and_process_input(FILE *input, BSOCK *UA_sock)
           * Suppress output if running in background or user hit ctl-c
           */
          if (!stop && !usrbrk()) {
-            sendit(UA_sock->msg);
+            if (UA_sock->msg) {
+               sendit(UA_sock->msg);
+            }
          }
       }
       stop_bsock_timer(tid);
@@ -987,7 +993,7 @@ static bool select_director(const char *director, DIRRES **ret_dir, CONRES **ret
    if (director) {    /* Command line choice overwrite the no choose option */
       LockRes();
       foreach_res(dir, R_DIRECTOR) {
-         if (bstrcmp(dir->hdr.name, director)) {
+         if (bstrcmp(dir->name(), director)) {
             break;
          }
       }
@@ -1005,8 +1011,7 @@ try_again:
       LockRes();
       numdir = 0;
       foreach_res(dir, R_DIRECTOR) {
-         senditf( _("%2d:  %s at %s:%d\n"), 1+numdir++, dir->hdr.name,
-                  dir->address, dir->DIRport);
+         senditf( _("%2d:  %s at %s:%d\n"), 1+numdir++, dir->name(), dir->address, dir->DIRport);
       }
       UnlockRes();
       if (get_cmd(stdin, _("Select Director by entering a number: "),
@@ -1040,7 +1045,7 @@ try_again:
    LockRes();
    for (i=0; i<numcon; i++) {
       cons = (CONRES *)GetNextRes(R_CONSOLE, (RES *)cons);
-      if (cons->director && bstrcmp(cons->director, dir->hdr.name)) {
+      if (cons->director && bstrcmp(cons->director, dir->name())) {
          break;
       }
       cons = NULL;
@@ -1086,7 +1091,10 @@ int main(int argc, char *argv[])
    bool list_directors = false;
    bool no_signals = false;
    bool test_config = false;
+   bool export_config = false;
+   bool export_config_schema = false;
    JCR jcr;
+   alist *verify_list = NULL;
    TLS_CONTEXT *tls_ctx = NULL;
    POOL_MEM history_file;
    utime_t heart_beat;
@@ -1103,7 +1111,7 @@ int main(int argc, char *argv[])
    working_directory = "/tmp";
    args = get_pool_memory(PM_FNAME);
 
-   while ((ch = getopt(argc, argv, "D:lc:d:nstu:?")) != -1) {
+   while ((ch = getopt(argc, argv, "D:lc:d:nstu:x:?")) != -1) {
       switch (ch) {
       case 'D':                    /* Director */
          if (director) {
@@ -1151,6 +1159,16 @@ int main(int argc, char *argv[])
          timeout = atoi(optarg);
          break;
 
+      case 'x':                    /* export configuration/schema and exit */
+         if (*optarg == 's') {
+            export_config_schema = true;
+         } else if (*optarg == 'c') {
+            export_config = true;
+         } else {
+            usage();
+         }
+         break;
+
       case '?':
       default:
          usage();
@@ -1185,8 +1203,23 @@ int main(int argc, char *argv[])
       configfile = bstrdup(CONFIG_FILE);
    }
 
+   if (export_config_schema) {
+      POOL_MEM buffer;
+
+      my_config = new_config_parser();
+      init_cons_config(my_config, configfile, M_ERROR_TERM);
+      print_config_schema_json(buffer);
+      printf("%s\n", buffer.c_str());
+      exit(0);
+   }
+
    my_config = new_config_parser();
    parse_cons_config(my_config, configfile, M_ERROR_TERM);
+
+   if (export_config) {
+      my_config->dump_resources(prtmsg, NULL);
+      exit(0);
+   }
 
    if (init_crypto() != 0) {
       Emsg0(M_ERROR_TERM, 0, _("Cryptography library initialization failed.\n"));
@@ -1203,7 +1236,7 @@ int main(int argc, char *argv[])
    if (list_directors) {
       LockRes();
       foreach_res(dir, R_DIRECTOR) {
-         senditf("%s\n", dir->hdr.name);
+         senditf("%s\n", dir->name());
       }
       UnlockRes();
    }
@@ -1232,7 +1265,7 @@ int main(int argc, char *argv[])
       /*
        * Generate passphrase prompt
        */
-      bsnprintf(errmsg, errmsg_len, "Passphrase for Console \"%s\" TLS private key: ", cons->hdr.name);
+      bsnprintf(errmsg, errmsg_len, "Passphrase for Console \"%s\" TLS private key: ", cons->name());
 
       /*
        * Initialize TLS context:
@@ -1247,10 +1280,11 @@ int main(int argc, char *argv[])
                                       tls_pem_callback,
                                       &errmsg,
                                       NULL,
+                                      cons->tls_cipherlist,
                                       cons->tls_verify_peer);
 
       if (!cons->tls_ctx) {
-         senditf(_("Failed to initialize TLS context for Console \"%s\".\n"), cons->hdr.name);
+         senditf(_("Failed to initialize TLS context for Console \"%s\".\n"), cons->name());
          terminate_console(0);
          return 1;
       }
@@ -1266,7 +1300,7 @@ int main(int argc, char *argv[])
       /*
        * Generate passphrase prompt
        */
-      bsnprintf(errmsg, errmsg_len, "Passphrase for Director \"%s\" TLS private key: ", dir->hdr.name);
+      bsnprintf(errmsg, errmsg_len, "Passphrase for Director \"%s\" TLS private key: ", dir->name());
 
       /*
        * Initialize TLS context:
@@ -1280,10 +1314,11 @@ int main(int argc, char *argv[])
                                      tls_pem_callback,
                                      &errmsg,
                                      NULL,
+                                     dir->tls_cipherlist,
                                      dir->tls_verify_peer);
 
       if (!dir->tls_ctx) {
-         senditf(_("Failed to initialize TLS context for Director \"%s\".\n"), dir->hdr.name);
+         senditf(_("Failed to initialize TLS context for Director \"%s\".\n"), dir->name());
          terminate_console(0);
          return 1;
       }
@@ -1312,18 +1347,20 @@ int main(int argc, char *argv[])
     * If cons == NULL, default console will be used
     */
    if (cons) {
-      name = cons->hdr.name;
+      name = cons->name();
       ASSERT(cons->password.encoding == p_encoding_md5);
       password = cons->password.value;
       tls_ctx = cons->tls_ctx;
+      verify_list = cons->tls_allowed_cns;
    } else {
       name = "*UserAgent*";
       ASSERT(dir->password.encoding == p_encoding_md5);
       password = dir->password.value;
       tls_ctx = dir->tls_ctx;
+      verify_list = dir->tls_allowed_cns;
    }
 
-   if (!UA_sock->authenticate_with_director(name, password, tls_ctx, errmsg, errmsg_len)) {
+   if (!UA_sock->authenticate_with_director(name, password, tls_ctx, verify_list, errmsg, errmsg_len)) {
       sendit(errmsg);
       terminate_console(0);
       return 1;
@@ -1453,7 +1490,7 @@ static int check_resources()
          Emsg2(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
                              " or \"TLS CA Certificate Dir\" are defined for Director \"%s\" in %s."
                              " At least one CA certificate store is required.\n"),
-                             director->hdr.name, configfile);
+                             director->name(), configfile);
          OK = false;
       }
    }
@@ -1485,7 +1522,7 @@ static int check_resources()
       if ((!cons->tls_ca_certfile && !cons->tls_ca_certdir) && tls_needed) {
          Emsg2(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
                              " or \"TLS CA Certificate Dir\" are defined for Console \"%s\" in %s.\n"),
-                             cons->hdr.name, configfile);
+                             cons->name(), configfile);
          OK = false;
       }
    }

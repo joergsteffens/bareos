@@ -41,6 +41,7 @@
  * Kern Sibbald, September MM
  */
 
+#define NEED_JANSSON_NAMESPACE 1
 #include "bareos.h"
 #include "filed.h"
 
@@ -75,76 +76,82 @@ static int32_t res_all_size = sizeof(res_all);
  * Client or File daemon "Global" resources
  */
 static RES_ITEM cli_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_client.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_client.hdr.desc), 0, 0, NULL },
-   { "fdport", CFG_TYPE_ADDRESSES_PORT, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT },
-   { "fdaddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT },
-   { "fdaddresses", CFG_TYPE_ADDRESSES, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT },
-   { "fdsourceaddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_client.FDsrc_addr), 0, CFG_ITEM_DEFAULT, "0" },
-   { "workingdirectory", CFG_TYPE_DIR, ITEM(res_client.working_directory), 0, CFG_ITEM_DEFAULT, _PATH_BAREOS_WORKINGDIR },
-   { "piddirectory", CFG_TYPE_DIR, ITEM(res_client.pid_directory), 0, CFG_ITEM_DEFAULT, _PATH_BAREOS_PIDDIR },
-   { "subsysdirectory", CFG_TYPE_DIR, ITEM(res_client.subsys_directory), CFG_ITEM_DEPRECATED, 0, NULL },
-   { "plugindirectory", CFG_TYPE_DIR, ITEM(res_client.plugin_directory), 0, 0, NULL },
-   { "pluginnames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_client.plugin_names), 0, 0, NULL },
-   { "scriptsdirectory", CFG_TYPE_DIR, ITEM(res_client.scripts_directory), 0, 0, NULL },
-   { "maximumconcurrentjobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "20" },
-   { "messages", CFG_TYPE_RES, ITEM(res_client.messages), R_MSGS, 0, NULL },
-   { "sdconnecttimeout", CFG_TYPE_TIME, ITEM(res_client.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */ },
-   { "heartbeatinterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0" },
-   { "maximumnetworkbuffersize", CFG_TYPE_PINT32, ITEM(res_client.max_network_buffer_size), 0, 0, NULL },
+   { "Name", CFG_TYPE_NAME, ITEM(res_client.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL, "The name of this resource. It is used to reference to it." },
+   { "Description", CFG_TYPE_STR, ITEM(res_client.hdr.desc), 0, 0, NULL, NULL, NULL },
+   { "FdPort", CFG_TYPE_ADDRESSES_PORT, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT, NULL, NULL },
+   { "FdAddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT, NULL, NULL },
+   { "FdAddresses", CFG_TYPE_ADDRESSES, ITEM(res_client.FDaddrs), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT, NULL, NULL },
+   { "FdSourceAddress", CFG_TYPE_ADDRESSES_ADDRESS, ITEM(res_client.FDsrc_addr), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
+   { "WorkingDirectory", CFG_TYPE_DIR, ITEM(res_client.working_directory), 0, CFG_ITEM_DEFAULT | CFG_ITEM_PLATFORM_SPECIFIC, _PATH_BAREOS_WORKINGDIR, NULL, NULL },
+   { "PidDirectory", CFG_TYPE_DIR, ITEM(res_client.pid_directory), 0, CFG_ITEM_DEFAULT | CFG_ITEM_PLATFORM_SPECIFIC, _PATH_BAREOS_PIDDIR, NULL, NULL },
+   { "SubSysDirectory", CFG_TYPE_DIR, ITEM(res_client.subsys_directory), 0, CFG_ITEM_DEPRECATED, NULL, NULL, NULL },
+   { "PluginDirectory", CFG_TYPE_DIR, ITEM(res_client.plugin_directory), 0, 0, NULL, NULL, NULL },
+   { "PluginNames", CFG_TYPE_PLUGIN_NAMES, ITEM(res_client.plugin_names), 0, 0, NULL, NULL, NULL },
+   { "ScriptsDirectory", CFG_TYPE_DIR, ITEM(res_client.scripts_directory), 0, 0, NULL, NULL, NULL },
+   { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "20", NULL, NULL },
+   { "MaximumConnections", CFG_TYPE_PINT32, ITEM(res_client.MaxConnections), 0, CFG_ITEM_DEFAULT, "42", "15.2.3-", NULL },
+   { "Messages", CFG_TYPE_RES, ITEM(res_client.messages), R_MSGS, 0, NULL, NULL, NULL },
+   { "SdConnectTimeout", CFG_TYPE_TIME, ITEM(res_client.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
+   { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
+   { "MaximumNetworkBufferSize", CFG_TYPE_PINT32, ITEM(res_client.max_network_buffer_size), 0, 0, NULL, NULL, NULL },
 #ifdef DATA_ENCRYPTION
-   { "pkisignatures", CFG_TYPE_BOOL, ITEM(res_client.pki_sign), 0, CFG_ITEM_DEFAULT, "false" },
-   { "pkiencryption", CFG_TYPE_BOOL, ITEM(res_client.pki_encrypt), 0, CFG_ITEM_DEFAULT, "false" },
-   { "pkikeypair", CFG_TYPE_DIR, ITEM(res_client.pki_keypair_file), 0, 0, NULL },
-   { "pkisigner", CFG_TYPE_ALIST_DIR, ITEM(res_client.pki_signing_key_files), 0, 0, NULL },
-   { "pkimasterkey", CFG_TYPE_ALIST_DIR, ITEM(res_client.pki_master_key_files), 0, 0, NULL },
-   { "pkicipher", CFG_TYPE_CIPHER, ITEM(res_client.pki_cipher), 0, CFG_ITEM_DEFAULT, "aes128" },
+   { "PkiSignatures", CFG_TYPE_BOOL, ITEM(res_client.pki_sign), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "PkiEncryption", CFG_TYPE_BOOL, ITEM(res_client.pki_encrypt), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "PkiKeyPair", CFG_TYPE_DIR, ITEM(res_client.pki_keypair_file), 0, 0, NULL, NULL, NULL },
+   { "PkiSigner", CFG_TYPE_ALIST_DIR, ITEM(res_client.pki_signing_key_files), 0, 0, NULL, NULL, NULL },
+   { "PkiMasterKey", CFG_TYPE_ALIST_DIR, ITEM(res_client.pki_master_key_files), 0, 0, NULL, NULL, NULL },
+   { "PkiCipher", CFG_TYPE_CIPHER, ITEM(res_client.pki_cipher), 0, CFG_ITEM_DEFAULT, "aes128", NULL, NULL },
 #endif
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_client.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_client.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_client.tls_require), 0, 0, NULL },
-   { "tlsverifypeer", CFG_TYPE_BOOL, ITEM(res_client.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_client.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_client.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_client.tls_keyfile), 0, 0, NULL },
-   { "verid", CFG_TYPE_STR, ITEM(res_client.verid), 0, 0, NULL },
-   { "compatible", CFG_TYPE_BOOL, ITEM(res_client.compatible), 0, CFG_ITEM_DEFAULT, "true" },
-   { "maximumbandwidthperjob", CFG_TYPE_SPEED, ITEM(res_client.max_bandwidth_per_job), 0, 0, NULL },
-   { "allowbandwidthbursting", CFG_TYPE_BOOL, ITEM(res_client.allow_bw_bursting), 0, CFG_ITEM_DEFAULT, "false" },
-   { "allowedscriptdir", CFG_TYPE_ALIST_DIR, ITEM(res_client.allowed_script_dirs), 0, 0, NULL },
-   { "allowedjobcommand", CFG_TYPE_ALIST_STR, ITEM(res_client.allowed_job_cmds), 0, 0, NULL },
-   { "absolutejobtimeout", CFG_TYPE_PINT32, ITEM(res_client.jcr_watchdog_time), 0, 0, NULL },
-   { "alwaysuselmdb", CFG_TYPE_BOOL, ITEM(res_client.always_use_lmdb), 0, CFG_ITEM_DEFAULT, "false" },
-   { "lmdbthreshold", CFG_TYPE_PINT32, ITEM(res_client.lmdb_threshold), 0, 0, NULL },
-   { NULL, 0, { 0 }, 0, 0, NULL }
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_client.tls_authenticate), 0, 0, NULL, NULL, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_client.tls_enable), 0, 0, NULL, NULL, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_client.tls_require), 0, 0, NULL, NULL, NULL },
+   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_client.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_client.tls_crlfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_client.tls_certfile), 0, 0, NULL, NULL, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_client.tls_keyfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_client.tls_cipherlist), 0, 0, NULL, NULL, NULL },
+   { "TlsAllowedCn", CFG_TYPE_ALIST_STR, ITEM(res_client.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
+   { "VerId", CFG_TYPE_STR, ITEM(res_client.verid), 0, 0, NULL, NULL, NULL },
+   { "Compatible", CFG_TYPE_BOOL, ITEM(res_client.compatible), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_client.max_bandwidth_per_job), 0, 0, NULL, NULL, NULL },
+   { "AllowBandwidthBursting", CFG_TYPE_BOOL, ITEM(res_client.allow_bw_bursting), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "AllowedScriptDir", CFG_TYPE_ALIST_DIR, ITEM(res_client.allowed_script_dirs), 0, 0, NULL, NULL, NULL },
+   { "AllowedJobCommand", CFG_TYPE_ALIST_STR, ITEM(res_client.allowed_job_cmds), 0, 0, NULL, NULL, NULL },
+   { "AbsoluteJobTimeout", CFG_TYPE_PINT32, ITEM(res_client.jcr_watchdog_time), 0, 0, NULL, NULL, NULL },
+   { "AlwaysUseLmdb", CFG_TYPE_BOOL, ITEM(res_client.always_use_lmdb), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "LmdbThreshold", CFG_TYPE_PINT32, ITEM(res_client.lmdb_threshold), 0, 0, NULL, NULL, NULL },
+   { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_client.secure_erase_cmdline), 0, 0, NULL, NULL, NULL },
+   { "LogTimestampFormat", CFG_TYPE_STR, ITEM(res_client.log_timestamp_format), 0, 0, NULL, "15.2.3-", NULL },
+   { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
 /*
  * Directors that can use our services
  */
 static RES_ITEM dir_items[] = {
-   { "name", CFG_TYPE_NAME, ITEM(res_dir.hdr.name), 0, CFG_ITEM_REQUIRED, NULL },
-   { "description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL },
-   { "password", CFG_TYPE_MD5PASSWORD, ITEM(res_dir.password), 0, CFG_ITEM_REQUIRED, NULL },
-   { "address", CFG_TYPE_STR, ITEM(res_dir.address), 0, 0, NULL },
-   { "monitor", CFG_TYPE_BOOL, ITEM(res_dir.monitor), 0, CFG_ITEM_DEFAULT, "false" },
-   { "tlsauthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL },
-   { "tlsenable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL },
-   { "tlsrequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL },
-   { "tlsverifypeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true" },
-   { "tlscacertificatefile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL },
-   { "tlscacertificatedir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL },
-   { "tlscertificaterevocationlist", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL },
-   { "tlscertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL },
-   { "tlskey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL },
-   { "tlsdhfile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL },
-   { "tlsallowedcn", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL },
-   { "maximumbandwidthperjob", CFG_TYPE_SPEED, ITEM(res_dir.max_bandwidth_per_job), 0, 0, NULL },
-   { "allowedscriptdir", CFG_TYPE_ALIST_DIR, ITEM(res_dir.allowed_script_dirs), 0, 0, NULL },
-   { "allowedjobcommand", CFG_TYPE_ALIST_STR, ITEM(res_dir.allowed_job_cmds), 0, 0, NULL },
-   { NULL, 0, { 0 }, 0, 0, NULL }
+   { "Name", CFG_TYPE_NAME, ITEM(res_dir.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
+   { "Description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL, NULL, NULL },
+   { "Password", CFG_TYPE_MD5PASSWORD, ITEM(res_dir.password), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
+   { "Address", CFG_TYPE_STR, ITEM(res_dir.address), 0, 0, NULL, NULL, NULL },
+   { "Monitor", CFG_TYPE_BOOL, ITEM(res_dir.monitor), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL, NULL, NULL },
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL, NULL, NULL },
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL, NULL, NULL },
+   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL, NULL, NULL },
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL, NULL, NULL },
+   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL, NULL, NULL },
+   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_dir.tls_cipherlist), 0, 0, NULL, NULL, NULL },
+   { "TlsAllowedCn", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
+   { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_dir.max_bandwidth_per_job), 0, 0, NULL, NULL, NULL },
+   { "AllowedScriptDir", CFG_TYPE_ALIST_DIR, ITEM(res_dir.allowed_script_dirs), 0, 0, NULL, NULL, NULL },
+   { "AllowedJobCommand", CFG_TYPE_ALIST_STR, ITEM(res_dir.allowed_job_cmds), 0, 0, NULL, NULL, NULL },
+   { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
 /*
@@ -157,10 +164,10 @@ static RES_ITEM dir_items[] = {
  * It must have one item for each of the resources.
  */
 static RES_TABLE resources[] = {
-   { "director", dir_items, R_DIRECTOR, sizeof(DIRRES) },
-   { "filedaemon", cli_items, R_CLIENT, sizeof(CLIENTRES) },
-   { "client", cli_items, R_CLIENT, sizeof(CLIENTRES) }, /* alias for filedaemon */
-   { "messages", msgs_items, R_MSGS, sizeof(MSGSRES) },
+   { "Director", dir_items, R_DIRECTOR, sizeof(DIRRES) },
+   { "FileDaemon", cli_items, R_CLIENT, sizeof(CLIENTRES) },
+   { "Client", cli_items, R_CLIENT, sizeof(CLIENTRES) }, /* alias for filedaemon */
+   { "Messages", msgs_items, R_MSGS, sizeof(MSGSRES) },
    { NULL, NULL, 0}
 };
 
@@ -171,36 +178,34 @@ void dump_resource(int type, RES *reshdr,
                    void sendit(void *sock, const char *fmt, ...),
                    void *sock, bool hide_sensitive_data)
 {
+   POOL_MEM buf;
    URES *res = (URES *)reshdr;
+   BRSRES *resclass;
    int recurse = 1;
 
    if (res == NULL) {
       sendit(sock, "No record for %d %s\n", type, res_to_str(type));
       return;
    }
+
    if (type < 0) { /* no recursion */
       type = - type;
       recurse = 0;
    }
+
    switch (type) {
-   case R_DIRECTOR:
-      sendit(sock, "Director: name=%s password=%s\n", reshdr->name,
-             res->res_dir.password.value);
+   case R_MSGS: {
+      MSGSRES *resclass = (MSGSRES *)reshdr;
+      resclass->print_config(buf);
       break;
-   case R_CLIENT:
-      sendit(sock, "Client: name=%s FDport=%d\n", reshdr->name,
-             get_first_port_host_order(res->res_client.FDaddrs));
-      break;
-   case R_MSGS:
-      sendit(sock, "Messages: name=%s\n", res->res_msgs.hdr.name);
-      if (res->res_msgs.mail_cmd)
-         sendit(sock, "      mailcmd=%s\n", res->res_msgs.mail_cmd);
-      if (res->res_msgs.operator_cmd)
-         sendit(sock, "      opcmd=%s\n", res->res_msgs.operator_cmd);
-      break;
-   default:
-      sendit(sock, "Unknown resource type %d\n", type);
    }
+   default:
+      resclass = (BRSRES *)reshdr;
+      resclass->print_config(buf);
+      break;
+   }
+   sendit(sock, "%s", buf.c_str());
+
    if (recurse && res->res_dir.hdr.next) {
       dump_resource(type, res->res_dir.hdr.next, sendit, sock, hide_sensitive_data);
    }
@@ -260,6 +265,9 @@ void free_resource(RES *sres, int type)
       }
       if (res->res_dir.tls_dhfile) {
          free(res->res_dir.tls_dhfile);
+      }
+      if (res->res_dir.tls_cipherlist) {
+         free(res->res_dir.tls_cipherlist);
       }
       if (res->res_dir.tls_allowed_cns) {
          delete res->res_dir.tls_allowed_cns;
@@ -340,6 +348,9 @@ void free_resource(RES *sres, int type)
       if (res->res_client.tls_keyfile) {
          free(res->res_client.tls_keyfile);
       }
+      if (res->res_client.tls_cipherlist) {
+         free(res->res_client.tls_cipherlist);
+      }
       if (res->res_client.tls_allowed_cns) {
          delete res->res_client.tls_allowed_cns;
       }
@@ -352,6 +363,12 @@ void free_resource(RES *sres, int type)
       if (res->res_client.allowed_job_cmds) {
          delete res->res_client.allowed_job_cmds;
       }
+      if (res->res_client.secure_erase_cmdline) {
+         free(res->res_client.secure_erase_cmdline);
+      }
+      if (res->res_client.log_timestamp_format) {
+         free(res->res_client.log_timestamp_format);
+      }
       break;
    case R_MSGS:
       if (res->res_msgs.mail_cmd) {
@@ -359,6 +376,9 @@ void free_resource(RES *sres, int type)
       }
       if (res->res_msgs.operator_cmd) {
          free(res->res_msgs.operator_cmd);
+      }
+      if (res->res_msgs.timestamp_format) {
+         free(res->res_msgs.timestamp_format);
       }
       free_msgs_res((MSGSRES *)res);  /* free message resource */
       res = NULL;
@@ -417,8 +437,8 @@ void save_resource(int type, RES_ITEM *items, int pass)
             /*
              * Resources containing another resource
              */
-            if ((res = (URES *)GetResWithName(R_DIRECTOR, res_all.res_dir.hdr.name)) == NULL) {
-               Emsg1(M_ABORT, 0, _("Cannot find Director resource %s\n"), res_all.res_dir.hdr.name);
+            if ((res = (URES *)GetResWithName(R_DIRECTOR, res_all.res_dir.name())) == NULL) {
+               Emsg1(M_ABORT, 0, _("Cannot find Director resource %s\n"), res_all.res_dir.name());
             } else {
                res->res_dir.tls_allowed_cns = res_all.res_dir.tls_allowed_cns;
                res->res_dir.allowed_script_dirs = res_all.res_dir.allowed_script_dirs;
@@ -426,8 +446,8 @@ void save_resource(int type, RES_ITEM *items, int pass)
             }
             break;
          case R_CLIENT:
-            if ((res = (URES *)GetResWithName(R_CLIENT, res_all.res_dir.hdr.name)) == NULL) {
-               Emsg1(M_ABORT, 0, _("Cannot find Client resource %s\n"), res_all.res_dir.hdr.name);
+            if ((res = (URES *)GetResWithName(R_CLIENT, res_all.res_dir.name())) == NULL) {
+               Emsg1(M_ABORT, 0, _("Cannot find Client resource %s\n"), res_all.res_dir.name());
             } else {
                res->res_client.plugin_names = res_all.res_client.plugin_names;
                res->res_client.pki_signing_key_files = res_all.res_client.pki_signing_key_files;
@@ -475,20 +495,22 @@ void save_resource(int type, RES_ITEM *items, int pass)
           */
          for (last = next = res_head[rindex]; next; next = next->next) {
             last = next;
-            if (bstrcmp(next->name, res->res_dir.hdr.name)) {
+            if (bstrcmp(next->name, res->res_dir.name())) {
                Emsg2(M_ERROR_TERM, 0,
                   _("Attempt to define second %s resource named \"%s\" is not permitted.\n"),
-                  resources[rindex].name, res->res_dir.hdr.name);
+                  resources[rindex].name, res->res_dir.name());
             }
          }
          last->next = (RES *)res;
          Dmsg2(90, "Inserting %s res: %s\n", res_to_str(type),
-               res->res_dir.hdr.name);
+               res->res_dir.name());
       }
    }
 }
 
 static struct s_kw CryptoCiphers[] = {
+   { "blowfish", CRYPTO_CIPHER_BLOWFISH_CBC },
+   { "3des", CRYPTO_CIPHER_3DES_CBC },
    { "aes128", CRYPTO_CIPHER_AES_128_CBC },
    { "aes192", CRYPTO_CIPHER_AES_192_CBC },
    { "aes256", CRYPTO_CIPHER_AES_256_CBC },
@@ -497,7 +519,6 @@ static struct s_kw CryptoCiphers[] = {
    { "camellia256", CRYPTO_CIPHER_CAMELLIA_256_CBC },
    { "aes128hmacsha1", CRYPTO_CIPHER_AES_128_CBC_HMAC_SHA1 },
    { "aes256hmacsha1", CRYPTO_CIPHER_AES_256_CBC_HMAC_SHA1 },
-   { "blowfish", CRYPTO_CIPHER_BLOWFISH_CBC },
    { NULL, 0 }
 };
 
@@ -564,7 +585,7 @@ static void parse_config_cb(LEX *lc, RES_ITEM *item, int index, int pass)
    }
 }
 
-bool parse_fd_config(CONFIG *config, const char *configfile, int exit_code)
+void init_fd_config(CONFIG *config, const char *configfile, int exit_code)
 {
    config->init(configfile,
                 NULL,
@@ -579,5 +600,51 @@ bool parse_fd_config(CONFIG *config, const char *configfile, int exit_code)
                 R_LAST,
                 resources,
                 res_head);
+}
+
+bool parse_fd_config(CONFIG *config, const char *configfile, int exit_code)
+{
+   init_fd_config(config, configfile, exit_code);
    return config->parse_config();
 }
+
+/*
+ * Print configuration file schema in json format
+ */
+#ifdef HAVE_JANSSON
+bool print_config_schema_json(POOL_MEM &buffer)
+{
+   RES_TABLE *resources = my_config->m_resources;
+
+   initialize_json();
+
+   json_t *json = json_object();
+   json_object_set_new(json, "format-version", json_integer(2));
+   json_object_set_new(json, "component", json_string("bareos-fd"));
+   json_object_set_new(json, "version", json_string(VERSION));
+
+   /*
+    * Resources
+    */
+   json_t *resource = json_object();
+   json_object_set(json, "resource", resource);
+   json_t *bareos_fd = json_object();
+   json_object_set(resource, "bareos-fd", bareos_fd);
+
+   for (int r = 0; resources[r].name; r++) {
+      RES_TABLE resource = my_config->m_resources[r];
+      json_object_set(bareos_fd, resource.name, json_items(resource.items));
+   }
+
+   pm_strcat(buffer, json_dumps(json, JSON_INDENT(2)));
+   json_decref(json);
+
+   return true;
+}
+#else
+bool print_config_schema_json(POOL_MEM &buffer)
+{
+   pm_strcat(buffer, "{ \"success\": false, \"message\": \"not available\" }");
+   return false;
+}
+#endif

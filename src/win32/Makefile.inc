@@ -5,6 +5,7 @@ ifeq ($(WIN_VERSION),)
 WIN_VERSION = 64
 endif
 
+
 #
 # If no debug if forced from the ouside set a default.
 #

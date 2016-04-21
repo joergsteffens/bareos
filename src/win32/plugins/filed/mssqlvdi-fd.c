@@ -2,6 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2010 Zilvinas Krapavickas <zkrapavickas@gmail.com>
+   Copyright (C) 2013-2014 Planets Communications B.V.
    Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -269,6 +270,10 @@ static bRC newPlugin(bpContext *ctx)
     */
    hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
    if (!SUCCEEDED (hr)) {
+      return bRC_Error;
+   }
+
+   if (!initialize_com_security()) {
       return bRC_Error;
    }
 
@@ -1168,7 +1173,7 @@ static inline void perform_ado_backup(bpContext *ctx)
    switch (p_ctx->backup_level) {
    case L_INCREMENTAL:
       Mmsg(ado_query,
-           "BACKUP LOG %s TO VIRTUAL_DEVICE='%s' WITH BLOCKSIZE=%d, BUFFERCOUNT=%d, MAXTRANSFERSIZE=%d",
+           "BACKUP LOG [%s] TO VIRTUAL_DEVICE='%s' WITH BLOCKSIZE=%d, BUFFERCOUNT=%d, MAXTRANSFERSIZE=%d",
            p_ctx->database,
            vdsname,
            DEFAULT_BLOCKSIZE,
@@ -1227,7 +1232,7 @@ static inline void perform_ado_restore(bpContext *ctx)
    switch (p_ctx->backup_level) {
    case L_INCREMENTAL:
       Mmsg(ado_query,
-           "RESTORE LOG %s FROM VIRTUAL_DEVICE='%s' WITH BLOCKSIZE=%d, BUFFERCOUNT=%d, MAXTRANSFERSIZE=%d, %s",
+           "RESTORE LOG [%s] FROM VIRTUAL_DEVICE='%s' WITH BLOCKSIZE=%d, BUFFERCOUNT=%d, MAXTRANSFERSIZE=%d, %s",
            p_ctx->database,
            vdsname,
            DEFAULT_BLOCKSIZE,
@@ -1424,7 +1429,16 @@ static inline bool setup_vdi_device(bpContext *ctx, struct io_pkt *io)
    /*
     * Create the VDI device set.
     */
-   hr = p_ctx->VDIDeviceSet->CreateEx(NULL, p_ctx->vdsname, &p_ctx->VDIConfig);
+   if (bstrcasecmp(p_ctx->instance, DEFAULT_INSTANCE)) {
+      hr = p_ctx->VDIDeviceSet->CreateEx(NULL, p_ctx->vdsname, &p_ctx->VDIConfig);
+   } else {
+      POOLMEM *instance_name;
+
+      instance_name = get_pool_memory(PM_NAME);
+      UTF8_2_wchar(&instance_name, p_ctx->instance);
+      hr = p_ctx->VDIDeviceSet->CreateEx((LPCWSTR)instance_name, p_ctx->vdsname, &p_ctx->VDIConfig);
+      free_pool_memory(instance_name);
+   }
    if (!SUCCEEDED(hr)) {
       comReportError(ctx, hr);
       return false;
@@ -1440,7 +1454,7 @@ static inline bool setup_vdi_device(bpContext *ctx, struct io_pkt *io)
    }
 
    /*
-    * Ask the database server to start a backup or restore via an other thread.
+    * Ask the database server to start a backup or restore via another thread.
     * We create a new thread that handles the connection to the database.
     */
    status = pthread_create(&p_ctx->ADOThread, NULL, adoThread, (void *)ctx);

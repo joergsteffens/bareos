@@ -43,7 +43,7 @@ static char jobcmd[] =
    "type=%d level=%d FileSet=%127s NoAttr=%d SpoolAttr=%d FileSetMD5=%127s "
    "SpoolData=%d PreferMountedVols=%d SpoolSize=%127s "
    "rerunning=%d VolSessionId=%d VolSessionTime=%d Quota=%llu "
-   "Protocol=%d BackupFormat=%127s DumpLevel=%d\n";
+   "Protocol=%d BackupFormat=%127s\n";
 
 /* Responses sent to Director daemon */
 static char OK_job[] =
@@ -74,7 +74,7 @@ bool job_cmd(JCR *jcr)
    BSOCK *dir = jcr->dir_bsock;
    POOL_MEM job_name, client_name, job, fileset_name, fileset_md5, backup_format;
    int32_t JobType, level, spool_attributes, no_attributes, spool_data;
-   int32_t PreferMountedVols, rerunning, protocol, dumplevel;
+   int32_t PreferMountedVols, rerunning, protocol;
    int status;
    uint64_t quota = 0;
    JCR *ojcr;
@@ -89,8 +89,8 @@ bool job_cmd(JCR *jcr)
                    &no_attributes, &spool_attributes, fileset_md5.c_str(),
                    &spool_data, &PreferMountedVols, spool_size, &rerunning,
                    &jcr->VolSessionId, &jcr->VolSessionTime, &quota, &protocol,
-                   backup_format.c_str(), &dumplevel);
-   if (status != 20) {
+                   backup_format.c_str());
+   if (status != 19) {
       pm_strcpy(jcr->errmsg, dir->msg);
       dir->fsend(BAD_job, status, jcr->errmsg);
       Dmsg1(100, ">dird: %s", dir->msg);
@@ -147,7 +147,6 @@ bool job_cmd(JCR *jcr)
    unbash_spaces(backup_format);
    jcr->backup_format = get_pool_memory(PM_NAME);
    pm_strcpy(jcr->backup_format, backup_format);
-   jcr->DumpLevel = dumplevel;
    jcr->authenticated = false;
 
    Dmsg1(50, "Quota set as %llu\n", quota);
@@ -401,7 +400,7 @@ bool query_cmd(JCR *jcr)
       unbash_spaces(dev_name);
       foreach_res(device, R_DEVICE) {
          /* Find resource, and make sure we were able to open it */
-         if (bstrcmp(dev_name.c_str(), device->hdr.name)) {
+         if (bstrcmp(dev_name.c_str(), device->name())) {
             if (!device->dev) {
                device->dev = init_dev(jcr, device);
             }
@@ -418,8 +417,8 @@ bool query_cmd(JCR *jcr)
          }
       }
       foreach_res(changer, R_AUTOCHANGER) {
-         /* Find resource, and make sure we were able to open it */
-         if (bstrcmp(dev_name.c_str(), changer->hdr.name)) {
+         /*Find resource, and make sure we were able to open it */
+         if (bstrcmp(dev_name.c_str(), changer->name())) {
             if (!changer->device || changer->device->size() == 0) {
                continue;              /* no devices */
             }
@@ -515,7 +514,7 @@ void stored_free_jcr(JCR *jcr)
     */
    free_restore_volume_list(jcr);
    if (jcr->RestoreBootstrap) {
-      unlink(jcr->RestoreBootstrap);
+      secure_erase(jcr, jcr->RestoreBootstrap);
       free_pool_memory(jcr->RestoreBootstrap);
       jcr->RestoreBootstrap = NULL;
    }

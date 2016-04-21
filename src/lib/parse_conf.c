@@ -75,7 +75,7 @@ static bool find_config_file(const char *config_file, char *full_path, int max_p
 /*
  * Simply print a message
  */
-static void prtmsg(void *sock, const char *fmt, ...)
+void prtmsg(void *sock, const char *fmt, ...)
 {
    va_list arg_ptr;
 
@@ -350,7 +350,7 @@ const char *get_default_configdir()
    }
    return szConfigDir;
 #else
-   return SYSCONFDIR;
+   return CONFDIR;
 #endif
 }
 
@@ -498,9 +498,9 @@ void CONFIG::init_resource(int type, RES_ITEM *items, int pass)
             switch (items[i].type) {
             case CFG_TYPE_BIT:
                if (bstrcasecmp(items[i].default_value, "on")) {
-                  *(items[i].ui32value) |= items[i].code;
+                  set_bit(items[i].code, items[i].bitvalue);
                } else if (bstrcasecmp(items[i].default_value, "off")) {
-                  *(items[i].ui32value) &= ~(items[i].code);
+                  clear_bit(items[i].code, items[i].bitvalue);
                }
                break;
             case CFG_TYPE_BOOL:
@@ -649,5 +649,15 @@ void CONFIG::init_resource(int type, RES_ITEM *items, int pass)
    }
    default:
       break;
+   }
+}
+
+void CONFIG::dump_resources(void sendit(void *sock, const char *fmt, ...),
+                            void *sock, bool hide_sensitive_data)
+{
+   for (int i = m_r_first; i <= m_r_last; i++) {
+      if (m_res_head[i - m_r_first]) {
+         dump_resource(i,m_res_head[i - m_r_first],sendit, sock, hide_sensitive_data);
+      }
    }
 }

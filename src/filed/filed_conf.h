@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2007 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -48,9 +48,8 @@ enum {
 };
 
 /* Definition of the contents of each Resource */
-struct DIRRES {
-   RES hdr;
-
+class DIRRES : public BRSRES {
+public:
    s_password password;               /* Director password */
    char *address;                     /* Director address or zero */
    bool monitor;                      /* Have only access to status and .status functions */
@@ -64,6 +63,7 @@ struct DIRRES {
    char *tls_certfile;                /* TLS Server Certificate File */
    char *tls_keyfile;                 /* TLS Server Key File */
    char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
+   char *tls_cipherlist;              /* TLS Cipher List */
    alist *tls_allowed_cns;            /* TLS Allowed Common Names */
    alist *allowed_script_dirs;        /* Only allow to run scripts in this directories */
    alist *allowed_job_cmds;           /* Only allow the following Job commands to be executed */
@@ -71,9 +71,8 @@ struct DIRRES {
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
 };
 
-struct CLIENTRES {
-   RES hdr;
-
+class CLIENTRES : public BRSRES {
+public:
    dlist *FDaddrs;
    dlist *FDsrc_addr;                 /* Address to source connections from */
    char *working_directory;
@@ -84,6 +83,7 @@ struct CLIENTRES {
    char *scripts_directory;
    MSGSRES *messages;                 /* Daemon message handler */
    uint32_t MaxConcurrentJobs;
+   uint32_t MaxConnections;
    utime_t SDConnectTimeout;          /* Timeout in seconds */
    utime_t heartbeat_interval;        /* Interval to send heartbeats */
    uint32_t max_network_buffer_size;  /* Max network buf size */
@@ -105,6 +105,7 @@ struct CLIENTRES {
    char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
    char *tls_certfile;                /* TLS Client Certificate File */
    char *tls_keyfile;                 /* TLS Client Key File */
+   char *tls_cipherlist;              /* TLS Cipher List */
    bool nokeepalive;                  /* Don't use SO_KEEPALIVE on sockets */
    bool always_use_lmdb;              /* Use LMDB for accurate data */
    uint32_t lmdb_threshold;           /* Switch to using LDMD when number of accurate entries exceeds treshold. */
@@ -116,6 +117,8 @@ struct CLIENTRES {
    alist *allowed_job_cmds;           /* Only allow the following Job commands to be executed */
    TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    char *verid;                       /* Custom Id to print in version command */
+   char *secure_erase_cmdline;        /* Cmdline to execute to perform secure erase of file */
+   char *log_timestamp_format;        /* Timestamp format to use in generic logging messages */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (global) */
 };
 
@@ -128,3 +131,6 @@ union URES {
    MSGSRES res_msgs;
    RES hdr;
 };
+
+void init_fd_config(CONFIG *config, const char *configfile, int exit_code);
+bool print_config_schema_json(POOL_MEM &buffer);

@@ -377,8 +377,9 @@ struct COUNTER_DBR {
 struct FILESET_DBR {
    DBId_t FileSetId;                  /* Unique FileSet id */
    char FileSet[MAX_NAME_LENGTH];     /* FileSet name */
+   char *FileSetText;                 /* FileSet as Text */
    char MD5[50];                      /* MD5 signature of include/exclude */
-   time_t CreateTime;                 /* date created */
+   time_t CreateTime;                 /* Date created */
    /*
     * This is where we return CreateTime
     */
@@ -500,7 +501,7 @@ typedef int (DB_RESULT_HANDLER)(void *, int, char **);
 /*
  * Current database version number for all drivers
  */
-#define BDB_VERSION 2003
+#define BDB_VERSION 2004
 
 class CATS_IMP_EXP B_DB: public SMARTALLOC {
 protected:
@@ -637,9 +638,8 @@ public:
    int32_t num_rows;
 
    e_list_type type;            /* Vertical/Horizontal */
-   DB_LIST_HANDLER *send;       /* send data back */
+   OUTPUT_FORMATTER *send;      /* send data back */
    bool once;                   /* Used to print header one time */
-   void *ctx;                   /* send() user argument */
    B_DB *mdb;
    JCR *jcr;
 
@@ -650,17 +650,16 @@ public:
 
    void send_dashes() {
       if (*line) {
-         send(ctx, line);
+         send->decoration(line);
       }
    }
 
-   LIST_CTX(JCR *j, B_DB *m, DB_LIST_HANDLER *h, void *c, e_list_type t) {
+   LIST_CTX(JCR *j, B_DB *m, OUTPUT_FORMATTER *h, e_list_type t) {
       line[0] = '\0';
       once = false;
       num_rows = 0;
       type = t;
       send = h;
-      ctx = c;
       jcr = j;
       mdb = m;
    }
@@ -670,8 +669,7 @@ public:
  * Some functions exported by sql.c for use within the cats directory.
  */
 int list_result(void *vctx, int cols, char **row);
-int list_result(JCR *jcr, B_DB *mdb, DB_LIST_HANDLER *send, void *ctx, e_list_type type);
-void list_dashes(B_DB *mdb, DB_LIST_HANDLER *send, void *ctx);
+int list_result(JCR *jcr, B_DB *mdb, OUTPUT_FORMATTER *send, e_list_type type);
 int get_sql_record_max(JCR *jcr, B_DB *mdb);
 bool check_tables_version(JCR *jcr, B_DB *mdb);
 bool db_check_max_connections(JCR *jcr, B_DB *mdb, uint32_t nb);

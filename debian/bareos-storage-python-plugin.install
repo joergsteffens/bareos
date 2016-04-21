@@ -1,3 +1,6 @@
 /usr/lib/bareos/plugins/python-sd.so
 /usr/lib/bareos/plugins/bareos-sd.py*
 /usr/lib/bareos/plugins/bareos_sd_consts.py*
+/usr/lib/bareos/plugins/BareosSdPluginBaseclass.py*
+/usr/lib/bareos/plugins/BareosSdWrapper.py*
+/usr/lib/bareos/plugins/bareos-sd-class-plugin.py*

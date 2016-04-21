@@ -1,19 +1,56 @@
-bareos (14.2.6-3) unstable; urgency=medium
+bareos (15.2.3-1) experimental; urgency=medium
 
-  * Team upload.
-  * Fix GnuTLS backend initialization. (Closes: #819807)
-    - Backport upstream commits in d/patches/fix-tls-backend-initalization
+  [ Felix Geyer ]
   * Add autopkgtests for TLS.
   * Add breaks-testbed to all tests.
 
- -- Felix Geyer <fgeyer@debian.org>  Sun, 03 Apr 2016 15:52:08 +0200
+  [ Evgeni Golov ]
+  * New upstream release.
+  * only change fileperms for files that exist (Closes: #808580)
 
-bareos (14.2.6-2) unstable; urgency=medium
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 07 Apr 2016 21:18:59 +0200
+
+bareos (15.2.2-2) experimental; urgency=medium
 
   * add proper breaks/conflics between bareos-storage and b-s-tape
     (Closes: #808311)
+  * yank out univention support, upstream needs it, we do not
+  * drop most Ubuntu 8.04 workarounds
+  * only build ceph and gluster support on Linux
+  * update homepage and source repo URLs for LZ4
 
- -- Evgeni Golov <evgeni@debian.org>  Fri, 18 Dec 2015 22:53:20 +0100
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 19 Dec 2015 17:17:37 +0100
+
+bareos (15.2.2-1) experimental; urgency=medium
+
+  * New upstream release.
+
+  [ Marco van Wieringen ]
+  * First plugin for doing LDAP backups.
+
+  [ Joerg Steffens ]
+  * plugin-python-ldap: add example configuration file
+  * CEPH packages for Debian based distributions
+  * Cephfs-, Rados- and Gfapi-plugins: added examples
+
+  [ André Bauer ]
+  * build glusterfs plugins on Debian/Ubuntu
+
+  [ Evgeni Golov ]
+  * refresh patches against 15.2.1
+  * add CEPH packages
+  * improve package descriptions
+  * allign the first sentence of the metapackage description with the others
+  * indent Desciption of bareos-common as the other descriptions
+  * drop openssl-no-home-rnd, applied upstream
+  * drop set-dbuser-dbname, applied upstream
+  * use dh-systemd unconditionally
+  * build depend on libcmocka-dev (>= 1.0.1)
+  * Build-Depends on libjansson-dev
+  * drop unneeded debian/bareos-filedaemon-python-plugin.dir
+  * reorder packages in d/conrol to match upstream
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 13 Dec 2015 09:13:31 +0100
 
 bareos (14.2.6-1) unstable; urgency=medium
 

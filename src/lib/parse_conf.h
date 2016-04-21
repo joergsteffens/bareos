@@ -25,7 +25,7 @@
  */
 
 struct RES_ITEM;                        /* Declare forward referenced structure */
-class RES;                              /* Declare forware referenced structure */
+class RES;                              /* Declare forward referenced structure */
 
 /*
  * Parser state
@@ -95,10 +95,23 @@ struct RES_ITEM {
       RES **resvalue;
       alist **alistvalue;
       dlist **dlistvalue;
+      char *bitvalue;
    };
    int32_t code;                        /* Item code/additional info */
    uint32_t flags;                      /* Flags: See CFG_ITEM_* */
    const char *default_value;           /* Default value */
+   /*
+    * version string in format: [start_version]-[end_version]
+    * start_version: directive has been introduced in this version
+    * end_version:   directive is deprecated since this version
+    */
+   const char *versions;
+   /*
+    * description of the directive, used for the documentation.
+    * Full sentence.
+    * Every new directive should have a description.
+    */
+   const char *description;
 };
 
 /* For storing name_addr items in res_items table */
@@ -143,7 +156,7 @@ struct RES_TABLE {
 #define CFG_ITEM_DEFAULT           0x2  /* Default supplied */
 #define CFG_ITEM_NO_EQUALS         0x4  /* Don't scan = after name */
 #define CFG_ITEM_DEPRECATED        0x8  /* Deprecated config option */
-#define CFG_ITEM_ALIAS             0x10 /* Item is an alias for an other */
+#define CFG_ITEM_ALIAS             0x10 /* Item is an alias for another */
 
 /*
  * CFG_ITEM_DEFAULT_PLATFORM_SPECIFIC: the value may differ between different
@@ -242,6 +255,7 @@ struct DATATYPE_NAME {
    const char *description;
 };
 
+
 /*
  * Base Class for all Resource Classes
  */
@@ -266,6 +280,7 @@ class MSGSRES : public BRSRES {
 public:
    char *mail_cmd;                    /* Mail command */
    char *operator_cmd;                /* Operator command */
+   char *timestamp_format;            /* Timestamp format */
    DEST *dest_chain;                  /* chain of destinations */
    char send_msg[nbytes_for_bits(M_MAX+1)]; /* Bit array of types */
 
@@ -299,7 +314,9 @@ typedef void (PRINT_RES_HANDLER)(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool
  */
 class CONFIG {
 public:
-   /* members */
+   /*
+    * Members
+    */
    const char *m_cf;                    /* Config file */
    LEX_ERROR_HANDLER *m_scan_error;     /* Error handler if non-null */
    LEX_WARNING_HANDLER *m_scan_warning; /* Warning handler if non-null */
@@ -318,7 +335,9 @@ public:
    RES **m_res_head;                    /* Pointer to defined resources */
    brwlock_t m_res_lock;                /* Resource lock */
 
-   /* methods */
+   /*
+    * Methods
+    */
    void init(
       const char *cf,
       LEX_ERROR_HANDLER *scan_error,
@@ -339,12 +358,24 @@ public:
    RES **save_resources();
    RES **new_res_head();
    void init_resource(int type, RES_ITEM *items, int pass);
+   void dump_resources(void sendit(void *sock, const char *fmt, ...),
+                       void *sock, bool hide_sensitive_data = false);
 };
 
 CONFIG *new_config_parser();
 
+void prtmsg(void *sock, const char *fmt, ...);
 
-/* Resource routines */
+/*
+ * Data type routines
+ */
+DATATYPE_NAME *get_datatype(int number);
+const char *datatype_to_str(int type);
+const char *datatype_to_description(int type);
+
+/*
+ * Resource routines
+ */
 RES *GetResWithName(int rcode, const char *name);
 RES *GetNextRes(int rcode, RES *res);
 void b_LockRes(const char *file, int line);
@@ -357,20 +388,18 @@ void save_resource(int type, RES_ITEM *item, int pass);
 bool store_resource(int type, LEX *lc, RES_ITEM *item, int index, int pass);
 const char *res_to_str(int rcode);
 
-bool print_config_schema_json(POOL_MEM &buff);
-bool print_res_item_schema_json(POOL_MEM &buff, int level, RES_ITEM *item );
+#ifdef HAVE_JANSSON
+/*
+ * JSON output helper functions
+ */
+json_t *json_item(s_kw *item);
+json_t *json_item(RES_ITEM *item);
+json_t *json_items(RES_ITEM items[]);
+#endif
 
-/* JSON output helper functions */
-void add_json_object_start(POOL_MEM &cfg_str, int level, const char *string);
-void add_json_object_end(POOL_MEM &cfg_str, int level, const char *string);
-void add_json_pair_plain(POOL_MEM &cfg_str, int level, const char *string, const char *value);
-void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, const char *value);
-void add_json_pair(POOL_MEM &cfg_str, int level, const char *string, int value);
-
-
-
-
-/* Loop through each resource of type, returning in var */
+/*
+ * Loop through each resource of type, returning in var
+ */
 #ifdef HAVE_TYPEOF
 #define foreach_res(var, type) \
         for((var)=NULL; ((var)=(typeof(var))GetNextRes((type), (RES *)var));)

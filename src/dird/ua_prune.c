@@ -32,7 +32,6 @@
 #include "dird.h"
 
 /* Imported variables */
-extern struct s_jt jobtypes[];
 
 /* Imported functions */
 
@@ -98,7 +97,7 @@ int file_delete_handler(void *ctx, int num_fields, char **row)
  * prune stats
  * prune directory=xxx [client=xxx] [recursive]
  */
-int prune_cmd(UAContext *ua, const char *cmd)
+bool prune_cmd(UAContext *ua, const char *cmd)
 {
    CLIENTRES *client;
    POOLRES *pool;
@@ -160,8 +159,7 @@ int prune_cmd(UAContext *ua, const char *cmd)
 
       return true;
    case 1: { /* prune jobs */
-      int i;
-      char jobtype[MAX_NAME_LENGTH];
+      int jobtype = -1;
 
       if (!(client = get_client_resource(ua))) {
          return false;
@@ -176,28 +174,8 @@ int prune_cmd(UAContext *ua, const char *cmd)
       /*
        * Ask what jobtype to prune.
        */
-      if ((i = find_arg_with_value(ua, NT_("jobtype"))) >= 0) {
-         bstrncpy(jobtype, ua->argv[i], sizeof(jobtype));
-      } else {
-         start_prompt(ua, _("Jobtype to prune:\n"));
-         for (i = 0; jobtypes[i].type_name; i++) {
-            add_prompt(ua, jobtypes[i].type_name);
-         }
-
-         if (do_prompt(ua, _("JobType"),  _("Select Job Type"), jobtype, sizeof(jobtype)) < 0) {
-            return true;
-         }
-      }
-
-      for (i = 0; jobtypes[i].type_name; i++) {
-         if (bstrcasecmp(jobtypes[i].type_name, jobtype)) {
-            break;
-         }
-      }
-
-      if (!jobtypes[i].type_name) {
-         ua->warning_msg(_("Illegal jobtype %s.\n"), jobtype);
-         return false;
+      if (!get_user_job_type_selection(ua, &jobtype) || jobtype == -1) {
+         return (jobtype == -1) ? true : false;
       }
 
       /*
@@ -211,11 +189,7 @@ int prune_cmd(UAContext *ua, const char *cmd)
          return false;
       }
 
-      if (jobtypes[i].type_name) {
-         return prune_jobs(ua, client, pool, jobtypes[i].job_type);
-      }
-
-      return false;
+      return prune_jobs(ua, client, pool, jobtype);
    }
    case 2: /* prune volume */
       if (!select_pool_and_media_dbr(ua, &pr, &mr)) {
@@ -565,10 +539,7 @@ bail_out:
 
 static void drop_temp_tables(UAContext *ua)
 {
-   int i;
-   for (i=0; drop_deltabs[i]; i++) {
-      db_sql_query(ua->db, drop_deltabs[i]);
-   }
+   db_sql_query(ua->db, drop_deltabs[db_get_type_index(ua->db)]);
 }
 
 static bool create_temp_tables(UAContext *ua)

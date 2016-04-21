@@ -226,7 +226,7 @@ static inline bRC trigger_plugin_event(JCR *jcr, bEventType eventType, bEvent *e
 }
 
 /**
- * Create a plugin event When receiving bEventCancelCommand, this function is called by an other thread.
+ * Create a plugin event When receiving bEventCancelCommand, this function is called by another thread.
  */
 void generate_plugin_event(JCR *jcr, bEventType eventType, void *value, bool reverse)
 {
@@ -1140,24 +1140,22 @@ int plugin_create_file(JCR *jcr, ATTR *attr, BFILE *bfd, int replace)
       return CF_ERROR;
    }
 
-   if (rp.create_status == CF_ERROR) {
+   switch (rp.create_status) {
+   case CF_ERROR:
       Qmsg1(jcr, M_ERROR, 0, _("Plugin createFile call failed. Returned CF_ERROR file=%s\n"), attr->ofname);
-      return CF_ERROR;
-   }
-
-   if (rp.create_status == CF_SKIP) {
-      return CF_SKIP;
-   }
-
-   if (rp.create_status == CF_CORE) {
-      return CF_CORE;           /* Let Bareos core handle the file creation */
-   }
-
-   /*
-    * Created link or directory?
-    */
-   if (rp.create_status == CF_CREATED) {
-      return rp.create_status;        /* yes, no need to bopen */
+      /*
+       * FALLTHROUGH
+       */
+   case CF_SKIP:
+      /*
+       * FALLTHROUGH
+       */
+   case CF_CORE:
+      /*
+       * FALLTHROUGH
+       */
+   case CF_CREATED:
+      return rp.create_status;
    }
 
    flags =  O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
@@ -1168,6 +1166,7 @@ int plugin_create_file(JCR *jcr, ATTR *attr, BFILE *bfd, int replace)
 
    if (status < 0) {
       berrno be;
+
       be.set_errno(bfd->berrno);
       Qmsg2(jcr, M_ERROR, 0, _("Could not create %s: ERR=%s\n"),
             attr->ofname, be.bstrerror());
@@ -1224,7 +1223,7 @@ bool plugin_set_attributes(JCR *jcr, ATTR *attr, BFILE *ofd)
       if (is_bopen(ofd)) {
          bclose(ofd);
       }
-      pm_strcpy(attr->ofname, "*none*");
+      pm_strcpy(attr->ofname, "*None*");
    }
 
    return true;
@@ -2002,8 +2001,8 @@ static bRC bareosGetValue(bpContext *ctx, bVariable var, void *value)
          break;                 /* a write only variable, ignore read request */
       case bVarVssObject:
 #ifdef HAVE_WIN32
-         if (g_pVSSClient) {
-            *(void **)value = g_pVSSClient->GetVssObject();
+         if (jcr->pVSSClient) {
+            *(void **)value = jcr->pVSSClient->GetVssObject();
             Dmsg1(dbglvl, "fd-plugin: return bVarVssObject=%p\n", *(void **)value);
             break;
           }
@@ -2011,8 +2010,8 @@ static bRC bareosGetValue(bpContext *ctx, bVariable var, void *value)
           return bRC_Error;
       case bVarVssDllHandle:
 #ifdef HAVE_WIN32
-         if (g_pVSSClient) {
-            *(void **)value = g_pVSSClient->GetVssDllHandle();
+         if (jcr->pVSSClient) {
+            *(void **)value = jcr->pVSSClient->GetVssDllHandle();
             Dmsg1(dbglvl, "fd-plugin: return bVarVssDllHandle=%p\n", *(void **)value);
             break;
           }

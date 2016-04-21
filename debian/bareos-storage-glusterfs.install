@@ -1,0 +1,2 @@
+/usr/lib/bareos/backends/libbareossd-gfapi*.so
+/etc/bareos/bareos-sd.d/device-gluster.conf

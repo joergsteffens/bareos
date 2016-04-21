@@ -16,11 +16,12 @@ CONFIG( debug, debug|release )  {
 }
 
 QMAKE_LIBDIR += ../lib
+QMAKE_CXXFLAGS += @JANSSON_INC@
 LIBS         += -lbareoscfg -lbareos
 
 bins.path            = /$(DESTDIR)@bindir@
 bins.files           = bareos-tray-monitor
-confs.path           = /$(DESTDIR)@sysconfdir@
+confs.path           = /$(DESTDIR)@confdir@
 confs.files          = tray-monitor.conf
 icons.path           = /$(DESTDIR)@datarootdir@/pixmaps/
 icons.files          = bareos-tray-monitor.xpm

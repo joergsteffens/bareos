@@ -19,10 +19,11 @@
 #                          #{_mingw64_install_post}
 
 
-%define flavors "prevista postvista prevista-debug postvista-debug"
+%define flavors "postvista postvista-debug"
+%define dirs_with_unittests "lib findlib"
 
 Name:           mingw64-winbareos
-Version:        14.2.6
+Version:        15.2.3
 Release:        0
 Summary:        bareos
 License:        LGPLv2+
@@ -36,10 +37,6 @@ BuildArch:      noarch
 
 %define addonsdir /bareos-addons/
 BuildRequires:  bareos-addons
-
-%define SIGNCERT ia.p12
-%define SIGNPWFILE signpassword
-
 
 Source1:        fillup.sed
 Patch1:         tray-monitor-conf.patch
@@ -79,12 +76,14 @@ BuildRequires:  mingw64-libfastlz
 BuildRequires:  mingw64-libfastlz-devel
 BuildRequires:  mingw64-libsqlite3-0
 BuildRequires:  mingw64-libsqlite-devel
+BuildRequires:  mingw64-cmocka
+BuildRequires:  mingw64-cmocka-devel
+BuildRequires:  mingw64-libjansson
+BuildRequires:  mingw64-libjansson-devel
 
 BuildRequires:  sed
 BuildRequires:  vim, procps, bc
 
-BuildRequires:  osslsigncode
-BuildRequires:  obs-name-resolution-settings
 %description
 bareos
 
@@ -94,17 +93,6 @@ Group:          Development/Libraries
 
 
 %description devel
-bareos
-
-
-%package prevista
-Summary:        bareos
-%description prevista
-bareos
-
-%package prevista-debug
-Summary:        bareos
-%description prevista-debug
 bareos
 
 
@@ -155,25 +143,22 @@ done
 
 %build
 
-#cd src/win32/
-#make WIN_DEBUG=%{WIN_DEBUG} BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=%{WIN_VISTACOMPAT} %{?jobs:-j%jobs}
+DIRS_WITH_UNITESTS="lib findlib";
 
+for flavor in `echo "%flavors"`; do
+   cd $flavor/src/win32/
+   WIN_VISTACOMPAT=$(echo $flavor | grep postvista >/dev/null && echo yes || echo no)
+   WIN_DEBUG=$(echo $flavor | grep debug >/dev/null && echo yes || echo no)
+   make WIN_DEBUG=$WIN_DEBUG BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=$WIN_VISTACOMPAT %{?jobs:-j%jobs}
+   cd -
 
-cd postvista/src/win32/
-make WIN_DEBUG=no BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=yes %{?jobs:-j%jobs}
-cd -
+   for UNITTEST_DIR in `echo "%dirs_with_unittests"`; do
+      cd $flavor/src/win32/${UNITTEST_DIR}/unittests
+      make WIN_DEBUG=$WIN_DEBUG BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=$WIN_VISTACOMPAT %{?jobs:-j%jobs}
+      cd -
+   done
 
-cd postvista-debug/src/win32/
-make WIN_DEBUG=yes BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=yes %{?jobs:-j%jobs}
-cd -
-
-cd prevista/src/win32/
-make WIN_DEBUG=no BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=no %{?jobs:-j%jobs}
-cd -
-
-cd prevista-debug/src/win32/
-make WIN_DEBUG=yes BUILD_QTGUI=%{BUILD_QTGUI} WIN_VERSION=%{WIN_VERSION} WIN_VISTACOMPAT=no %{?jobs:-j%jobs}
-cd -
+done
 
 %install
 for flavor in `echo "%flavors"`; do
@@ -181,6 +166,9 @@ for flavor in `echo "%flavors"`; do
    mkdir -p $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
    mkdir -p $RPM_BUILD_ROOT/etc/$flavor/%name
 
+   for UNITTEST_DIR in `echo "%dirs_with_unittests"`; do
+      cp $flavor/src/win32/${UNITTEST_DIR}/unittests/*.exe $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
+   done
    pushd $flavor/src/win32
 
    cp qt-tray-monitor/bareos-tray-monitor.exe \
@@ -191,9 +179,14 @@ for flavor in `echo "%flavors"`; do
       stored/btape.exe \
       stored/bls.exe \
       stored/bextract.exe \
+      stored/bscan.exe \
       dird/bareos-dir.exe \
       dird/bareos-dbcheck.exe \
       tools/bsmtp.exe \
+      tools/bregex.exe \
+      tools/bwild.exe \
+      tests/grow.exe \
+      tests/bregtest.exe \
       stored/libbareossd*.dll \
       cats/libbareoscats*.dll \
       lib/libbareos.dll \
@@ -201,7 +194,10 @@ for flavor in `echo "%flavors"`; do
       lmdb/libbareoslmdb.dll \
       plugins/filed/bpipe-fd.dll \
       plugins/filed/mssqlvdi-fd.dll \
+      plugins/filed/python-fd.dll \
       plugins/stored/autoxflate-sd.dll \
+      plugins/stored/python-sd.dll \
+      plugins/dird/python-dir.dll \
       $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
 
    for cfg in  ../qt-tray-monitor/tray-monitor.fd.conf.in \
@@ -228,41 +224,20 @@ for flavor in `echo "%flavors"`; do
       cp -av src/cats/ddl/$i/postgres* $RPM_BUILD_ROOT/etc/$flavor/%name/ddl/$i/
    done
 
+   for i in creates updates; do
+      cp -av src/cats/ddl/$i/sqlite* $RPM_BUILD_ROOT/etc/$flavor/%name/ddl/$i/
+   done
+
    for sql in $RPM_BUILD_ROOT/etc/$flavor//%name/ddl/*/*.sql;
    do
       sed -f %SOURCE1 $sql -i ;
    done
-
-   # sign binary files
-   pushd $RPM_BUILD_ROOT%{_mingw64_bindir}/$flavor
-   for BINFILE in *; do
-      mv $BINFILE $BINFILE.unsigned
-      osslsigncode sign \
-                   -pkcs12 ${OLDPWD}/%SIGNCERT \
-                   -readpass ${OLDPWD}/%SIGNPWFILE \
-                   -n "${DESCRIPTION}" \
-                   -i http://www.bareos.com/ \
-                   -t http://timestamp.comodoca.com/authenticode \
-                   -in  $BINFILE.unsigned \
-                   -out $BINFILE
-      rm *.unsigned
-   done
-   popd
 done
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
-
-
-%files prevista
-%defattr(-,root,root)
-/etc/prevista/%name/*.conf
-/etc/prevista/%name/ddl/
-%dir %{_mingw64_bindir}/prevista
-%{_mingw64_bindir}/prevista/*.dll
-%{_mingw64_bindir}/prevista/*.exe
 
 
 %files postvista
@@ -272,15 +247,6 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_mingw64_bindir}/postvista
 %{_mingw64_bindir}/postvista/*.dll
 %{_mingw64_bindir}/postvista/*.exe
-
-
-%files prevista-debug
-%defattr(-,root,root)
-/etc/prevista-debug/%name/*.conf
-/etc/prevista-debug/%name/ddl/
-%dir %{_mingw64_bindir}/prevista-debug
-%{_mingw64_bindir}/prevista-debug/*.dll
-%{_mingw64_bindir}/prevista-debug/*.exe
 
 
 %files postvista-debug

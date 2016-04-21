@@ -3,7 +3,10 @@
 #
 @MCOMMON@
 
+CEPHFS_CPPFLAGS += @CEPHFS_INC@
 PYTHON_CPPFLAGS += @PYTHON_INC@
+RADOS_CPPFLAGS += @RADOS_INC@
+GLUSTER_CPPFLAGS += @GLUSTER_INC@
 
 srcdir = @srcdir@
 VPATH = @srcdir@:../../filed
@@ -23,7 +26,7 @@ BUILD_PLUGINS = @BUILD_FD_PLUGINS@
 
 # inference rules
 .c.lo:
-	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CPPFLAGS) $(INCLUDES) -c $<
+	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) -c $<
 
 all: Makefile bpipe-fd.la test-plugin-fd.la test-deltaseq-fd.la $(BUILD_PLUGINS)
 
@@ -37,14 +40,41 @@ example-plugin-fd.la: Makefile example-plugin-fd$(DEFAULT_OBJECT_TYPE)
 bpipe-fd.la: Makefile bpipe-fd$(DEFAULT_OBJECT_TYPE)
 	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared bpipe-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version
 
+cephfs-fd.lo: cephfs-fd.c
+	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CPPFLAGS) $(INCLUDES) $(CEPHFS_CPPFLAGS) -c $<
+
+cephfs-fd.la: Makefile \
+	      cephfs-fd$(DEFAULT_OBJECT_TYPE) \
+	      ../../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
+	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared cephfs-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version \
+	-L../../lib -lbareos @CEPHFS_LIBS@
+
+gfapi-fd.lo: gfapi-fd.c
+	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CPPFLAGS) $(INCLUDES) $(GLUSTER_CPPFLAGS) -c $<
+
+gfapi-fd.la: Makefile \
+	     gfapi-fd$(DEFAULT_OBJECT_TYPE) \
+	     ../../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
+	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared gfapi-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version \
+	-L../../lib -lbareos @GLUSTER_LIBS@
+
 python-fd.lo: python-fd.c python-fd.h
-	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CPPFLAGS) $(INCLUDES) $(PYTHON_CPPFLAGS) -c $<
+	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $(PYTHON_CPPFLAGS) -c $<
 
 python-fd.la: Makefile \
 	      python-fd$(DEFAULT_OBJECT_TYPE) \
 	      ../../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
 	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared python-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version \
 	-L../../lib -lbareos @PYTHON_LIBS@
+
+rados-fd.lo: rados-fd.c
+	$(LIBTOOL_COMPILE) $(CXX) $(DEFS) $(DEBUG) $(CPPFLAGS) $(INCLUDES) $(RADOS_CPPFLAGS) -c $<
+
+rados-fd.la: Makefile \
+	     rados-fd$(DEFAULT_OBJECT_TYPE) \
+	     ../../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
+	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared rados-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version \
+	-L../../lib -lbareos @RADOS_LIBS@
 
 test-deltaseq-fd.la: Makefile test-deltaseq-fd$(DEFAULT_OBJECT_TYPE)
 	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -shared test-deltaseq-fd.lo -o $@ -rpath $(plugindir) -module -export-dynamic -avoid-version \
@@ -57,19 +87,25 @@ test-plugin-fd.la: Makefile test-plugin-fd$(DEFAULT_OBJECT_TYPE) ../../lib/libba
 plugtest: Makefile fd_plugins.c fileset.c \
 	  ../../findlib/libbareosfind$(DEFAULT_ARCHIVE_TYPE) \
 	  ../../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
-	$(CXX) -DTEST_PROGRAM $(DEFS) $(DEBUG) -c $(CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) ../../filed/fd_plugins.c
-	$(CXX) $(DEFS) $(DEBUG) -c $(CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) ../../filed/fileset.c
+	$(CXX) -DTEST_PROGRAM $(DEFS) $(DEBUG) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) ../../filed/fd_plugins.c
+	$(CXX) $(DEFS) $(DEBUG) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) ../../filed/fileset.c
 	$(LIBTOOL_LINK) $(CXX) $(LDFLAGS) -L../../lib -L../../findlib -o $@ fd_plugins.o fileset.o -lbareosfind -lbareos $(DLIB) -lm $(LIBS)
 
 install: all
 	$(MKDIR) $(DESTDIR)$(plugindir)
-	$(CP) *.py *.py.template $(DESTDIR)$(plugindir)
+	$(MKDIR) ${DESTDIR}${confdir}/bareos-dir.d/
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bpipe-fd.la $(DESTDIR)$(plugindir)
 	$(RMF) $(DESTDIR)$(plugindir)/bpipe-fd.la
 	@for plugin in $(BUILD_PLUGINS); do \
 	   $(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) $$plugin $(DESTDIR)$(plugindir); \
 	   $(RMF) $(DESTDIR)$(plugindir)/$$plugin; \
+		CONF=`echo $$plugin | sed 's/\(.*\)-fd.la$$/plugin-\1.conf/'`; \
+		if [ -f "$$CONF" ]; then \
+			$(INSTALL_CONFIG) $$CONF ${DESTDIR}${confdir}/bareos-dir.d/; \
+		fi; \
 	done
+	$(CP) *.py *.py.template $(DESTDIR)$(plugindir)
+	$(INSTALL_CONFIG) plugin-python-ldap.conf ${DESTDIR}${confdir}/bareos-dir.d/
 
 install-test-plugin: all
 	$(MKDIR) $(DESTDIR)$(plugindir)
@@ -88,5 +124,6 @@ clean:	libtool-clean
 
 distclean: clean
 	@$(RMF) Makefile
+	@$(RMF) plugin-python-ldap.conf
 
 depend:

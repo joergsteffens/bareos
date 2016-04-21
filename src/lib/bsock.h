@@ -122,7 +122,8 @@ public:
    const char *bstrerror();           /* last error on socket */
    bool despool(void update_attr_spool_size(ssize_t size), ssize_t tsize);
    bool authenticate_with_director(const char *name, const char *password,
-                                   TLS_CONTEXT *tls_ctx, char *response, int response_len);
+                                   TLS_CONTEXT *tls_ctx, alist *verify_list,
+                                   char *response, int response_len);
    bool set_locking();                /* in bsock.c */
    void clear_locking();              /* in bsock.c */
    void set_source_address(dlist *src_addr_list);
@@ -144,7 +145,7 @@ public:
    bool is_stop() { return errors || is_terminated(); }
    bool is_error() { errno = b_errno; return errors; }
    void set_data_end(int32_t FileIndex) {
-          if (m_spool != -1 && FileIndex > m_FileIndex) {
+          if (m_spool && FileIndex > m_FileIndex) {
               m_FileIndex = FileIndex - 1;
               m_data_end = lseek(m_spool_fd, 0, SEEK_CUR);
            }

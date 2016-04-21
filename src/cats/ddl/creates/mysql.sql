@@ -47,6 +47,15 @@ CREATE TABLE File (
    INDEX (JobId, PathId, FilenameId)
 );
 
+--
+-- Possibly add one or more of the following indexes
+--  to the above File table if your Verifies are
+--  too slow, but they can slow down backups.
+--
+--  INDEX (PathId),
+--  INDEX (FilenameId),
+--
+
 CREATE TABLE RestoreObject (
    RestoreObjectId INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
    ObjectName BLOB NOT NULL,
@@ -63,14 +72,6 @@ CREATE TABLE RestoreObject (
    INDEX (JobId)
 );
 
---
--- Possibly add one or more of the following indexes
---  to the above File table if your Verifies are
---  too slow, but they can slow down backups.
---
---  INDEX (PathId),
---  INDEX (FilenameId),
---
 CREATE TABLE MediaType (
    MediaTypeId INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
    MediaType TINYBLOB NOT NULL,
@@ -194,6 +195,7 @@ CREATE TABLE FileSet (
    FileSet TINYBLOB NOT NULL,
    MD5 TINYBLOB,
    CreateTime DATETIME DEFAULT 0,
+   FileSetText BLOB NOT NULL,
    PRIMARY KEY(FileSetId)
 );
 
@@ -377,7 +379,7 @@ CREATE TABLE Version (
 );
 
 CREATE TABLE Quota (
-   ClientId INT UNSIGNED DEFAULT NULL,
+   ClientId INTEGER DEFAULT 0 REFERENCES Client,
    GraceTime BIGINT DEFAULT 0,
    QuotaLimit BIGINT UNSIGNED DEFAULT 0,
    PRIMARY KEY (ClientId)
@@ -460,5 +462,5 @@ INSERT INTO Status (JobStatus,JobStatusLong,Severity) VALUES
 -- Initialize Version
 --   DELETE should not be required,
 --   but prevents errors if create script is called multiple times
-DELETE FROM Version WHERE VersionId<=2003;
-INSERT INTO Version (VersionId) VALUES (2003);
+DELETE FROM Version WHERE VersionId<=2004;
+INSERT INTO Version (VersionId) VALUES (2004);

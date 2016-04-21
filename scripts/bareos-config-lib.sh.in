@@ -1,7 +1,7 @@
 #!/bin/sh
 
 CONFIG_LIB=@scriptdir@/bareos-config-lib.sh
-DIR_CFG=@sysconfdir@
+DIR_CFG=@confdir@
 CFG_DIR=${DIR_CFG}/bareos-dir.conf
 DIR_SCRIPTS=@scriptdir@
 DBCHECK="@sbindir@/bareos-dbcheck -B -c ${CFG_DIR}"
@@ -335,8 +335,20 @@ set_config_param()
     # set parameter values to a Bareos configuration file
     #
 
+    # Limitations:
+    # - multiple directives in one line,
+    #   separated by ";"
+    #   (could by handled by RS="\n|;", but this could cause problems with other lines)
+    #   Possible workaround: get expanded config by "bareos-* -xc"
+    # - "}" must be the only character in a line
+    # - between "{" and the first directive must be a line break
+    # - Name directive must come before directive to modify,
+    #   preferably Name is the first directive of a resource
+    # - does not handle includes ("@" and include scripts)
+    #   Possible workaround: get expanded config by "bareos-* -xc"
+
     # configuration file
-    CFG_FILE="${1}"
+    FILE="${1}"
     # section, currently ignored
     SECTION="${2}"
     # name of the section, currently ignored
@@ -346,16 +358,73 @@ set_config_param()
     # value to set
     VALUE="${5}"
 
-    if ! [ -r "${CFG_FILE}" ]; then
-        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: can't read ${CFG_FILE}"
+    if [ ! -w "${FILE}" ]; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: can't access ${CFG_FILE}"
         return 1
     fi
 
-    if egrep -i "^[ 	]*${PARAM}[ 	]*=" ${CFG_FILE}; then
-        sed -r -i "s#^[ 	]*${PARAM}[ 	]*=.*#  ${PARAM} = \"${VALUE}\"#" ${CFG_FILE}
-        echo "$CFG_FILE: set ${SECTION} ${NAME} ${PARAM} = ${VALUE}"
-    else
-        echo "FAILED to set ${SECTION} ${NAME} ${PARAM} = ${VALUE} ($CFG_FILE)"
+    TEMP=`mktemp`
+    awk -v SECTION="$SECTION" -v NAME="$NAME" -v PARAM="$PARAM" -v VALUE="$VALUE" '
+  BEGIN {
+    IGNORECASE = 1;
+    FS = "=";
+    # could add ; as Record Seperator, but this may causes problems if line contains this character.
+    #RS="\n|;"
+    done = 0
+    printed = 0
+  };
+  level == 1 && /}/ && resourcetype == SECTION && name == NAME && done == 0 {
+        printf "  %s = %s\n", PARAM, VALUE
+        printf "}\n"
+        printed = 1
+        done = 1
+  };
+  /}/ {
+    resourcetype="";
+    level--;
+  };
+  /{/ {
+        level++;
+  };
+  level == 1 && /{/ {
+        resourcetype=$1;
+        gsub("[ {]","",resourcetype)
+  };
+  level == 1 && resourcetype == SECTION && $1 ~ /^[ ]*Name[ ]*$/ {
+        name = $2
+        gsub("[ \"]","",name)
+        #printf "%s: %s\n", resourcetype, name
+  };
+  level == 1 && resourcetype == SECTION && name == NAME {
+        param = $1
+        gsub("[ \"]","",param)
+        #printf "found %s => %s\n", param, $2
+  };
+  level == 1 && resourcetype == SECTION && name == NAME && param == PARAM {
+        printf "%s= %s\n", $1, VALUE
+        printed = 1
+        done = 1
+  };
+  printed == 0 {
+    print $0
+  }
+  printed == 1 {
+    printed = 0
+  }
+    ' "$FILE" > "$TEMP"
+    if [ $? -ne 0 ]; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: replace failed"
+        rm "$TEMP"
+        return 1
+    fi
+
+    chown --reference="${FILE}" "$TEMP"
+    chmod --reference="${FILE}" "$TEMP"
+
+    mv "$TEMP" "$FILE"
+    if [ $? != 0 ]; then
+        warn "failed to set parameter ${SECTION} ${NAME} ${PARAM} = ${VALUE}: replacing $FILE failed"
+        rm -f "$TEMP"
         return 1
     fi
 }
@@ -394,7 +463,7 @@ get_database_param()
     fi
 
     # if $temp_log exists, but have only size 0, remove it.
-    if [ -f $temp_log ] && ! [ -s $temp_log ]; then
+    if [ -f $temp_log -a ! -s $temp_log ]; then
         rm $temp_log
     fi
 
@@ -508,7 +577,8 @@ get_translated_sql_file()
     db_password="${db_password-`get_database_password @db_password@`}"
     db_version=`get_database_version`
 
-    if echo "$db_password" | grep -q '#'; then
+    echo "$db_password" | grep '#' > /dev/null 2>&1
+    if [ $? = 0 ]; then
         error "database passwords containing # are not supported."
         return 3
     fi
@@ -632,6 +702,14 @@ apply_dbconfig_settings()
     # check if dbconfig is enabled
     [ $dbc_upgrade = 'true' ] || return 0
 
+    if [ -n "$dbc_dbuser" ]; then
+        set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbuser" "$dbc_dbuser"
+    fi
+
+    if [ -n "$dbc_dbname" ]; then
+        set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbname" "$dbc_dbname"
+    fi
+
     case "$dbc_dbtype" in
         pgsql)
             set_config_param "${CFG_DIR}" "Catalog" "MyCatalog" "dbdriver" "postgresql"
@@ -734,7 +812,7 @@ initialize_passwords()
     if [ ! -f ${DIR_CFG}/.rndpwd ]; then
         for string in ${PASSWORD_SUBST}
         do
-           pass=`openssl rand -base64 33`
+           pass=`RANDFILE=/dev/urandom openssl rand -base64 33`
            echo "${string}=${pass}" >> ${DIR_CFG}/.rndpwd
         done
         chmod 400 ${DIR_CFG}/.rndpwd

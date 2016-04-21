@@ -24,6 +24,7 @@ GETTEXT_LIBS = @LIBINTL@
 OPENSSL_LIBS_NONSHARED = @OPENSSL_LIBS_NONSHARED@
 GNUTLS_LIBS_NONSHARED = @GNUTLS_LIBS_NONSHARED@
 
+JANSSON_CPPFLAGS = @JANSSON_INC@
 COMPRESS_CPPFLAGS += @ZLIB_INC@ @LZO_INC@ @FASTLZ_INC@
 
 first_rule: all
@@ -33,7 +34,7 @@ dummy:
 SVRSRCS = accurate.c accurate_htable.c accurate_lmdb.c authenticate.c \
 	  backup.c compression.c crypto.c dir_cmd.c estimate.c \
 	  fd_plugins.c filed_conf.c filed.c fileset.c heartbeat.c \
-	  restore.c sd_cmds.c status.c verify_vol.c verify.c
+	  restore.c sd_cmds.c socket_server.c status.c verify_vol.c verify.c
 SVROBJS = $(SVRSRCS:.c=.o)
 
 FDLIBS += @LMDB_LIBS@
@@ -56,6 +57,10 @@ INCLUDES += -I$(srcdir) -I$(basedir) -I$(basedir)/include -I$(basedir)/lmdb
 	@echo "Compiling $<"
 	$(NO_ECHO)$(CXX) $(DEFS) $(DEBUG) -c $(WCFLAGS) $(CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) $<
 #-------------------------------------------------------------------------
+filed_conf.o: filed_conf.c
+	@echo "Compiling $<"
+	$(NO_ECHO)$(CXX) $(DEFS) $(DEBUG) -c $(WCFLAGS) $(CPPFLAGS) $(JANSSON_CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) $<
+
 compression.o: compression.c
 	@echo "Compiling $<"
 	$(NO_ECHO)$(CXX) $(DEFS) $(DEBUG) -c $(WCFLAGS) $(CPPFLAGS) $(COMPRESS_CPPFLAGS) $(INCLUDES) $(DINCLUDE) $(CXXFLAGS) $<
@@ -64,31 +69,13 @@ all: Makefile bareos-fd @STATIC_FD@
 	@echo "==== Make of filed is good ===="
 	@echo " "
 
-win32/winlib.a:
-	@if test -f win32/Makefile -a "${GMAKE}" != "none"; then \
-	   (cd win32; $(GMAKE) DESTDIR=$(DESTDIR)); \
-	fi
-	@rm -f bareos-fd.exe
-
-win32/winmain.o:
-	@if test -f win32/Makefile -a "${GMAKE}" != "none"; then \
-	   (cd win32; $(GMAKE) DESTDIR=$(DESTDIR)); \
-	fi
-	@rm -f bareos-fd.exe
-
-win32/winres.res:
-	@if test -f win32/Makefile -a "${GMAKE}" != "none"; then \
-	   (cd win32; $(GMAKE) DESTDIR=$(DESTDIR)); \
-	fi
-	@rm -f bareos-fd.exe
-
 bareos-fd: Makefile $(SVROBJS) \
 	   ../findlib/libbareosfind$(DEFAULT_ARCHIVE_TYPE) \
 	   ../lib/libbareoscfg$(DEFAULT_ARCHIVE_TYPE) \
 	   ../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
 	@echo "Linking $@ ..."
 	$(LIBTOOL_LINK) $(CXX) $(WLDFLAGS) $(LDFLAGS) -L../lib -L../findlib -o $@ $(SVROBJS) \
-	  $(FDLIBS) -lbareosfind -lbareoscfg -lbareos -lm $(LIBS) \
+	  -lbareosfind -lbareoscfg -lbareos -lm $(FDLIBS) $(LIBS) \
 	  $(DLIB) $(WRAPLIBS) $(GETTEXT_LIBS) $(OPENSSL_LIBS_NONSHARED) $(GNUTLS_LIBS_NONSHARED)
 
 static-bareos-fd: Makefile $(SVROBJS) \
@@ -97,7 +84,7 @@ static-bareos-fd: Makefile $(SVROBJS) \
 		  ../lib/libbareos$(DEFAULT_ARCHIVE_TYPE)
 	@echo "Linking $@ ..."
 	$(LIBTOOL_LINK) $(CXX) $(WLDFLAGS) $(LDFLAGS) -static -L../lib -L../findlib -o $@ $(SVROBJS) \
-	   $(FDLIBS) -lbareosfind -lbareoscfg -lbareos -lm $(LIBS) \
+	   -lbareosfind -lbareoscfg -lbareos -lm $(FDLIBS) $(LIBS) \
 	   $(DLIB) $(WRAPLIBS) $(GETTEXT_LIBS) $(OPENSSL_LIBS) $(GNUTLS_LIBS)
 	strip $@
 
@@ -135,16 +122,16 @@ devclean: realclean
 install: all
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bareos-fd $(DESTDIR)$(sbindir)/bareos-fd
 	@srcconf=bareos-fd.conf; \
-	if  test -f ${DESTDIR}${sysconfdir}/$$srcconf; then \
+	if  test -f ${DESTDIR}${confdir}/$$srcconf; then \
 	   destconf=$$srcconf.new; \
 	   echo "  ==> Found existing $$srcconf, installing new conf file as $$destconf"; \
 	else \
 	   destconf=$$srcconf; \
 	fi; \
-	echo "${INSTALL_CONFIG} $$srcconf ${DESTDIR}${sysconfdir}/$$destconf"; \
-	${INSTALL_CONFIG} $$srcconf ${DESTDIR}${sysconfdir}/$$destconf
+	echo "${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf"; \
+	${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf
 	-@if test "x${fd_group}" != "x"; then \
-	   chgrp -f ${fd_group} ${DESTDIR}${sysconfdir}/$$destconf ; \
+	   chgrp -f ${fd_group} ${DESTDIR}${confdir}/$$destconf ; \
 	fi
 	@if test -f static-bareos-fd; then \
 	   $(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) static-bareos-fd $(DESTDIR)$(sbindir)/static-bareos-fd; \

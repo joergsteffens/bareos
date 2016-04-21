@@ -5,12 +5,12 @@ Date:   Wed Jul 22 17:57:03 2015 +0200
     do not try to generate debian/ files via automake
 
 diff --git a/autoconf/configure.in b/autoconf/configure.in
-index e0e054c..3f006dc 100644
+index 56b3344..9372c9c 100644
 --- a/autoconf/configure.in
 +++ b/autoconf/configure.in
-@@ -3947,43 +3947,6 @@ debian|ubuntu|univention)
+@@ -4189,50 +4189,6 @@ debian|ubuntu|univention)
+    PSCMD="ps -e -o pid,command"
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
-    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
 -      debian/bareos-bat.install \
 -      debian/bareos-bat.postinst \
@@ -32,11 +32,18 @@ index e0e054c..3f006dc 100644
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ceph-plugin.install \
+-      debian/bareos-filedaemon-glusterfs-plugin.install \
+-      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
 -      debian/bareos-filedaemon.postinst \
 -      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-ceph.install \
+-      debian/bareos-storage-ceph.postinst \
+-      debian/bareos-storage-glusterfs.install \
+-      debian/bareos-storage-glusterfs.postinst \
 -      debian/bareos-storage-fifo.postinst \
 -      debian/bareos-storage-fifo.install \
 -      debian/bareos-storage-python-plugin.install \
@@ -52,13 +59,25 @@ index e0e054c..3f006dc 100644
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
+@@ -4443,10 +4399,7 @@ if test "x${support_systemd}" = "xyes"; then
+ 		   platforms/systemd/bareos.conf \
+ 		   platforms/systemd/bareos-dir.service \
+ 		   platforms/systemd/bareos-fd.service \
+-		   platforms/systemd/bareos-sd.service \
+-		   debian/bareos-filedaemon.service \
+-		   debian/bareos-storage.service \
+-		   debian/bareos-director.service"
++		   platforms/systemd/bareos-sd.service"
+     AC_DEFINE(HAVE_SYSTEMD, 1, [Define to 1 if systemd support should be enabled])
+ else
+     AC_MSG_RESULT(no)
 diff --git a/configure b/configure
-index 9952a62..a1e97dd 100755
+index bdd8623..4b2f7fe 100755
 --- a/configure
 +++ b/configure
-@@ -32153,43 +32153,6 @@ debian|ubuntu|univention)
+@@ -32693,50 +32693,6 @@ debian|ubuntu|univention)
+    PSCMD="ps -e -o pid,command"
     DEBIAN_CONTROL_UNIVENTION_BAREOS=/dev/null
-    DEBIAN_CONTROL_UNIVENTION_BAREOS_SCHEMA=/dev/null
     PFILES="${PFILES} ${DEBIAN_CONTROL} \
 -      debian/bareos-bat.install \
 -      debian/bareos-bat.postinst \
@@ -80,11 +99,18 @@ index 9952a62..a1e97dd 100755
 -      debian/bareos-director.install \
 -      debian/bareos-director.postinst \
 -      debian/bareos-director.preinst \
+-      debian/bareos-filedaemon-ceph-plugin.install \
+-      debian/bareos-filedaemon-glusterfs-plugin.install \
+-      debian/bareos-filedaemon-ldap-python-plugin.install \
 -      debian/bareos-filedaemon-python-plugin.install \
 -      debian/bareos-filedaemon.bareos-fd.init \
 -      debian/bareos-filedaemon.install \
 -      debian/bareos-filedaemon.postinst \
 -      debian/bareos-filedaemon.preinst \
+-      debian/bareos-storage-ceph.install \
+-      debian/bareos-storage-ceph.postinst \
+-      debian/bareos-storage-glusterfs.install \
+-      debian/bareos-storage-glusterfs.postinst \
 -      debian/bareos-storage-fifo.postinst \
 -      debian/bareos-storage-fifo.install \
 -      debian/bareos-storage-python-plugin.install \
@@ -100,3 +126,15 @@ index 9952a62..a1e97dd 100755
        platforms/debian/Makefile \
        platforms/debian/set_dbconfig_vars.sh"
     case "$DISTNAME" in
+@@ -33000,10 +32956,7 @@ $as_echo "yes" >&6; }
+ 		   platforms/systemd/bareos.conf \
+ 		   platforms/systemd/bareos-dir.service \
+ 		   platforms/systemd/bareos-fd.service \
+-		   platforms/systemd/bareos-sd.service \
+-		   debian/bareos-filedaemon.service \
+-		   debian/bareos-storage.service \
+-		   debian/bareos-director.service"
++		   platforms/systemd/bareos-sd.service"
+ 
+ $as_echo "#define HAVE_SYSTEMD 1" >>confdefs.h
+ 

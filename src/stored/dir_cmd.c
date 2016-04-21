@@ -45,7 +45,6 @@
 /* Exported variables */
 
 /* Imported variables */
-extern BSOCK *filed_chan;
 extern struct s_last_job last_job;
 extern bool init_done;
 
@@ -196,6 +195,22 @@ static struct s_cmds cmds[] = {
    { NULL, NULL, false } /* list terminator */
 };
 
+ /*
+  * Count the number of running jobs.
+  */
+static inline bool count_running_jobs()
+{
+   JCR *jcr;
+   unsigned int cnt = 0;
+
+   foreach_jcr(jcr) {
+      cnt++;
+   }
+   endeach_jcr(jcr);
+
+   return (cnt >= me->MaxConcurrentJobs) ? false : true;
+}
+
 /*
  * Connection request from an director.
  *
@@ -206,12 +221,17 @@ static struct s_cmds cmds[] = {
  *  - We execute the command
  *  - We continue or exit depending on the return status
  */
-static void *handle_director_connection(BSOCK *dir, char *job_name)
+void *handle_director_connection(BSOCK *dir)
 {
    JCR *jcr;
    int i, errstat;
    int bnet_stat = 0;
    bool found, quit;
+
+   if (!count_running_jobs()) {
+      Emsg0(M_ERROR, 0, _("Number of Jobs exhausted, please increase MaximumConcurrentJobs\n"));
+      return NULL;
+   }
 
    /*
     * This is a connection from the Director, so setup a JCR
@@ -308,64 +328,6 @@ bail_out:
    free_jcr(jcr);
 
    return NULL;
-}
-
-/*
- * Connection request. We accept connections either from the
- * Director, Storage Daemon or a Client (File daemon).
- *
- * Note, we are running as a seperate thread of the Storage daemon.
- *
- * Basic tasks done here:
- *  - If it was a connection from the FD, call handle_filed_connection()
- *  - If it was a connection from an other SD, call handle_stored_connection()
- *  - Otherwise it was a connection from the DIR, call handle_director_connection()
- */
-void *handle_connection_request(void *arg)
-{
-   BSOCK *bs = (BSOCK *)arg;
-   char name[500];
-   char tbuf[100];
-
-   if (bs->recv() <= 0) {
-      Emsg1(M_ERROR, 0, _("Connection request from %s failed.\n"), bs->who());
-      bmicrosleep(5, 0);   /* make user wait 5 seconds */
-      bs->close();
-      return NULL;
-   }
-
-   /*
-    * Do a sanity check on the message received
-    */
-   if (bs->msglen < 25 || bs->msglen > (int)sizeof(name)) {
-      Dmsg1(000, "<filed: %s", bs->msg);
-      Emsg2(M_ERROR, 0, _("Invalid connection from %s. Len=%d\n"), bs->who(), bs->msglen);
-      bmicrosleep(5, 0);   /* make user wait 5 seconds */
-      bs->close();
-      return NULL;
-   }
-
-   Dmsg1(110, "Conn: %s", bs->msg);
-
-   /*
-    * See if this is a File daemon connection. If so call FD handler.
-    */
-   if (sscanf(bs->msg, "Hello Start Job %127s", name) == 1) {
-      Dmsg1(110, "Got a FD connection at %s\n", bstrftimes(tbuf, sizeof(tbuf), (utime_t)time(NULL)));
-      return handle_filed_connection(bs, name);
-   }
-
-   /*
-    * See if this is a Storage daemon connection. If so call SD handler.
-    */
-   if (sscanf(bs->msg, "Hello Start Storage Job %127s", name) == 1) {
-      Dmsg1(110, "Got a SD connection at %s\n", bstrftimes(tbuf, sizeof(tbuf), (utime_t)time(NULL)));
-      return handle_stored_connection(bs, name);
-   }
-
-   Dmsg1(110, "Got a DIR connection at %s\n", bstrftimes(tbuf, sizeof(tbuf), (utime_t)time(NULL)));
-
-   return handle_director_connection(bs, name);
 }
 
 /*
@@ -850,7 +812,7 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
    unbash_spaces(devname);
    foreach_res(device, R_DEVICE) {
       /* Find resource, and make sure we were able to open it */
-      if (bstrcmp(device->hdr.name, devname.c_str())) {
+      if (bstrcmp(device->name(), devname.c_str())) {
          if (!device->dev) {
             device->dev = init_dev(jcr, device);
          }
@@ -860,7 +822,7 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
                  devname.c_str());
             continue;
          }
-         Dmsg1(20, "Found device %s\n", device->hdr.name);
+         Dmsg1(20, "Found device %s\n", device->name());
          found = true;
          break;
       }
@@ -868,10 +830,10 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
    if (!found) {
       foreach_res(changer, R_AUTOCHANGER) {
          /* Find resource, and make sure we were able to open it */
-         if (bstrcmp(devname.c_str(), changer->hdr.name)) {
+         if (bstrcmp(devname.c_str(), changer->name())) {
             /* Try each device in this AutoChanger */
             foreach_alist(device, changer->device) {
-               Dmsg1(100, "Try changer device %s\n", device->hdr.name);
+               Dmsg1(100, "Try changer device %s\n", device->name());
                if (!device->dev) {
                   device->dev = init_dev(jcr, device);
                }
@@ -879,7 +841,7 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
                   Dmsg1(100, "Device %s could not be opened. Skipped\n", devname.c_str());
                   Jmsg(jcr, M_WARNING, 0, _("\n"
                      "     Device \"%s\" in changer \"%s\" requested by DIR could not be opened or does not exist.\n"),
-                       device->hdr.name, devname.c_str());
+                       device->name(), devname.c_str());
                   continue;
                }
                if (!device->dev->autoselect) {
@@ -887,7 +849,7 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
                   continue;              /* device is not available */
                }
                if (drive < 0 || drive == (int)device->dev->drive_index) {
-                  Dmsg1(20, "Found changer device %s\n", device->hdr.name);
+                  Dmsg1(20, "Found changer device %s\n", device->name());
                   found = true;
                   break;
                }
@@ -900,7 +862,7 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
    }
 
    if (found) {
-      Dmsg1(100, "Found device %s\n", device->hdr.name);
+      Dmsg1(100, "Found device %s\n", device->name());
       dcr = New(SD_DCR);
       setup_new_dcr_device(jcr, dcr, device->dev, blocksizes);
       dcr->set_will_write();
@@ -1262,12 +1224,12 @@ static inline bool get_bootstrap_file(JCR *jcr, BSOCK *sock)
    bool ok = false;
 
    if (jcr->RestoreBootstrap) {
-      unlink(jcr->RestoreBootstrap);
+      secure_erase(jcr, jcr->RestoreBootstrap);
       free_pool_memory(jcr->RestoreBootstrap);
    }
    P(bsr_mutex);
    bsr_uniq++;
-   Mmsg(fname, "%s/%s.%s.%d.bootstrap", me->working_directory, me->hdr.name,
+   Mmsg(fname, "%s/%s.%s.%d.bootstrap", me->working_directory, me->name(),
       jcr->Job, bsr_uniq);
    V(bsr_mutex);
    Dmsg1(400, "bootstrap=%s\n", fname);
@@ -1276,7 +1238,7 @@ static inline bool get_bootstrap_file(JCR *jcr, BSOCK *sock)
    if (!bs) {
       berrno be;
       Jmsg(jcr, M_FATAL, 0, _("Could not create bootstrap file %s: ERR=%s\n"),
-         jcr->RestoreBootstrap, be.bstrerror());
+           jcr->RestoreBootstrap, be.bstrerror());
       goto bail_out;
    }
    Dmsg0(10, "=== Bootstrap file ===\n");
@@ -1299,7 +1261,7 @@ static inline bool get_bootstrap_file(JCR *jcr, BSOCK *sock)
    ok = true;
 
 bail_out:
-   unlink(jcr->RestoreBootstrap);
+   secure_erase(jcr, jcr->RestoreBootstrap);
    free_pool_memory(jcr->RestoreBootstrap);
    jcr->RestoreBootstrap = NULL;
    if (!ok) {

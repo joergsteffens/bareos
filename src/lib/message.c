@@ -74,8 +74,9 @@ void setup_tsd_key();
  * Allow only one thread to tweak d->fd at a time
  */
 static pthread_mutex_t fides_mutex = PTHREAD_MUTEX_INITIALIZER;
-static MSGSRES *daemon_msgs;          /* global messages */
-static char *catalog_db = NULL;       /* database type */
+static MSGSRES *daemon_msgs;          /* Global messages */
+static char *catalog_db = NULL;       /* Database type */
+static const char *log_timestamp_format = "%d-%b %H:%M";
 static void (*message_callback)(int type, char *msg) = NULL;
 static FILE *trace_fd = NULL;
 #if defined(HAVE_WIN32)
@@ -144,14 +145,11 @@ static void delivery_error(const char *fmt,...)
    int i, len, maxlen;
    POOLMEM *pool_buf;
    char dt[MAX_TIME_LENGTH];
-   int dtlen;
 
    pool_buf = get_pool_memory(PM_EMSG);
 
-   bstrftime_ny(dt, sizeof(dt), time(NULL));
-   dtlen = strlen(dt);
-   dt[dtlen++] = ' ';
-   dt[dtlen] = 0;
+   bstrftime(dt, sizeof(dt), time(NULL), log_timestamp_format);
+   bstrncat(dt, " ", sizeof(dt));
 
    i = Mmsg(pool_buf, "%s Message delivery ERROR: ", dt);
 
@@ -306,7 +304,7 @@ void init_msg(JCR *jcr, MSGSRES *msg, job_code_callback_t job_code_callback)
       daemon_msgs = (MSGSRES *)malloc(sizeof(MSGSRES));
       memset(daemon_msgs, 0, sizeof(MSGSRES));
       for (i=1; i<=M_MAX; i++) {
-         add_msg_dest(daemon_msgs, MD_STDOUT, i, NULL, NULL);
+         add_msg_dest(daemon_msgs, MD_STDOUT, i, NULL, NULL, NULL);
       }
       Dmsg1(050, "Create daemon global message resource %p\n", daemon_msgs);
       return;
@@ -363,7 +361,7 @@ void init_console_msg(const char *wd)
    if (fd == -1) {
       berrno be;
       Emsg2(M_ERROR_TERM, 0, _("Could not open console message file %s: ERR=%s\n"),
-          con_fname, be.bstrerror());
+            con_fname, be.bstrerror());
    }
    if (lseek(fd, 0, SEEK_END) > 0) {
       console_msg_pending = 1;
@@ -373,12 +371,12 @@ void init_console_msg(const char *wd)
    if (!con_fd) {
       berrno be;
       Emsg2(M_ERROR, 0, _("Could not open console message file %s: ERR=%s\n"),
-          con_fname, be.bstrerror());
+            con_fname, be.bstrerror());
    }
    if (rwl_init(&con_lock) != 0) {
       berrno be;
       Emsg1(M_ERROR_TERM, 0, _("Could not get con mutex: ERR=%s\n"),
-         be.bstrerror());
+            be.bstrerror());
    }
 }
 
@@ -392,7 +390,8 @@ void init_console_msg(const char *wd)
  * but in the case of MAIL is a space separated list of
  * email addresses, ...
  */
-void add_msg_dest(MSGSRES *msg, int dest_code, int msg_type, char *where, char *mail_cmd)
+void add_msg_dest(MSGSRES *msg, int dest_code, int msg_type,
+                  char *where, char *mail_cmd, char *timestamp_format)
 {
    DEST *d;
 
@@ -406,7 +405,7 @@ void add_msg_dest(MSGSRES *msg, int dest_code, int msg_type, char *where, char *
          Dmsg4(850, "Add to existing d=%p msgtype=%d destcode=%d where=%s\n",
                d, msg_type, dest_code, NPRT(where));
          set_bit(msg_type, d->msg_types);
-         set_bit(msg_type, msg->send_msg);  /* set msg_type bit in our local */
+         set_bit(msg_type, msg->send_msg);  /* Set msg_type bit in our local */
          return;
       }
    }
@@ -418,16 +417,23 @@ void add_msg_dest(MSGSRES *msg, int dest_code, int msg_type, char *where, char *
    memset(d, 0, sizeof(DEST));
    d->next = msg->dest_chain;
    d->dest_code = dest_code;
-   set_bit(msg_type, d->msg_types);      /* set type bit in structure */
-   set_bit(msg_type, msg->send_msg);     /* set type bit in our local */
+   set_bit(msg_type, d->msg_types);      /* Set type bit in structure */
+   set_bit(msg_type, msg->send_msg);     /* Set type bit in our local */
+
    if (where) {
       d->where = bstrdup(where);
    }
+
    if (mail_cmd) {
       d->mail_cmd = bstrdup(mail_cmd);
    }
-   Dmsg5(850, "add new d=%p msgtype=%d destcode=%d where=%s mailcmd=%s\n",
-          d, msg_type, dest_code, NPRT(where), NPRT(d->mail_cmd));
+
+   if (timestamp_format) {
+      d->timestamp_format = bstrdup(timestamp_format);
+   }
+
+   Dmsg6(850, "add new d=%p msgtype=%d destcode=%d where=%s mailcmd=%s timestampformat=%s\n",
+         d, msg_type, dest_code, NPRT(where), NPRT(d->mail_cmd), NPRT(d->timestamp_format));
    msg->dest_chain = d;
 }
 
@@ -481,7 +487,6 @@ static BPIPE *open_mail_pipe(JCR *jcr, POOLMEM *&cmd, DEST *d)
    } else {
       Mmsg(cmd, "/usr/lib/sendmail -F BAREOS %s", d->where);
    }
-   fflush(stdout);
 
    if ((bpipe = open_bpipe(cmd, 120, "rw"))) {
       /*
@@ -493,8 +498,9 @@ static BPIPE *open_mail_pipe(JCR *jcr, POOLMEM *&cmd, DEST *d)
    } else {
       berrno be;
       delivery_error(_("open mail pipe %s failed: ERR=%s\n"),
-         cmd, be.bstrerror());
+                     cmd, be.bstrerror());
    }
+
    return bpipe;
 }
 
@@ -681,6 +687,9 @@ void free_msgs_res(MSGSRES *msgs)
       if (d->mail_cmd) {
          free(d->mail_cmd);
       }
+      if (d->timestamp_format) {
+         free(d->timestamp_format);
+      }
       old = d;                        /* save pointer to release */
       d = d->next;                    /* point to next buffer */
       free(old);                      /* free the destination item */
@@ -844,6 +853,7 @@ void dispatch_message(JCR *jcr, int type, utime_t mtime, char *msg)
    MSGSRES *msgs;
    BPIPE *bpipe;
    const char *mode;
+   bool dt_conversion = false;
 
    Dmsg2(850, "Enter dispatch_message type=%d msg=%s", type, msg);
 
@@ -856,15 +866,13 @@ void dispatch_message(JCR *jcr, int type, utime_t mtime, char *msg)
    if (mtime == 0) {
       mtime = time(NULL);
    }
+
    if (mtime == 1) {
       *dt = 0;
       dtlen = 0;
-      mtime = time(NULL);      /* get time for SQL log */
+      mtime = time(NULL);      /* Get time for SQL log */
    } else {
-      bstrftime_ny(dt, sizeof(dt), mtime);
-      dtlen = strlen(dt);
-      dt[dtlen++] = ' ';
-      dt[dtlen] = 0;
+      dt_conversion = true;
    }
 
    /*
@@ -924,6 +932,10 @@ void dispatch_message(JCR *jcr, int type, utime_t mtime, char *msg)
     * If closing this message resource, print and send to syslog, then get out.
     */
    if (msgs->is_closing()) {
+      if (dt_conversion) {
+         bstrftime(dt, sizeof(dt), mtime, log_timestamp_format);
+         bstrncat(dt, " ", sizeof(dt));
+      }
       fputs(dt, stdout);
       fputs(msg, stdout);
       fflush(stdout);
@@ -933,6 +945,20 @@ void dispatch_message(JCR *jcr, int type, utime_t mtime, char *msg)
 
    for (d = msgs->dest_chain; d; d = d->next) {
       if (bit_is_set(type, d->msg_types)) {
+         /*
+          * See if a specific timestamp format was specified for this log resource.
+          * Otherwise apply the global setting in log_timestamp_format.
+          */
+         if (dt_conversion) {
+            if (d->timestamp_format) {
+               bstrftime(dt, sizeof(dt), mtime, d->timestamp_format);
+            } else {
+               bstrftime(dt, sizeof(dt), mtime, log_timestamp_format);
+            }
+            bstrncat(dt, " ", sizeof(dt));
+            dtlen = strlen(dt);
+         }
+
          switch (d->dest_code) {
          case MD_CATALOG:
             if (!jcr || !jcr->db) {
@@ -1096,13 +1122,14 @@ send_to_file:
                   fputs(msg, d->fd);
                }
             }
+            fflush(d->fd);
             msgs->clear_in_use();
             break;
          case MD_DIRECTOR:
             Dmsg1(850, "DIRECTOR for following msg: %s", msg);
             if (jcr && jcr->dir_bsock && !jcr->dir_bsock->errors) {
                jcr->dir_bsock->fsend("Jmsg Job=%s type=%d level=%lld %s",
-                  jcr->Job, type, mtime, msg);
+                                     jcr->Job, type, mtime, msg);
             } else {
                Dmsg1(800, "no jcr for following msg: %s", msg);
             }
@@ -1160,7 +1187,7 @@ static void pt_out(char *buf)
       if (!trace_fd) {
          POOL_MEM fn(PM_FNAME);
 
-         Mmsg(fn, "%s/%s.trace", working_directory ? working_directory : "c:", my_name);
+         Mmsg(fn, "%s/%s.trace", TRACEFILEDIRECTORY, my_name);
          trace_fd = fopen(fn.c_str(), "a+b");
       }
       if (trace_fd) {
@@ -1192,8 +1219,10 @@ static void pt_out(char *buf)
 void d_msg(const char *file, int line, int level, const char *fmt,...)
 {
    va_list ap;
+   char ed1[50];
    int len, maxlen;
-   utime_t mtime;
+   btime_t mtime;
+   uint32_t usecs;
    bool details = true;
    POOL_MEM buf(PM_EMSG),
             more(PM_EMSG);
@@ -1205,20 +1234,20 @@ void d_msg(const char *file, int line, int level, const char *fmt,...)
 
    if (level <= debug_level) {
       if (dbg_timestamp) {
-         mtime = time(NULL);
-         bstrftimes(buf.c_str(), buf.size(), mtime);
-         pm_strcat(buf, " ");
+         mtime = get_current_btime();
+         usecs = mtime % 1000000;
+         Mmsg(buf, "%s.%06d ", bstrftimes(ed1, sizeof(ed1), btime_to_utime(mtime)), usecs);
          pt_out(buf.c_str());
       }
 
 #ifdef FULL_LOCATION
       if (details) {
-         Mmsg(buf, "%s: %s:%d-%u ", my_name, get_basename(file), line, get_jobid_from_tsd());
+         Mmsg(buf, "%s (%d): %s:%d-%u ", my_name, level, get_basename(file), line, get_jobid_from_tsd());
       }
 #endif
 
       while (1) {
-         maxlen = more.size() - 1;
+         maxlen = more.max_size() - 1;
          va_start(ap, fmt);
          len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
          va_end(ap);
@@ -1316,7 +1345,7 @@ void p_msg(const char *file, int line, int level, const char *fmt,...)
 #endif
 
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1389,7 +1418,7 @@ void t_msg(const char *file, int line, int level, const char *fmt,...)
       if (!trace_fd) {
          POOL_MEM fn(PM_FNAME);
 
-         Mmsg(fn, "%s/%s.trace", working_directory ? working_directory : "c:", my_name);
+         Mmsg(fn, "%s/%s.trace", TRACEFILEDIRECTORY, my_name);
          trace_fd = fopen(fn.c_str(), "a+b");
       }
 
@@ -1400,7 +1429,7 @@ void t_msg(const char *file, int line, int level, const char *fmt,...)
 #endif
 
       while (1) {
-         maxlen = more.size() - 1;
+         maxlen = more.max_size() - 1;
          va_start(ap, fmt);
          len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
          va_end(ap);
@@ -1475,7 +1504,7 @@ void e_msg(const char *file, int line, int type, int level, const char *fmt,...)
    }
 
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1536,7 +1565,7 @@ void Jmsg(JCR *jcr, int type, utime_t mtime, const char *fmt,...)
     */
    if (is_watchdog()) {
       while (1) {
-         maxlen = buf.size()- 1;
+         maxlen = buf.max_size() - 1;
          va_start(ap, fmt);
          len = bvsnprintf(buf.c_str(), maxlen, fmt, ap);
          va_end(ap);
@@ -1618,7 +1647,7 @@ void Jmsg(JCR *jcr, int type, utime_t mtime, const char *fmt,...)
    }
 
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1659,7 +1688,7 @@ void j_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const 
 
    Mmsg(buf, "%s:%d ", get_basename(file), line);
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1689,7 +1718,7 @@ int m_msg(const char *file, int line, POOLMEM **pool_buf, const char *fmt, ...)
 
    Mmsg(buf, "%s:%d ", get_basename(file), line);
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1717,7 +1746,7 @@ int m_msg(const char *file, int line, POOLMEM *&pool_buf, const char *fmt, ...)
 
    Mmsg(buf, "%s:%d ", get_basename(file), line);
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1822,7 +1851,7 @@ void Qmsg(JCR *jcr, int type, utime_t mtime, const char *fmt,...)
    MQUEUE_ITEM *item;
 
    while (1) {
-      maxlen = buf.size() - 1;
+      maxlen = buf.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(buf.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1898,7 +1927,7 @@ void q_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const 
 
    Mmsg(buf, "%s:%d ", get_basename(file), line);
    while (1) {
-      maxlen = more.size() - 1;
+      maxlen = more.max_size() - 1;
       va_start(ap, fmt);
       len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
       va_end(ap);
@@ -1914,4 +1943,12 @@ void q_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const 
    pm_strcat(buf, more.c_str());
 
    Qmsg(jcr, type, mtime, "%s", buf.c_str());
+}
+
+/*
+ * Set gobal date format used for log messages.
+ */
+void set_log_timestamp_format(const char *format)
+{
+   log_timestamp_format = format;
 }

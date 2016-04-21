@@ -231,10 +231,14 @@ struct stat
 #define iscsym  __iscsym
 #endif
 
-typedef bool (*t_pVSSPathConvert)(const char *szFilePath, char *szShadowPath, int nBuflen);
-typedef bool (*t_pVSSPathConvertW)(const wchar_t  *szFilePath, wchar_t  *szShadowPath, int nBuflen);
+bool initialize_com_security();
 
-void SetVSSPathConvert(t_pVSSPathConvert pPathConvert, t_pVSSPathConvertW pPathConvertW);
+bool CreateJunction(const char *szJunction, const char *szPath);
+const char *errorString(void);
+
+typedef bool (*t_pVSSPathConvert)(const char *szFilePath, char *szShadowPath, int nBuflen);
+typedef bool (*t_pVSSPathConvertW)(const wchar_t *szFilePath, wchar_t *szShadowPath, int nBuflen);
+bool SetVSSPathConvert(t_pVSSPathConvert pPathConvert, t_pVSSPathConvertW pPathConvertW);
 
 int lchown(const char *, uid_t uid, gid_t gid);
 int chown(const char *, uid_t uid, gid_t gid);
@@ -351,10 +355,10 @@ int win32_chmod(const char *, mode_t, _dev_t);
 char* win32_cgets (char* buffer, int len);
 
 int WSA_Init(void);
+void Win32TSDCleanup();
 void Win32ClearCompatible();
 void Win32SetCompatible();
 bool Win32IsCompatible();
-void Win32ConvCleanupCache();
 
 #if defined(HAVE_MINGW)
 void closelog();
@@ -419,5 +423,7 @@ bool win32_restore_file_attributes(POOLMEM *ofname,
 #ifndef IO_REPARSE_TAG_DEDUP
 #define IO_REPARSE_TAG_DEDUP (0x80000013)
 #endif
+
+#define HAVE_VA_COPY 1
 
 #endif /* __COMPAT_H_ */

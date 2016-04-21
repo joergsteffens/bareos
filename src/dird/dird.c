@@ -54,10 +54,9 @@ static void cleanup_old_files();
 extern "C" void reload_config(int sig);
 extern void invalidate_schedules();
 extern bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code);
+extern void prtmsg(void *sock, const char *fmt, ...);
 
 /* Imported subroutines */
-void start_UA_server(dlist *addrs);
-void stop_UA_server(void);
 void init_job_server(int max_workers);
 void term_job_server();
 void store_jobtype(LEX *lc, RES_ITEM *item, int index, int pass);
@@ -123,20 +122,21 @@ static void usage()
    fprintf(stderr, _(
 PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
-"Usage: bareos-dir [-f -s] [-c config_file] [-d debug_level] [config_file]\n"
-"       -c <file>   set configuration file to file\n"
-"       -d <nn>     set debug level to <nn>\n"
-"       -dt         print timestamp in debug output\n"
-"       -f          run in foreground (for debugging)\n"
-"       -g          groupid\n"
-"       -m          print kaboom output (for debugging)\n"
-"       -r <job>    run <job> now\n"
-"       -s          no signals\n"
-"       -t          test - read configuration and exit\n"
-"       -u          userid\n"
-"       -v          verbose user messages\n"
-"       -x          print configuration file schema in JSON format and exit\n"
-"       -?          print this message.\n"
+"Usage: bareos-dir [options] [-c config_file] [-d debug_level] [config_file]\n"
+"        -c <file>   use <file> as configuration file\n"
+"        -d <nn>     set debug level to <nn>\n"
+"        -dt         print timestamp in debug output\n"
+"        -f          run in foreground (for debugging)\n"
+"        -g <group>  run as group <group>\n"
+"        -m          print kaboom output (for debugging)\n"
+"        -r <job>    run <job> now\n"
+"        -s          no signals (for debugging)\n"
+"        -t          test - read configuration and exit\n"
+"        -u <user>   run as user <user>\n"
+"        -v          verbose user messages\n"
+"        -xc         print configuration and exit\n"
+"        -xs         print configuration file schema in JSON format and exit\n"
+"        -?          print this message.\n"
 "\n"), 2000, VERSION, BDATE);
 
    exit(1);
@@ -158,6 +158,7 @@ int main (int argc, char *argv[])
    JCR *jcr;
    cat_op mode;
    bool no_signals = false;
+   bool export_config = false;
    bool export_config_schema = false;
    char *uid = NULL;
    char *gid = NULL;
@@ -175,7 +176,7 @@ int main (int argc, char *argv[])
 
    console_command = run_console_command;
 
-   while ((ch = getopt(argc, argv, "c:d:fg:mr:stu:vx?")) != -1) {
+   while ((ch = getopt(argc, argv, "c:d:fg:mr:stu:vx:?")) != -1) {
       switch (ch) {
       case 'c':                    /* specify config file */
          if (configfile != NULL) {
@@ -233,14 +234,20 @@ int main (int argc, char *argv[])
          verbose++;
          break;
 
-      case 'x':                    /* export configuration file schema (json) and exit */
-         export_config_schema = true;
+      case 'x':                    /* export configuration/schema and exit */
+         if (*optarg == 's') {
+            export_config_schema = true;
+         } else if (*optarg == 'c') {
+            export_config = true;
+         } else {
+            usage();
+         }
          break;
 
       case '?':
       default:
          usage();
-
+         break;
       }
    }
    argc -= optind;
@@ -274,16 +281,29 @@ int main (int argc, char *argv[])
    }
 
    if (export_config_schema) {
+      POOL_MEM buffer;
+
       my_config = new_config_parser();
       init_dir_config(my_config, configfile, M_ERROR_TERM);
-      POOL_MEM buffer;
       print_config_schema_json(buffer);
-      printf( "%s\n", buffer.c_str() );
+      printf("%s\n", buffer.c_str());
       goto bail_out;
    }
 
    my_config = new_config_parser();
    parse_dir_config(my_config, configfile, M_ERROR_TERM);
+
+   if (export_config) {
+      my_config->dump_resources(prtmsg, NULL);
+      goto bail_out;
+   }
+
+   if (!test_config) {                /* we don't need to do this block in test mode */
+      if (background) {
+         daemon_start();
+         init_stack_dump();              /* grab new pid */
+      }
+   }
 
    if (init_crypto() != 0) {
       Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Cryptography library initialization failed.\n"));
@@ -296,10 +316,6 @@ int main (int argc, char *argv[])
    }
 
    if (!test_config) {                /* we don't need to do this block in test mode */
-      if (background) {
-         daemon_start();
-         init_stack_dump();              /* grab new pid */
-      }
       /* Create pid must come after we are a daemon -- so we have our final pid */
       create_pid_file(me->pid_directory, "bareos-dir",
                       get_first_port_host_order(me->DIRaddrs));
@@ -356,7 +372,7 @@ int main (int argc, char *argv[])
    init_console_msg(working_directory);
 
    Dmsg0(200, "Start UA server\n");
-   start_UA_server(me->DIRaddrs);
+   start_socket_server(me->DIRaddrs);
 
    start_watchdog();                  /* start network watchdog thread */
 
@@ -432,7 +448,7 @@ void terminate_dird(int sig)
       my_config = NULL;
    }
 
-   stop_UA_server();
+   stop_socket_server();
    term_msg();                        /* terminate message handler */
    cleanup_crypto();
    close_memory_pool();               /* release free memory in pool */
@@ -589,6 +605,11 @@ void reload_config(int sig)
          my_config->m_res_head[i] = res_tab[i];
       }
       table = rtable;                 /* release new, bad, saved table below */
+
+      /*
+       * Reset director resource to old config as check_resources() changed it
+       */
+      me = (DIRRES *)GetNextRes(R_DIRECTOR, NULL);
    } else {
       invalidate_schedules();
       /*
@@ -661,9 +682,20 @@ static bool check_resources()
       OK = false;
       goto bail_out;
    } else {
+      /*
+       * Sanity check.
+       */
+      if (me->MaxConsoleConnections > me->MaxConnections) {
+         me->MaxConnections = me->MaxConsoleConnections + 10;
+      }
+
       my_config->m_omit_defaults = me->omit_defaults;
       set_working_directory(me->working_directory);
-      if (!me->messages) {       /* If message resource not specified */
+
+      /*
+       * See if message resource is specified.
+       */
+      if (!me->messages) {
          me->messages = (MSGSRES *)GetNextRes(R_MSGS, NULL);
          if (!me->messages) {
             Jmsg(NULL, M_FATAL, 0, _("No Messages resource defined in %s\n"), configfile);
@@ -733,14 +765,18 @@ static bool check_resources()
        */
       if (OK && (need_tls || me->tls_require)) {
          /*
-          * Initialize TLS context:
-          * Args: CA certfile, CA certdir, Certfile, Keyfile,
-          * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer
+          * Initialize TLS context.
           */
          me->tls_ctx = new_tls_context(me->tls_ca_certfile,
-            me->tls_ca_certdir, me->tls_crlfile, me->tls_certfile,
-            me->tls_keyfile, NULL, NULL, me->tls_dhfile,
-            me->tls_verify_peer);
+                                       me->tls_ca_certdir,
+                                       me->tls_crlfile,
+                                       me->tls_certfile,
+                                       me->tls_keyfile,
+                                       NULL,
+                                       NULL,
+                                       me->tls_dhfile,
+                                       me->tls_cipherlist,
+                                       me->tls_verify_peer);
 
          if (!me->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Director \"%s\" in %s.\n"),
@@ -757,7 +793,7 @@ static bool check_resources()
       goto bail_out;
    }
 
-   if (!populate_jobdefs()) {
+   if (!populate_defs()) {
       OK = false;
       goto bail_out;
    }
@@ -812,14 +848,18 @@ static bool check_resources()
        */
       if (OK && (need_tls || cons->tls_require)) {
          /*
-          * Initialize TLS context:
-          * Args: CA certfile, CA certdir, Certfile, Keyfile,
-          * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer
+          * Initialize TLS context.
           */
          cons->tls_ctx = new_tls_context(cons->tls_ca_certfile,
-                                         cons->tls_ca_certdir, cons->tls_crlfile, cons->tls_certfile,
-                                         cons->tls_keyfile, NULL, NULL,
-                                         cons->tls_dhfile, cons->tls_verify_peer);
+                                         cons->tls_ca_certdir,
+                                         cons->tls_crlfile,
+                                         cons->tls_certfile,
+                                         cons->tls_keyfile,
+                                         NULL,
+                                         NULL,
+                                         cons->tls_dhfile,
+                                         cons->tls_cipherlist,
+                                         cons->tls_verify_peer);
          if (!cons->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
                cons->name(), configfile);
@@ -869,14 +909,19 @@ static bool check_resources()
        */
       if (OK && (need_tls || client->tls_require)) {
          /*
-          * Initialize TLS context:
-          * Args: CA certfile, CA certdir, Certfile, Keyfile,
-          * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer
+          * Initialize TLS context.
           */
          client->tls_ctx = new_tls_context(client->tls_ca_certfile,
-                                           client->tls_ca_certdir, client->tls_crlfile, client->tls_certfile,
-                                           client->tls_keyfile, NULL, NULL, NULL,
-                                           true);
+                                           client->tls_ca_certdir,
+                                           client->tls_crlfile,
+                                           client->tls_certfile,
+                                           client->tls_keyfile,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           client->tls_cipherlist,
+                                           client->tls_verify_peer);
+
          if (!client->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
                client->name(), configfile);
@@ -919,13 +964,19 @@ static bool check_resources()
        */
       if (OK && (need_tls || store->tls_require)) {
         /*
-         * Initialize TLS context:
-         * Args: CA certfile, CA certdir, Certfile, Keyfile,
-         * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer
+         * Initialize TLS context.
          */
          store->tls_ctx = new_tls_context(store->tls_ca_certfile,
-                                          store->tls_ca_certdir, store->tls_crlfile, store->tls_certfile,
-                                          store->tls_keyfile, NULL, NULL, NULL, true);
+                                          store->tls_ca_certdir,
+                                          store->tls_crlfile,
+                                          store->tls_certfile,
+                                          store->tls_keyfile,
+                                          NULL,
+                                          NULL,
+                                          NULL,
+                                          store->tls_cipherlist,
+                                          store->tls_verify_peer);
+
          if (!store->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Storage \"%s\" in %s.\n"),
                  store->name(), configfile);
@@ -953,7 +1004,13 @@ static bool check_resources()
    UnlockRes();
    if (OK) {
       close_msg(NULL);                    /* close temp message handler */
-      init_msg(NULL, me->messages); /* open daemon message handler */
+      init_msg(NULL, me->messages);       /* open daemon message handler */
+      if (me->secure_erase_cmdline) {
+         set_secure_erase_cmdline(me->secure_erase_cmdline);
+      }
+      if (me->log_timestamp_format) {
+         set_log_timestamp_format(me->log_timestamp_format);
+      }
    }
 
 bail_out:
@@ -977,6 +1034,8 @@ static bool initialize_sql_pooling(void)
                                   catalog->db_port,
                                   catalog->db_socket,
                                   catalog->disable_batch_insert,
+                                  catalog->try_reconnect,
+                                  catalog->exit_on_fatal,
                                   catalog->pooling_min_connections,
                                   catalog->pooling_max_connections,
                                   catalog->pooling_increment_connections,
@@ -1227,7 +1286,7 @@ static void cleanup_old_files()
          pm_strcpy(cleanup, basename);
          pm_strcat(cleanup, result->d_name);
          Dmsg1(100, "Unlink: %s\n", cleanup);
-         unlink(cleanup);
+         secure_erase(NULL, cleanup);
       }
    }
 

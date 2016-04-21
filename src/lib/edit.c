@@ -482,7 +482,7 @@ bool is_name_valid(const char *name, POOLMEM **msg)
    int len;
    const char *p;
    /* Special characters to accept */
-   const char *accept = ":.-_ ";
+   const char *accept = ":.-_/ ";
 
    /* No name is invalid */
    if (!name) {
@@ -549,24 +549,3 @@ char *add_commas(char *val, char *buf)
    return buf;
 }
 
-#ifdef TEST_PROGRAM
-void d_msg(const char*, int, int, const char*, ...)
-{}
-int main(int argc, char *argv[])
-{
-   char *str[] = {"3", "3n", "3 hours", "3.5 day", "3 week", "3 m", "3 q", "3 years"};
-   utime_t val;
-   char buf[100];
-   char outval[100];
-
-   for (int i=0; i<8; i++) {
-      strcpy(buf, str[i]);
-      if (!duration_to_utime(buf, &val)) {
-         printf("Error return from duration_to_utime for in=%s\n", str[i]);
-         continue;
-      }
-      edit_utime(val, outval);
-      printf("in=%s val=%" lld " outval=%s\n", str[i], val, outval);
-   }
-}
-#endif

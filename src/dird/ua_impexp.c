@@ -1001,9 +1001,9 @@ static char *move_volumes_in_autochanger(UAContext *ua,
  * Perform the actual move operation which is either a:
  * - import of import slots into normal slots
  * - export of normal slots into export slots
- * - move from one normal slot to an other normal slot
+ * - move from one normal slot to another normal slot
  */
-static int perform_move_operation(UAContext *ua, enum e_move_op operation)
+static bool perform_move_operation(UAContext *ua, enum e_move_op operation)
 {
    bool scan;
    USTORERES store;
@@ -1016,7 +1016,7 @@ static int perform_move_operation(UAContext *ua, enum e_move_op operation)
        nr_enabled_dst_slots = 0;
    int drive = -1;
    int i, max_slots;
-   int retval = 0;
+   bool retval = false;
 
    store.store = get_storage_resource(ua, false, true);
    if (!store.store) {
@@ -1322,7 +1322,7 @@ static int perform_move_operation(UAContext *ua, enum e_move_op operation)
       update_slots_from_vol_list(ua, store.store, vol_list, visited_slot_list);
    }
 
-   retval = 1;
+   retval = true;
 
 bail_out:
    close_sd_bsock(ua);
@@ -1346,7 +1346,7 @@ bail_out:
 /*
  * Import volumes from Import/Export Slots into normal Slots.
  */
-int import_cmd(UAContext *ua, const char *cmd)
+bool import_cmd(UAContext *ua, const char *cmd)
 {
    return perform_move_operation(ua, VOLUME_IMPORT);
 }
@@ -1354,15 +1354,15 @@ int import_cmd(UAContext *ua, const char *cmd)
 /*
  * Export volumes from normal slots to Import/Export Slots.
  */
-int export_cmd(UAContext *ua, const char *cmd)
+bool export_cmd(UAContext *ua, const char *cmd)
 {
    return perform_move_operation(ua, VOLUME_EXPORT);
 }
 
 /*
- * Move volume from one slot to an other.
+ * Move volume from one slot to another.
  */
-int move_cmd(UAContext *ua, const char *cmd)
+bool move_cmd(UAContext *ua, const char *cmd)
 {
    return perform_move_operation(ua, VOLUME_MOVE);
 }

@@ -22,7 +22,7 @@ include Makefile.inc
 
 VERSION_STRING := $(shell grep 'VERSION "' ../include/version.h | cut -d ' ' -f3)
 
-all_subdirs = lib findlib lmdb filed console tools cats dird stored plugins
+all_subdirs = lib findlib lmdb filed console tools cats dird stored plugins lib/unittests tests
 ifeq ($(BUILD_QTGUI),yes)
 all_subdirs += qt-console qt-tray-monitor
 endif
@@ -57,11 +57,14 @@ distclean:
 
 ifeq ($(BUILD_QTGUI),)
 rc-files: tools/bsmtpres.rc \
+	  tools/bregexres.rc \
+	  tools/bwildres.rc \
 	  console/consoleres.rc \
 	  filed/filedres.rc \
 	  stored/storedres.rc \
 	  stored/bextractres.rc \
 	  stored/blsres.rc \
+	  stored/bscanres.rc \
 	  stored/btaperes.rc \
 	  dird/dirdres.rc \
 	  dird/dbcheckres.rc
@@ -69,11 +72,14 @@ rc-files: tools/bsmtpres.rc \
 qt-gui:
 else
 rc-files: tools/bsmtpres.rc \
+	  tools/bregexres.rc \
+	  tools/bwildres.rc \
 	  console/consoleres.rc \
 	  filed/filedres.rc \
 	  stored/storedres.rc \
 	  stored/bextractres.rc \
 	  stored/blsres.rc \
+	  stored/bscanres.rc \
 	  stored/btaperes.rc \
 	  dird/dirdres.rc \
 	  dird/dbcheckres.rc \
@@ -98,6 +104,12 @@ endif
 tools/bsmtpres.rc: tools/bsmtpres.rc.in
 	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
 
+tools/bregexres.rc: tools/bregexres.rc.in
+	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
+
+tools/bwildres.rc: tools/bwildres.rc.in
+	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
+
 console/consoleres.rc: console/consoleres.rc.in
 	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
 
@@ -120,4 +132,7 @@ stored/btaperes.rc: stored/btaperes.rc.in
 	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
 
 stored/blsres.rc: stored/blsres.rc.in
+	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@
+
+stored/bscanres.rc: stored/bscanres.rc.in
 	@sed -e 's/@VERSION@/$(VERSION_STRING)/' $< > $@

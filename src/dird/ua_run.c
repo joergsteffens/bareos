@@ -186,7 +186,7 @@ static inline bool rerun_job(UAContext *ua, JobId_t JobId, bool yes, utime_t now
    Dmsg1(100, "rerun cmdline=%s\n", ua->cmd);
 
    parse_ua_args(ua);
-   return (run_cmd(ua, ua->cmd) != 0);
+   return run_cmd(ua, ua->cmd);
 
 bail_out:
    return false;
@@ -198,7 +198,7 @@ bail_out:
  * Returns: 0 on error
  *          1 if OK
  */
-int rerun_cmd(UAContext *ua, const char *cmd)
+bool rerun_cmd(UAContext *ua, const char *cmd)
 {
    int i, j, d, h, s, u;
    int days = 0;
@@ -221,7 +221,7 @@ int rerun_cmd(UAContext *ua, const char *cmd)
    const int secs_in_hour = 3600;
 
    if (!open_client_db(ua)) {
-      return 1;
+      return true;
    }
 
    now = (utime_t)time(NULL);
@@ -332,10 +332,10 @@ int rerun_cmd(UAContext *ua, const char *cmd)
       }
    }
 
-   return 1;
+   return true;
 
 bail_out:
-   return 0;
+   return false;
 }
 
 /*
@@ -349,7 +349,7 @@ bail_out:
  *          JobId if OK
  *
  */
-int run_cmd(UAContext *ua, const char *cmd)
+int do_run_cmd(UAContext *ua, const char *cmd)
 {
    JCR *jcr = NULL;
    RUN_CTX rc;
@@ -358,7 +358,7 @@ int run_cmd(UAContext *ua, const char *cmd)
    bool do_pool_overrides = true;
 
    if (!open_client_db(ua)) {
-      return 1;
+      return 0;
    }
 
    if (!scan_command_line_arguments(ua, rc)) {
@@ -525,7 +525,9 @@ start_job:
          ua->error_msg(_("Job failed.\n"));
       } else {
          char ed1[50];
-         ua->send_msg(_("Job queued. JobId=%s\n"), edit_int64(JobId, ed1));
+         ua->send->object_start("run");
+         ua->send->object_key_value("jobid", edit_int64(JobId, ed1), _("Job queued. JobId=%s\n"));
+         ua->send->object_end("run");
       }
 
       return JobId;
@@ -534,7 +536,13 @@ start_job:
 bail_out:
    ua->send_msg(_("Job not run.\n"));
    free_jcr(jcr);
+
    return 0;                       /* do not run */
+}
+
+bool run_cmd(UAContext *ua, const char *cmd)
+{
+   return (do_run_cmd(ua, ua->cmd) != 0);
 }
 
 int modify_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
@@ -2011,7 +2019,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    if (!rc.job) {
       return false;
    } else if (!acl_access_ok(ua, Job_ACL, rc.job->name(), true)) {
-      ua->error_msg( _("No authorization. Job \"%s\".\n"), rc.job->name());
+      ua->error_msg(_("No authorization. Job \"%s\".\n"), rc.job->name());
       return false;
    }
 
@@ -2050,7 +2058,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
          ua->error_msg(_("No authorization. Pool \"%s\".\n"), rc.next_pool->name());
          return false;
       }
-      Dmsg1(100, "Using next pool %s\n", rc.pool->name());
+      Dmsg1(100, "Using next pool %s\n", rc.next_pool->name());
    }
 
    if (rc.store_name) {
@@ -2099,11 +2107,14 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
       rc.client = rc.job->client;           /* use default */
    }
 
-   if (rc.client && !acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
-      ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
-      return false;
+   if (rc.client) {
+      if (!acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
+         ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
+         return false;
+      } else {
+         Dmsg1(800, "Using client=%s\n", rc.client->name());
+      }
    }
-   Dmsg1(800, "Using client=%s\n", rc.client->name());
 
    if (rc.restore_client_name) {
       rc.client = GetClientResWithName(rc.restore_client_name);
@@ -2117,12 +2128,14 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
       rc.client = rc.job->client;           /* use default */
    }
 
-   if (rc.client && !acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
-      ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
-      return false;
+   if (rc.client) {
+      if (!acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
+         ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
+         return false;
+      } else {
+         Dmsg1(800, "Using restore client=%s\n", rc.client->name());
+      }
    }
-
-   Dmsg1(800, "Using restore client=%s\n", rc.client->name());
 
    if (rc.fileset_name) {
       rc.fileset = GetFileSetResWithName(rc.fileset_name);

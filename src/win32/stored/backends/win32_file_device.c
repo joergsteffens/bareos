@@ -2,6 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2000-2012 Free Software Foundation Europe e.V.
+   Copyright (C) 2013-2014 Planets Communications B.V.
    Copyright (C) 2013-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -258,7 +259,7 @@ bool win32_file_device::d_truncate(DCR *dcr)
        * Close file and blow it away
        */
       ::close(m_fd);
-      ::unlink(archive_name.c_str());
+      secure_erase(dcr->jcr, archive_name.c_str());
 
       /*
        * Recreate the file -- of course, empty

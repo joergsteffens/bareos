@@ -20,12 +20,12 @@
    02110-1301, USA.
 */
 /*
- * This file handles commands from an other Storage daemon.
+ * This file handles commands from another Storage daemon.
  *
  * Marco van Wieringen, November 2012
  *
  * We get here because the Director has initiated a Job with
- * an other Storage daemon, then done the same with this
+ * another Storage daemon, then done the same with this
  * Storage daemon. When the Storage daemon receives a proper
  * connection from the other Storage daemon, control is
  * passed here to handle the subsequent Storage daemon commands.
@@ -87,7 +87,7 @@ static char Job_end[] =
    "3099 Job %s end JobStatus=%d JobFiles=%d JobBytes=%s JobErrors=%u\n";
 
 /*
- * After receiving a connection (in dircmd.c) if it is
+ * After receiving a connection (in socket_server.c) if it is
  * from the Storage daemon, this routine is called.
  */
 void *handle_stored_connection(BSOCK *sd, char *job_name)

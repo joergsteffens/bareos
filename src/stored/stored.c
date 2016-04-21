@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2012 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2015 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -37,6 +37,7 @@
 
 /* Imported functions */
 extern bool parse_sd_config(CONFIG *config, const char *configfile, int exit_code);
+extern void prtmsg(void *sock, const char *fmt, ...);
 
 /* Forward referenced functions */
 #if !defined(HAVE_WIN32)
@@ -63,11 +64,6 @@ bool init_done = false;
 /* Global static variables */
 static bool foreground = 0;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static workq_t dird_workq;            /* queue for processing connections */
-#if HAVE_NDMP
-static workq_t ndmp_workq;            /* queue for processing NDMP connections */
-#endif
-static alist *sock_fds;
 
 static void usage()
 {
@@ -79,13 +75,15 @@ PROG_COPYRIGHT
 "        -d <nn>     set debug level to <nn>\n"
 "        -dt         print timestamp in debug output\n"
 "        -f          run in foreground (for debugging)\n"
-"        -g <group>  set groupid to group\n"
+"        -g <group>  run as group <group>\n"
 "        -m          print kaboom output (for debugging)\n"
 "        -p          proceed despite I/O errors\n"
 "        -s          no signals (for debugging)\n"
-"        -t          test - read config and exit\n"
-"        -u <user>   userid to <user>\n"
+"        -t          test - read configuration and exit\n"
+"        -u <user>   run as user <user>\n"
 "        -v          verbose user messages\n"
+"        -xc         print configuration and exit\n"
+"        -xs         print configuration file schema in JSON format and exit\n"
 "        -?          print this message.\n"
 "\n"), 2000, VERSION, BDATE);
 
@@ -94,7 +92,7 @@ PROG_COPYRIGHT
 
 /*********************************************************************
  *
- *  Main Bareos Unix Storage Daemon
+ *  Main Bareos Storage Daemon
  *
  */
 #if defined(HAVE_WIN32)
@@ -106,6 +104,8 @@ int main (int argc, char *argv[])
    int ch;
    bool no_signals = false;
    bool test_config = false;
+   bool export_config = false;
+   bool export_config_schema = false;
    pthread_t thid;
    char *uid = NULL;
    char *gid = NULL;
@@ -120,7 +120,9 @@ int main (int argc, char *argv[])
    init_msg(NULL, NULL);
    daemon_start_time = time(NULL);
 
-   /* Sanity checks */
+   /*
+    * Sanity checks
+    */
    if (TAPE_BSIZE % B_DEV_BSIZE != 0 || TAPE_BSIZE / B_DEV_BSIZE == 0) {
       Emsg2(M_ABORT, 0, _("Tape block size (%d) not multiple of system size (%d)\n"),
          TAPE_BSIZE, B_DEV_BSIZE);
@@ -129,7 +131,7 @@ int main (int argc, char *argv[])
       Emsg1(M_ABORT, 0, _("Tape block size (%d) is not a power of 2\n"), TAPE_BSIZE);
    }
 
-   while ((ch = getopt(argc, argv, "c:d:fg:mpstu:v?")) != -1) {
+   while ((ch = getopt(argc, argv, "c:d:fg:mpstu:vx:?")) != -1) {
       switch (ch) {
       case 'c':                    /* configuration file */
          if (configfile != NULL) {
@@ -181,6 +183,16 @@ int main (int argc, char *argv[])
          verbose++;
          break;
 
+      case 'x':                    /* export configuration/schema and exit */
+         if (*optarg == 's') {
+            export_config_schema = true;
+         } else if (*optarg == 'c') {
+            export_config = true;
+         } else {
+            usage();
+         }
+         break;
+
       case '?':
       default:
          usage();
@@ -198,8 +210,13 @@ int main (int argc, char *argv[])
       argc--;
       argv++;
    }
-   if (argc)
+   if (argc) {
       usage();
+   }
+
+   if (configfile == NULL) {
+      configfile = bstrdup(CONFIG_FILE);
+   }
 
    /*
     * See if we want to drop privs.
@@ -212,12 +229,28 @@ int main (int argc, char *argv[])
       init_signals(terminate_stored);
    }
 
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
+   if (export_config_schema) {
+      POOL_MEM buffer;
+
+      my_config = new_config_parser();
+      init_sd_config(my_config, configfile, M_ERROR_TERM);
+      print_config_schema_json(buffer);
+      printf("%s\n", buffer.c_str());
+      goto bail_out;
    }
 
    my_config = new_config_parser();
    parse_sd_config(my_config, configfile, M_ERROR_TERM);
+
+   if (export_config) {
+      my_config->dump_resources(prtmsg, NULL);
+      goto bail_out;
+   }
+
+   if (!foreground && !test_config) {
+      daemon_start();                 /* become daemon */
+      init_stack_dump();              /* pick up new pid */
+   }
 
    if (init_crypto() != 0) {
       Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Cryptography library initialization failed.\n"));
@@ -233,12 +266,7 @@ int main (int argc, char *argv[])
       terminate_stored(0);
    }
 
-   my_name_is(0, (char **)NULL, me->hdr.name);     /* Set our real name */
-
-   if (!foreground) {
-      daemon_start();                 /* become daemon */
-      init_stack_dump();              /* pick up new pid */
-   }
+   my_name_is(0, (char **)NULL, me->name());     /* Set our real name */
 
    create_pid_file(me->pid_directory, "bareos-sd",
                    get_first_port_host_order(me->SDaddrs));
@@ -252,7 +280,7 @@ int main (int argc, char *argv[])
    /*
     * Make sure on Solaris we can run concurrent, watch dog + servers + misc
     */
-   set_thread_concurrency(me->max_concurrent_jobs * 2 + 4);
+   set_thread_concurrency(me->MaxConcurrentJobs * 2 + 4);
    lmgr_init_thread(); /* initialize the lockmanager stack */
 
    load_sd_plugins(me->plugin_directory, me->plugin_names);
@@ -284,23 +312,24 @@ int main (int argc, char *argv[])
    start_statistics_thread();
 
 #if HAVE_NDMP
-   /* Seperate thread that handles NDMP connections */
+   /*
+    * Seperate thread that handles NDMP connections
+    */
    if (me->ndmp_enable) {
-      start_ndmp_thread_server(me->NDMPaddrs,
-                               me->max_concurrent_jobs * 2 + 1,
-                               &ndmp_workq);
+      start_ndmp_thread_server(me->NDMPaddrs, me->MaxConnections);
    }
 #endif
 
-   /* Single server used for Director/Storage and File daemon */
-   sock_fds = New(alist(10, not_owned_by_alist));
-   bnet_thread_server_tcp(me->SDaddrs,
-                      me->max_concurrent_jobs * 2 + 1,
-                      sock_fds,
-                      &dird_workq,
-                      me->nokeepalive,
-                      handle_connection_request);
-   exit(1);                           /* to keep compiler quiet */
+   /*
+    * Single server used for Director/Storage and File daemon
+    */
+   start_socket_server(me->SDaddrs);
+
+   /* to keep compiler quiet */
+   terminate_stored(0);
+
+bail_out:
+   return 0;
 }
 
 /* Return a new Session Id */
@@ -326,15 +355,24 @@ static int check_resources()
          configfile);
       OK = false;
    }
+
    if (GetNextRes(R_DIRECTOR, NULL) == NULL) {
       Jmsg1(NULL, M_ERROR, 0, _("No Director resource defined in %s. Cannot continue.\n"),
          configfile);
       OK = false;
    }
+
    if (GetNextRes(R_DEVICE, NULL) == NULL){
       Jmsg1(NULL, M_ERROR, 0, _("No Device resource defined in %s. Cannot continue.\n"),
            configfile);
       OK = false;
+   }
+
+   /*
+    * Sanity check.
+    */
+   if (me->MaxConnections < ((2 * me->MaxConcurrentJobs) + 2)) {
+      me->MaxConnections = (2 * me->MaxConcurrentJobs) + 2;
    }
 
    if (!me->messages) {
@@ -369,13 +407,13 @@ static int check_resources()
 
       if (!store->tls_certfile && tls_needed) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Certificate\" file not defined for Storage \"%s\" in %s.\n"),
-              store->hdr.name, configfile);
+              store->name(), configfile);
          OK = false;
       }
 
       if (!store->tls_keyfile && tls_needed) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Key\" file not defined for Storage \"%s\" in %s.\n"),
-              store->hdr.name, configfile);
+              store->name(), configfile);
          OK = false;
       }
 
@@ -384,7 +422,7 @@ static int check_resources()
               " or \"TLS CA Certificate Dir\" are defined for Storage \"%s\" in %s."
               " At least one CA certificate store is required"
               " when using \"TLS Verify Peer\".\n"),
-              store->hdr.name, configfile);
+              store->name(), configfile);
          OK = false;
       }
 
@@ -401,11 +439,12 @@ static int check_resources()
                                           NULL,
                                           NULL,
                                           store->tls_dhfile,
+                                          store->tls_cipherlist,
                                           store->tls_verify_peer);
 
          if (!store->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Storage \"%s\" in %s.\n"),
-                 store->hdr.name, configfile);
+                 store->name(), configfile);
             OK = false;
          }
 
@@ -425,13 +464,13 @@ static int check_resources()
 
       if (!director->tls_certfile && tls_needed) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Certificate\" file not defined for Director \"%s\" in %s.\n"),
-              director->hdr.name, configfile);
+              director->name(), configfile);
          OK = false;
       }
 
       if (!director->tls_keyfile && tls_needed) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Key\" file not defined for Director \"%s\" in %s.\n"),
-              director->hdr.name, configfile);
+              director->name(), configfile);
          OK = false;
       }
 
@@ -440,7 +479,7 @@ static int check_resources()
               " or \"TLS CA Certificate Dir\" are defined for Director \"%s\" in %s."
               " At least one CA certificate store is required"
               " when using \"TLS Verify Peer\".\n"),
-              director->hdr.name, configfile);
+              director->name(), configfile);
          OK = false;
       }
 
@@ -457,11 +496,12 @@ static int check_resources()
                                              NULL,
                                              NULL,
                                              director->tls_dhfile,
+                                             director->tls_cipherlist,
                                              director->tls_verify_peer);
 
          if (!director->tls_ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Director \"%s\" in %s.\n"),
-                 director->hdr.name, configfile);
+                 director->name(), configfile);
             OK = false;
          }
 
@@ -472,9 +512,9 @@ static int check_resources()
 
    DEVRES *device;
    foreach_res(device, R_DEVICE) {
-      if (device->drive_crypto_enabled && device->cap_bits & CAP_LABEL) {
+      if (device->drive_crypto_enabled && bit_is_set(CAP_LABEL, device->cap_bits)) {
          Jmsg(NULL, M_FATAL, 0, _("LabelMedia enabled is incompatible with tape crypto on Device \"%s\" in %s.\n"),
-              device->hdr.name, configfile);
+              device->name(), configfile);
          OK = false;
       }
    }
@@ -487,6 +527,12 @@ static int check_resources()
       close_msg(NULL);                   /* close temp message handler */
       init_msg(NULL, me->messages);      /* open daemon message handler */
       set_working_directory(me->working_directory);
+      if (me->secure_erase_cmdline) {
+         set_secure_erase_cmdline(me->secure_erase_cmdline);
+      }
+      if (me->log_timestamp_format) {
+         set_log_timestamp_format(me->log_timestamp_format);
+      }
    }
 
    return OK;
@@ -555,7 +601,7 @@ static void cleanup_old_files()
          pm_strcpy(cleanup, basename);
          pm_strcat(cleanup, result->d_name);
          Dmsg1(500, "Unlink: %s\n", cleanup);
-         unlink(cleanup);
+         secure_erase(NULL, cleanup);
       }
    }
    free(entry);
@@ -627,7 +673,7 @@ void *device_initialization(void *arg)
          get_autochanger_loaded_slot(dcr);
       }
 
-      if (device->cap_bits & CAP_ALWAYSOPEN) {
+      if (bit_is_set(CAP_ALWAYSOPEN, device->cap_bits)) {
          Dmsg1(20, "calling first_open_device %s\n", dev->print_name());
          if (!first_open_device(dcr)) {
             Jmsg1(NULL, M_ERROR, 0, _("Could not open device %s\n"), dev->print_name());
@@ -638,7 +684,7 @@ void *device_initialization(void *arg)
          }
       }
 
-      if (device->cap_bits & CAP_AUTOMOUNT && dev->is_open()) {
+      if (bit_is_set(CAP_AUTOMOUNT, device->cap_bits) && dev->is_open()) {
          switch (read_dev_volume_label(dcr)) {
          case VOL_OK:
             memcpy(&dev->VolCatInfo, &dcr->VolCatInfo, sizeof(dev->VolCatInfo));
@@ -691,9 +737,7 @@ void terminate_stored(int sig)
 #endif
    stop_watchdog();
 
-   cleanup_bnet_thread_server_tcp(sock_fds, &dird_workq);
-   delete sock_fds;
-   sock_fds = NULL;
+   stop_socket_server();
 
    if (sig == SIGTERM) {              /* normal shutdown request? */
       /*

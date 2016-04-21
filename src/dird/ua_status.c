@@ -41,9 +41,10 @@ static void do_scheduler_status(UAContext *ua);
 static bool do_subscription_status(UAContext *ua);
 static void do_all_status(UAContext *ua);
 static void status_slots(UAContext *ua, STORERES *store);
-static void status_content(UAContext *ua, STORERES *store);
+static void status_content_api(UAContext *ua, STORERES *store);
+static void status_content_json(UAContext *ua, STORERES *store);
 
-static char OKqstatus[] =
+static char OKdotstatus[] =
    "1000 OK .status\n";
 static char DotStatusJob[] =
    "JobId=%s JobStatus=%c JobErrors=%d\n";
@@ -68,7 +69,7 @@ bool dot_status_cmd(UAContext *ua, const char *cmd)
 
    if (bstrcasecmp(ua->argk[1], "dir")) {
       if (bstrcasecmp(ua->argk[2], "current")) {
-         ua->send_msg(OKqstatus, ua->argk[2]);
+         ua->send_msg(OKdotstatus, ua->argk[2]);
          foreach_jcr(njcr) {
             if (njcr->JobId != 0 && acl_access_ok(ua, Job_ACL, njcr->res.job->name())) {
                ua->send_msg(DotStatusJob, edit_int64(njcr->JobId, ed1), njcr->JobStatus, njcr->JobErrors);
@@ -76,7 +77,7 @@ bool dot_status_cmd(UAContext *ua, const char *cmd)
          }
          endeach_jcr(njcr);
       } else if (bstrcasecmp(ua->argk[2], "last")) {
-         ua->send_msg(OKqstatus, ua->argk[2]);
+         ua->send_msg(OKdotstatus, ua->argk[2]);
          if ((last_jobs) && (last_jobs->size() > 0)) {
             job = (s_last_job*)last_jobs->last();
             if (acl_access_ok(ua, Job_ACL, job->Job)) {
@@ -132,19 +133,10 @@ bool dot_status_cmd(UAContext *ua, const char *cmd)
    return true;
 }
 
-/* This is the *old* command handler, so we must return
- *  1 or it closes the connection
- */
-int qstatus_cmd(UAContext *ua, const char *cmd)
-{
-   dot_status_cmd(ua, cmd);
-   return 1;
-}
-
 /*
  * status command
  */
-int status_cmd(UAContext *ua, const char *cmd)
+bool status_cmd(UAContext *ua, const char *cmd)
 {
    STORERES *store;
    CLIENTRES *client;
@@ -156,10 +148,10 @@ int status_cmd(UAContext *ua, const char *cmd)
    for (i = 1; i < ua->argc; i++) {
       if (bstrcasecmp(ua->argk[i], NT_("all"))) {
          do_all_status(ua);
-         return 1;
+         return true;
       } else if (bstrncasecmp(ua->argk[i], NT_("dir"), 3)) {
          do_director_status(ua);
-         return 1;
+         return true;
       } else if (bstrcasecmp(ua->argk[i], NT_("client"))) {
          client = get_client_resource(ua);
          if (client) {
@@ -174,15 +166,15 @@ int status_cmd(UAContext *ua, const char *cmd)
                break;
             }
          }
-         return 1;
+         return true;
       } else if (bstrncasecmp(ua->argk[i], NT_("sched"), 5)) {
          do_scheduler_status(ua);
-         return 1;
+         return true;
       } else if (bstrncasecmp(ua->argk[i], NT_("sub"), 3)) {
          if (do_subscription_status(ua)) {
-            return 1;
+            return true;
          } else {
-            return 0;
+            return false;
          }
       } else {
          /*
@@ -199,7 +191,17 @@ int status_cmd(UAContext *ua, const char *cmd)
                case APT_NDMPV4:
                   break;
                default:
-                  status_slots(ua, store);
+                  switch (ua->api) {
+                  case API_MODE_OFF:
+                     status_slots(ua, store);
+                     break;
+                  case API_MODE_ON:
+                     status_content_api(ua, store);
+                     break;
+                  case API_MODE_JSON:
+                     status_content_json(ua, store);
+                     break;
+                  }
                   break;
                }
             } else {
@@ -215,7 +217,8 @@ int status_cmd(UAContext *ua, const char *cmd)
                }
             }
          }
-         return 1;
+
+         return true;
       }
    }
    /* If no args, ask for status type */
@@ -230,7 +233,7 @@ int status_cmd(UAContext *ua, const char *cmd)
       add_prompt(ua, NT_("All"));
       Dmsg0(20, "do_prompt: select daemon\n");
       if ((item=do_prompt(ua, "",  _("Select daemon type for status"), prmt, sizeof(prmt))) < 0) {
-         return 1;
+         return true;
       }
       Dmsg1(20, "item=%d\n", item);
       switch (item) {
@@ -277,7 +280,7 @@ int status_cmd(UAContext *ua, const char *cmd)
          break;
       }
    }
-   return 1;
+   return true;
 }
 
 static void do_all_status(UAContext *ua)
@@ -379,22 +382,37 @@ static void do_all_status(UAContext *ua)
 
 void list_dir_status_header(UAContext *ua)
 {
-   int len;
+   int len, cnt;
+   CATRES *catalog;
    char dt[MAX_TIME_LENGTH];
    char b1[35], b2[35], b3[35], b4[35], b5[35];
-   POOL_MEM msg(PM_FNAME);
+   POOL_MEM msg(PM_FNAME),
+            dbdrivers(PM_FNAME);
 
+   cnt = 0;
+   foreach_res(catalog, R_CATALOG) {
+      if (cnt) {
+         dbdrivers.strcat(" ");
+      }
+      dbdrivers.strcat(catalog->db_driver);
+      cnt++;
+   }
    ua->send_msg(_("%s Version: %s (%s) %s %s %s\n"), my_name, VERSION, BDATE,
                 HOST_OS, DISTNAME, DISTVER);
    bstrftime_nc(dt, sizeof(dt), daemon_start_time);
-   ua->send_msg(_("Daemon started %s. Jobs: run=%d, running=%d mode=%d\n"),
-                dt, num_jobs_run, job_count(), (int)DEVELOPER_MODE);
+   ua->send_msg(_("Daemon started %s. Jobs: run=%d, running=%d mode=%d db=%s\n"),
+                dt, num_jobs_run, job_count(), (int)DEVELOPER_MODE, dbdrivers.c_str() );
    ua->send_msg(_(" Heap: heap=%s smbytes=%s max_bytes=%s bufs=%s max_bufs=%s\n"),
                 edit_uint64_with_commas((char *)sbrk(0)-(char *)start_heap, b1),
                 edit_uint64_with_commas(sm_bytes, b2),
                 edit_uint64_with_commas(sm_max_bytes, b3),
                 edit_uint64_with_commas(sm_buffers, b4),
                 edit_uint64_with_commas(sm_max_buffers, b5));
+
+   if (me->secure_erase_cmdline) {
+      ua->send_msg(_(" secure erase command='%s'\n"), me->secure_erase_cmdline);
+   }
+
    len = list_dir_plugins(msg);
    if (len > 0) {
       ua->send_msg("%s\n", msg.c_str());
@@ -844,7 +862,7 @@ static void prt_runtime(UAContext *ua, sched_pkt *sp)
          set_storageid_in_mr(jcr->res.wstore, &mr);
          Dmsg0(250, "call find_next_volume_for_append\n");
          /* no need to set ScratchPoolId, since we use fnv_no_create_vol */
-         ok = find_next_volume_for_append(jcr, &mr, 1, fnv_no_create_vol, fnv_no_prune);
+         ok = find_next_volume_for_append(jcr, &mr, 1, NULL, fnv_no_create_vol, fnv_no_prune);
       }
       if (!ok) {
          bstrncpy(mr.VolumeName, "*unknown*", sizeof(mr.VolumeName));
@@ -1286,7 +1304,7 @@ static void list_terminated_jobs(UAContext *ua)
    unlock_last_jobs_list();
 }
 
-static void content_send_info(UAContext *ua, char type, int Slot, char *vol_name)
+static void content_send_info_api(UAContext *ua, char type, int Slot, char *vol_name)
 {
    char ed1[50], ed2[50], ed3[50];
    POOL_DBR pr;
@@ -1308,13 +1326,56 @@ static void content_send_info(UAContext *ua, char type, int Slot, char *vol_name
                    edit_uint64(mr.VolBytes, ed1),
                    mr.VolStatus, mr.MediaType, pr.Name,
                    edit_uint64(mr.LastWritten, ed2),
-                   edit_uint64(mr.LastWritten+mr.VolRetention, ed3));
-
+                   edit_uint64(mr.LastWritten + mr.VolRetention, ed3));
    } else {                  /* Media unknown */
       ua->send_msg(slot_api_full_format,
                    type, Slot, 0, mr.VolumeName, "?", "?", "?", "?",
                    "0", "0");
+   }
+}
 
+static void content_send_info_json(UAContext *ua, const char *type, int Slot, char *vol_name)
+{
+   POOL_DBR pr;
+   MEDIA_DBR mr;
+
+   memset(&pr, 0, sizeof(pr));
+   memset(&mr, 0, sizeof(mr));
+
+   bstrncpy(mr.VolumeName, vol_name, sizeof(mr.VolumeName));
+   if (db_get_media_record(ua->jcr, ua->db, &mr)) {
+      pr.PoolId = mr.PoolId;
+      if (!db_get_pool_record(ua->jcr, ua->db, &pr)) {
+         strcpy(pr.Name, "?");
+      }
+
+      ua->send->object_start();
+      ua->send->object_key_value("type", type, "%s\n");
+      ua->send->object_key_value("slotnr", Slot, "%d\n");
+      ua->send->object_key_value("content", "full", "%s\n");
+      ua->send->object_key_value("mr_slotnr", mr.Slot, "%lld\n");
+      ua->send->object_key_value("mr_volname", mr.VolumeName, "%s\n");
+      ua->send->object_key_value("mr_volbytes", mr.VolBytes, "%lld\n");
+      ua->send->object_key_value("mr_volstatus", mr.VolStatus, "%s\n");
+      ua->send->object_key_value("mr_mediatype", mr.MediaType, "%s\n");
+      ua->send->object_key_value("pr_name", pr.Name, "%s\n");
+      ua->send->object_key_value("mr_lastwritten", mr.LastWritten, "%lld\n");
+      ua->send->object_key_value("mr_expire", mr.LastWritten + mr.VolRetention, "%lld\n");
+      ua->send->object_end();
+   } else {                  /* Media unknown */
+      ua->send->object_start();
+      ua->send->object_key_value("type", type, "%s\n");
+      ua->send->object_key_value("slotnr", Slot, "%d\n");
+      ua->send->object_key_value("content", "full", "%s\n");
+      ua->send->object_key_value("mr_slotnr", (uint64_t)0, "%lld\n");
+      ua->send->object_key_value("mr_volname", mr.VolumeName, "%s\n");
+      ua->send->object_key_value("mr_volbytes", "?", "%s\n");
+      ua->send->object_key_value("mr_volstatus", "?", "%s\n");
+      ua->send->object_key_value("mr_mediatype", "?", "%s\n");
+      ua->send->object_key_value("pr_name", "?", "%s\n");
+      ua->send->object_key_value("mr_lastwritten", (uint64_t)0, "%lld\n");
+      ua->send->object_key_value("mr_expire", (uint64_t)0, "%lld\n");
+      ua->send->object_end();
    }
 }
 
@@ -1350,9 +1411,8 @@ static void content_send_info(UAContext *ua, char type, int Slot, char *vol_name
  * S|1|1|vol1|31417344|Full|LTO1-ANSI|Inc|1250858902|1282394902
  * S|2||||||||
  * S|3|3|vol4|15869952|Append|LTO1-ANSI|Inc|1250858907|1282394907
- *
  */
-static void status_content(UAContext *ua, STORERES *store)
+static void status_content_api(UAContext *ua, STORERES *store)
 {
    bool found;
    vol_list_t *vl1, *vl2;
@@ -1391,10 +1451,10 @@ static void status_content(UAContext *ua, STORERES *store)
          case slot_content_full:
             switch (vl1->Type) {
             case slot_type_normal:
-               content_send_info(ua, 'S', vl1->Slot, vl1->VolName);
+               content_send_info_api(ua, 'S', vl1->Slot, vl1->VolName);
                break;
             case slot_type_import:
-               content_send_info(ua, 'I', vl1->Slot, vl1->VolName);
+               content_send_info_api(ua, 'I', vl1->Slot, vl1->VolName);
                break;
             default:
                break;
@@ -1413,10 +1473,10 @@ static void status_content(UAContext *ua, STORERES *store)
                   if (vl1->Slot == vl2->Loaded) {
                      switch (vl1->Type) {
                      case slot_type_normal:
-                        content_send_info(ua, 'S', vl1->Slot, vl2->VolName);
+                        content_send_info_api(ua, 'S', vl1->Slot, vl2->VolName);
                         break;
                      case slot_type_import:
-                        content_send_info(ua, 'I', vl1->Slot, vl2->VolName);
+                        content_send_info_api(ua, 'I', vl1->Slot, vl2->VolName);
                         break;
                      default:
                         break;
@@ -1456,10 +1516,143 @@ static void status_content(UAContext *ua, STORERES *store)
          default:
             break;
          }
+         break;
       default:
          break;
       }
    }
+
+bail_out:
+   if (vol_list) {
+      free_vol_list(vol_list);
+   }
+   close_sd_bsock(ua);
+
+   return;
+}
+
+static void status_content_json(UAContext *ua, STORERES *store)
+{
+   bool found;
+   vol_list_t *vl1, *vl2;
+   dlist *vol_list = NULL;
+
+   if (!open_client_db(ua)) {
+      return;
+   }
+
+   vol_list = get_vol_list_from_SD(ua, store, true /* listall */ , true /* want to see all slots */);
+   if (!vol_list) {
+      ua->warning_msg(_("No Volumes found, or no barcodes.\n"));
+      goto bail_out;
+   }
+
+   ua->send->array_start("contents");
+   foreach_dlist(vl1, vol_list) {
+      switch (vl1->Type) {
+      case slot_type_drive:
+         ua->send->object_start();
+         ua->send->object_key_value("type", "drive", "%s\n");
+         ua->send->object_key_value("slotnr", vl1->Slot, "%d\n");
+         switch (vl1->Content) {
+         case slot_content_full:
+            ua->send->object_key_value("content", "full", "%s\n");
+            ua->send->object_key_value("loaded", vl1->Loaded, "%d\n");
+            ua->send->object_key_value("volname", vl1->VolName, "%s\n");
+            break;
+         case slot_content_empty:
+            ua->send->object_key_value("content", "empty", "%s\n");
+            break;
+         default:
+            break;
+         }
+         ua->send->object_end();
+         break;
+      case slot_type_normal:
+      case slot_type_import:
+         switch (vl1->Content) {
+         case slot_content_full:
+            switch (vl1->Type) {
+            case slot_type_normal:
+               content_send_info_json(ua, "slot", vl1->Slot, vl1->VolName);
+               break;
+            case slot_type_import:
+               content_send_info_json(ua, "import_slot", vl1->Slot, vl1->VolName);
+               break;
+            default:
+               break;
+            }
+            break;
+         case slot_content_empty:
+            /*
+             * See if this empty slot is empty because the volume is loaded
+             * in one of the drives.
+             */
+            found = false;
+            vl2 = (vol_list_t *)vol_list->first();
+            while (!found && vl2) {
+               switch (vl2->Type) {
+               case slot_type_drive:
+                  if (vl1->Slot == vl2->Loaded) {
+                     switch (vl1->Type) {
+                     case slot_type_normal:
+                        content_send_info_json(ua, "slot", vl1->Slot, vl2->VolName);
+                        break;
+                     case slot_type_import:
+                        content_send_info_json(ua, "import_slot", vl1->Slot, vl2->VolName);
+                        break;
+                     default:
+                        break;
+                     }
+                     found = true;
+
+                     /*
+                      * When we used this entry we can remove it from
+                      * the list so we limit the search time next round.
+                      */
+                     vol_list->remove(vl2);
+                     if (vl2->VolName) {
+                        free(vl2->VolName);
+                     }
+                     free(vl2);
+                     continue;
+                  }
+                  break;
+               default:
+                  break;
+               }
+               vl2 = (vol_list_t *)vol_list->next((void *)vl2);
+            }
+            if (!found) {
+               switch (vl1->Type) {
+               case slot_type_normal:
+                  ua->send->object_start();
+                  ua->send->object_key_value("type", "slot", "%s\n");
+                  ua->send->object_key_value("slotnr", vl1->Slot, "%d\n");
+                  ua->send->object_key_value("content", "empty", "%s\n");
+                  ua->send->object_end();
+                  break;
+               case slot_type_import:
+                  ua->send->object_start();
+                  ua->send->object_key_value("type", "import_slot", "%s\n");
+                  ua->send->object_key_value("slotnr", vl1->Slot, "%d\n");
+                  ua->send->object_key_value("content", "empty", "%s\n");
+                  ua->send->object_end();
+                  break;
+               default:
+                  break;
+               }
+            }
+            break;
+         default:
+            break;
+         }
+         break;
+      default:
+         break;
+      }
+   }
+   ua->send->array_end("contents");
 
 bail_out:
    if (vol_list) {
@@ -1487,11 +1680,6 @@ static void status_slots(UAContext *ua, STORERES *store_r)
     * Slot | Volume | Status | MediaType | Pool
     */
    const char *slot_hformat=" %4i%c| %16s | %9s | %14s | %24s |\n";
-
-   if (ua->api) {
-      status_content(ua, store_r);
-      return;
-   }
 
    if (!open_client_db(ua)) {
       return;

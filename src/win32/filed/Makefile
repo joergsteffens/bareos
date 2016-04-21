@@ -31,6 +31,7 @@ INCLUDES = -I. \
 	   -I../.. \
 	   -I../../include \
 	   -I../../lmdb \
+	   -I../../filed \
 	   -I../include \
 	   -I../compat/include \
 	   -I../vss/include
@@ -43,12 +44,13 @@ LDLIBS = ../lib/libbareos.a \
          $(MINGW_LIB)/liblzo2.dll.a \
          $(MINGW_LIB)/libfastlz.dll.a \
          $(MINGW_LIB)/libpthreadGCE2.a \
+         $(MINGW_LIB)/libjansson.a \
 	 $(WINSOCKLIB) -lole32 -loleaut32 -luuid -lcomctl32
 
 SVRSRCS = accurate.c accurate_htable.c accurate_lmdb.c authenticate.c \
 	  backup.c compression.c crypto.c dir_cmd.c estimate.c \
 	  fd_plugins.c filed_conf.c filed.c fileset.c heartbeat.c \
-	  restore.c sd_cmds.c status.c verify.c verify_vol.c \
+	  restore.c sd_cmds.c socket_server.c status.c verify.c verify_vol.c \
 	  vss.c vss_XP.c vss_W2K3.c vss_Vista.c service.c main.c
 
 SVROBJS = $(SVRSRCS:.c=.o)

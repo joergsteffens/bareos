@@ -414,6 +414,16 @@ VOLRES *reserve_volume(DCR *dcr, const char *VolumeName)
    Dmsg2(dbglvl, "enter reserve_volume=%s drive=%s\n", VolumeName, dcr->dev->print_name());
 
    /*
+    * If aquiring a volume for writing it may not be on the read volume list.
+    */
+   if (me->filedevice_concurrent_read && dcr->is_writing() && find_read_volume(VolumeName)) {
+      Mmsg(dcr->jcr->errmsg,
+           _("Could not reserve volume \"%s\" for append, because it is read by another Job.\n"),
+           dev->VolHdr.VolumeName);
+      return NULL;
+   }
+
+   /*
     * We lock the reservations system here to ensure when adding a new volume that no newly
     * scheduled job can reserve it.
     */
@@ -470,11 +480,29 @@ VOLRES *reserve_volume(DCR *dcr, const char *VolumeName)
    nvol = new_vol_item(dcr, VolumeName);
 
    /*
-    * Now try to insert the new Volume
+    * See if this is a request for reading a file type device which can be
+    * accesses by multiple readers at once without disturbing each other.
     */
-   vol = (VOLRES *)vol_list->binary_insert(nvol, compare_by_volumename);
+   if (me->filedevice_concurrent_read && !dcr->is_writing() && dev->is_file()) {
+      nvol->set_jobid(dcr->jcr->JobId);
+      nvol->set_reading();
+      vol = nvol;
+      dev->vol = vol;
+
+      /*
+       * Read volumes on file based devices are not inserted into the write volume list.
+       */
+      goto get_out;
+   } else {
+      /*
+       * Now try to insert the new Volume
+       */
+      vol = (VOLRES *)vol_list->binary_insert(nvol, compare_by_volumename);
+   }
+
    if (vol != nvol) {
       Dmsg2(dbglvl, "Found vol=%s dev-same=%d\n", vol->vol_name, dev==vol->dev);
+
       /*
        * At this point, a Volume with this name already is in the list,
        * so we simply release our new Volume entry. Note, this should
@@ -734,7 +762,18 @@ bool free_volume(DEVICE *dev)
    if (!vol->is_swapping()) {
       Dmsg1(dbglvl, "=== clear in_use vol=%s\n", vol->vol_name);
       dev->vol = NULL;
-      vol_list->remove(vol);
+
+      /*
+       * Volume is on write volume list if one of the folling is applicable:
+       *  - The volume is written to.
+       *  - Config option filedevice_concurrent_read is not on.
+       *  - The device is not of type File.
+       */
+      if (vol->is_writing() ||
+          !me->filedevice_concurrent_read ||
+          !dev->is_file()) {
+         vol_list->remove(vol);
+      }
       Dmsg2(dbglvl, "=== remove volume %s dev=%s\n", vol->vol_name, dev->print_name());
       free_vol_item(vol);
 

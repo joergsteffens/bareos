@@ -34,7 +34,6 @@
 extern bool GetWindowsVersionString(char *buf, int maxsiz);
 
 /* Imported variables */
-extern BSOCK *filed_chan;
 extern void *start_heap;
 
 /* Static variables */
@@ -138,15 +137,20 @@ static void list_resources(STATUS_PKT *sp)
 #ifdef xxxx
 static find_device(char *devname)
 {
+   bool found;
+   DEVRES *device;
+   AUTOCHANGERRES *changer;
+
    foreach_res(device, R_DEVICE) {
-      if (strcasecmp(device->hdr.name, devname) == 0) {
+      if (strcasecmp(device->name(), devname) == 0) {
          found = true;
          break;
       }
    }
+
    if (!found) {
       foreach_res(changer, R_AUTOCHANGER) {
-         if (strcasecmp(changer->hdr.name, devname) == 0) {
+         if (strcasecmp(changer->name(), devname) == 0) {
             break;
          }
       }
@@ -203,11 +207,11 @@ static void list_devices(JCR *jcr, STATUS_PKT *sp, const char *devicenames)
       /*
        * See if we need to list this autochanger.
        */
-      if (devicenames && !need_to_list_device(devicenames, changer->hdr.name)) {
+      if (devicenames && !need_to_list_device(devicenames, changer->name())) {
          continue;
       }
 
-      len = Mmsg(msg, _("Autochanger \"%s\" with devices:\n"), changer->hdr.name);
+      len = Mmsg(msg, _("Autochanger \"%s\" with devices:\n"), changer->name());
       sendit(msg, len, sp);
 
       foreach_alist(device, changer->device) {
@@ -215,7 +219,7 @@ static void list_devices(JCR *jcr, STATUS_PKT *sp, const char *devicenames)
             len = Mmsg(msg, "   %s\n", device->dev->print_name());
             sendit(msg, len, sp);
          } else {
-            len = Mmsg(msg, "   %s\n", device->hdr.name);
+            len = Mmsg(msg, "   %s\n", device->name());
             sendit(msg, len, sp);
          }
       }
@@ -233,14 +237,14 @@ static void list_devices(JCR *jcr, STATUS_PKT *sp, const char *devicenames)
             /*
              * See if we need to list this particular device part of the given autochanger.
              */
-            if (!need_to_list_device(devicenames, device->changer_res->hdr.name)) {
+            if (!need_to_list_device(devicenames, device->changer_res->name())) {
                continue;
             }
          } else {
             /*
              * Try matching a non autochanger device.
              */
-            if (!need_to_list_device(devicenames, device->hdr.name)) {
+            if (!need_to_list_device(devicenames, device->name())) {
                continue;
             }
          }
@@ -333,7 +337,7 @@ static void list_devices(JCR *jcr, STATUS_PKT *sp, const char *devicenames)
             sendit(msg, len, sp);
             send_blocked_status(dev, sp);
          } else {
-            len = Mmsg(msg, _("\nDevice \"%s\" is not open or does not exist.\n"), device->hdr.name);
+            len = Mmsg(msg, _("\nDevice \"%s\" is not open or does not exist.\n"), device->name());
             sendit(msg, len, sp);
          }
       }
@@ -429,6 +433,12 @@ static void list_status_header(STATUS_PKT *sp)
               (int)sizeof(int64_t), (int)DEVELOPER_MODE,
               edit_uint64_with_commas(me->max_bandwidth_per_job / 1024, b1));
    sendit(msg, len, sp);
+
+
+   if (me->secure_erase_cmdline) {
+      len = Mmsg(msg, _(" secure erase command='%s'\n"), me->secure_erase_cmdline);
+      sendit(msg, len, sp);
+   }
 
    len = list_sd_plugins(msg);
    if (len > 0) {
@@ -545,18 +555,18 @@ static void send_device_status(DEVICE *dev, STATUS_PKT *sp)
       sendit(msg, len, sp);
 
       len = Mmsg(msg, "  %sEOF %sBSR %sBSF %sFSR %sFSF %sEOM %sREM %sRACCESS %sAUTOMOUNT %sLABEL %sANONVOLS %sALWAYSOPEN\n",
-         dev->capabilities & CAP_EOF ? "" : "!",
-         dev->capabilities & CAP_BSR ? "" : "!",
-         dev->capabilities & CAP_BSF ? "" : "!",
-         dev->capabilities & CAP_FSR ? "" : "!",
-         dev->capabilities & CAP_FSF ? "" : "!",
-         dev->capabilities & CAP_EOM ? "" : "!",
-         dev->capabilities & CAP_REM ? "" : "!",
-         dev->capabilities & CAP_RACCESS ? "" : "!",
-         dev->capabilities & CAP_AUTOMOUNT ? "" : "!",
-         dev->capabilities & CAP_LABEL ? "" : "!",
-         dev->capabilities & CAP_ANONVOLS ? "" : "!",
-         dev->capabilities & CAP_ALWAYSOPEN ? "" : "!");
+                 dev->has_cap(CAP_EOF) ? "" : "!",
+                 dev->has_cap(CAP_BSR) ? "" : "!",
+                 dev->has_cap(CAP_BSF) ? "" : "!",
+                 dev->has_cap(CAP_FSR) ? "" : "!",
+                 dev->has_cap(CAP_FSF) ? "" : "!",
+                 dev->has_cap(CAP_EOM) ? "" : "!",
+                 dev->has_cap(CAP_REM) ? "" : "!",
+                 dev->has_cap(CAP_RACCESS) ? "" : "!",
+                 dev->has_cap(CAP_AUTOMOUNT) ? "" : "!",
+                 dev->has_cap(CAP_LABEL) ? "" : "!",
+                 dev->has_cap(CAP_ANONVOLS) ? "" : "!",
+                 dev->has_cap(CAP_ALWAYSOPEN) ? "" : "!");
       sendit(msg, len, sp);
    }
 
@@ -567,15 +577,15 @@ static void send_device_status(DEVICE *dev, STATUS_PKT *sp)
       dev->is_open() ? "" : "!",
       dev->is_tape() ? "" : "!",
       dev->is_labeled() ? "" : "!",
-      dev->state & ST_MALLOC ? "" : "!",
+      bit_is_set(ST_MALLOC, dev->state) ? "" : "!",
       dev->can_append() ? "" : "!",
       dev->can_read() ? "" : "!",
       dev->at_eot() ? "" : "!",
-      dev->state & ST_WEOT ? "" : "!",
+      bit_is_set(ST_WEOT, dev->state) ? "" : "!",
       dev->at_eof() ? "" : "!",
-      dev->state & ST_NEXTVOL ? "" : "!",
-      dev->state & ST_SHORT ? "" : "!",
-      dev->state & ST_MOUNTED ? "" : "!");
+      bit_is_set(ST_NEXTVOL, dev->state) ? "" : "!",
+      bit_is_set(ST_SHORT, dev->state) ? "" : "!",
+      bit_is_set(ST_MOUNTED, dev->state) ? "" : "!");
    sendit(msg, len, sp);
 
    len = Mmsg(msg, _("  num_writers=%d reserves=%d block=%d\n"), dev->num_writers,

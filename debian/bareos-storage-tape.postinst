@@ -22,7 +22,9 @@ daemon_group=bareos
 
 permissions()
 {
-  chown root:${daemon_group} /etc/bareos/bareos-sd.d/device-tape-with-autoloader.conf
+  if [ -f "/etc/bareos/bareos-sd.d/device-tape-with-autoloader.conf" ]; then
+    chown root:${daemon_group} /etc/bareos/bareos-sd.d/device-tape-with-autoloader.conf
+  fi
 }
 
 case "$1" in

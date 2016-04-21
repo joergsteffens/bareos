@@ -1,6 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
+   Copyright (C) 2014-2014 Planets Communications B.V.
    Copyright (C) 2014-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -29,6 +30,25 @@
 #ifdef HAVE_GFAPI
 #include "stored.h"
 #include "backends/gfapi_device.h"
+
+/*
+ * Options that can be specified for this device type.
+ */
+enum device_option_type {
+   argument_none = 0,
+   argument_uri
+};
+
+struct device_option {
+   const char *name;
+   enum device_option_type type;
+   int compare_size;
+};
+
+static device_option device_options[] = {
+   { "uri=", argument_uri, 4 },
+   { NULL, argument_none }
+};
 
 /*
  * Parse a gluster definition into something we can use for setting
@@ -239,40 +259,40 @@ bail_out:
 /*
  * Create a parent directory using the gfapi.
  */
-static inline bool gfapi_makedir(glfs_t *glfs, const char *directory)
+static inline bool gfapi_makedirs(glfs_t *glfs, const char *directory)
 {
+   int len;
    char *bp;
    struct stat st;
    bool retval = false;
    POOL_MEM new_directory(PM_FNAME);
 
    pm_strcpy(new_directory, directory);
+   len = strlen(new_directory.c_str());
 
    /*
-    * See if the parent exists.
+    * Strip any trailing slashes.
     */
-   bp = strrchr(new_directory.c_str(), '/');
-   if (bp) {
-      /*
-       * See if we reached the root.
-       */
-      if (bp == new_directory.c_str()) {
-         /*
-          * Create the directory.
-          */
-         if (glfs_mkdir(glfs, directory, 0750) == 0) {
-            retval = true;
-         }
-      } else {
-         *bp = '\0';
+   for (char *p = new_directory.c_str() + (len - 1);
+        (p >= new_directory.c_str()) && *p == '/';
+        p--) {
+      *p = '\0';
+   }
 
-         if (glfs_stat(glfs, new_directory.c_str(), &st) != 0) {
-            switch (errno) {
-            case ENOENT:
+   if (strlen(new_directory.c_str()) &&
+       glfs_stat(glfs, new_directory.c_str(), &st) != 0) {
+      /*
+       * See if the parent exists.
+       */
+      switch (errno) {
+         case ENOENT:
+            bp = strrchr(new_directory.c_str(), '/');
+            if (bp) {
                /*
                 * Make sure our parent exists.
                 */
-               retval = gfapi_makedir(glfs, new_directory.c_str());
+               *bp = '\0';
+               retval = gfapi_makedirs(glfs, new_directory.c_str());
                if (!retval) {
                   return false;
                }
@@ -283,14 +303,13 @@ static inline bool gfapi_makedir(glfs_t *glfs, const char *directory)
                if (glfs_mkdir(glfs, directory, 0750) == 0) {
                   retval = true;
                }
-               break;
-            default:
-               break;
             }
-         } else {
-            retval = true;
-         }
+            break;
+         default:
+            break;
       }
+   } else {
+      retval = true;
    }
 
    return retval;
@@ -306,15 +325,64 @@ int gfapi_device::d_open(const char *pathname, int flags, int mode)
    /*
     * Parse the gluster URI.
     */
-   if (!m_gfapi_volume) {
-      m_gfapi_volume = bstrdup(dev_name);
-      if (!parse_gfapi_devicename(m_gfapi_volume,
+   if (!m_gfapi_configstring) {
+      char *bp, *next_option;
+      bool done;
+
+      if (!dev_options) {
+         Mmsg0(errmsg, _("No device options configured\n"));
+         Emsg0(M_FATAL, 0, errmsg);
+         goto bail_out;
+      }
+
+      m_gfapi_configstring = bstrdup(dev_options);
+
+      bp = m_gfapi_configstring;
+      while (bp) {
+         next_option = strchr(bp, ',');
+         if (next_option) {
+            *next_option++ = '\0';
+         }
+
+         done = false;
+         for (int i = 0; !done && device_options[i].name; i++) {
+            /*
+             * Try to find a matching device option.
+             */
+            if (bstrncasecmp(bp, device_options[i].name, device_options[i].compare_size)) {
+               switch (device_options[i].type) {
+               case argument_uri:
+                  m_gfapi_uri = bp + device_options[i].compare_size;
+                  done = true;
+                  break;
+               default:
+                  break;
+               }
+            }
+         }
+
+         if (!done) {
+            Mmsg1(errmsg, _("Unable to parse device option: %s\n"), bp);
+            Emsg0(M_FATAL, 0, errmsg);
+            goto bail_out;
+         }
+
+         bp = next_option;
+      }
+
+      if (!m_gfapi_uri) {
+         Mmsg0(errmsg, _("No GFAPI URI configured\n"));
+         Emsg0(M_FATAL, 0, errmsg);
+         goto bail_out;
+      }
+
+      if (!parse_gfapi_devicename(m_gfapi_uri,
                                   &m_transport,
                                   &m_servername,
                                   &m_volumename,
                                   &m_basedir,
                                   &m_serverport)) {
-         Mmsg1(errmsg, _("Unable to parse device URI %s.\n"), dev_name);
+         Mmsg1(errmsg, _("Unable to parse device URI %s.\n"), dev_options);
          Emsg0(M_FATAL, 0, errmsg);
          goto bail_out;
       }
@@ -368,7 +436,7 @@ int gfapi_device::d_open(const char *pathname, int flags, int mode)
       if (glfs_stat(m_glfs, m_virtual_filename, &st) != 0) {
          switch (errno) {
          case ENOENT:
-            if (!gfapi_makedir(m_glfs, m_virtual_filename)) {
+            if (!gfapi_makedirs(m_glfs, m_virtual_filename)) {
                Mmsg1(errmsg, _("Specified glusterfs direcory %s cannot be created.\n"), m_virtual_filename);
                Emsg0(M_FATAL, 0, errmsg);
                goto bail_out;
@@ -497,6 +565,7 @@ bool gfapi_device::d_truncate(DCR *dcr)
          berrno be;
 
          Mmsg2(errmsg, _("Unable to stat device %s. ERR=%s\n"), prt_name, be.bstrerror());
+         Dmsg1(100, "%s", errmsg);
          return false;
       }
 
@@ -541,9 +610,9 @@ gfapi_device::~gfapi_device()
       m_glfs = NULL;
    }
 
-   if (m_gfapi_volume) {
-      free(m_gfapi_volume);
-      m_gfapi_volume = NULL;
+   if (m_gfapi_configstring) {
+      free(m_gfapi_configstring);
+      m_gfapi_configstring = NULL;
    }
 
    free_pool_memory(m_virtual_filename);
@@ -551,7 +620,7 @@ gfapi_device::~gfapi_device()
 
 gfapi_device::gfapi_device()
 {
-   m_gfapi_volume = NULL;
+   m_gfapi_configstring = NULL;
    m_transport = NULL;
    m_servername = NULL;
    m_volumename = NULL;

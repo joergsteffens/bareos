@@ -1,6 +1,7 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
+   Copyright (C) 2014-2014 Planets Communications B.V.
    Copyright (C) 2014-2014 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
@@ -29,6 +30,27 @@
 #ifdef HAVE_OBJECTSTORE
 #include "stored.h"
 #include "object_store_device.h"
+
+/*
+ * Options that can be specified for this device type.
+ */
+enum device_option_type {
+   argument_none = 0,
+   argument_profile,
+   argument_bucket
+};
+
+struct device_option {
+   const char *name;
+   enum device_option_type type;
+   int compare_size;
+};
+
+static device_option device_options[] = {
+   { "profile=", argument_profile, 8 },
+   { "bucket=", argument_bucket, 7 },
+   { NULL, argument_none }
+};
 
 static int droplet_reference_count = 0;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -114,25 +136,66 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
 
    if (!m_object_configstring) {
       int len;
-      char *bp;
+      char *bp, *next_option;
+      bool done;
 
-      m_object_configstring = bstrdup(dev_name);
+      if (!dev_options) {
+         Mmsg0(errmsg, _("No device options configured\n"));
+         Emsg0(M_FATAL, 0, errmsg);
+         return -1;
+      }
 
-      /*
-       * See if there is a bucket defined.
-       */
-      bp = strchr(m_object_configstring, ':');
-      if (bp) {
-         *bp++ = '\0';
-         m_object_bucketname = bp;
+      m_object_configstring = bstrdup(dev_options);
+
+      bp = m_object_configstring;
+      while (bp) {
+         next_option = strchr(bp, ',');
+         if (next_option) {
+            *next_option++ = '\0';
+         }
+
+         done = false;
+         for (int i = 0; !done && device_options[i].name; i++) {
+            /*
+             * Try to find a matching device option.
+             */
+            if (bstrncasecmp(bp, device_options[i].name, device_options[i].compare_size)) {
+               switch (device_options[i].type) {
+               case argument_profile:
+                  m_profile = bp + device_options[i].compare_size;
+                  done = true;
+                  break;
+               case argument_bucket:
+                  m_object_bucketname = bp + device_options[i].compare_size;
+                  done = true;
+                  break;
+               default:
+                  break;
+               }
+            }
+         }
+
+         if (!done) {
+            Mmsg1(errmsg, _("Unable to parse device option: %s\n"), bp);
+            Emsg0(M_FATAL, 0, errmsg);
+            goto bail_out;
+         }
+
+         bp = next_option;
+      }
+
+      if (!m_profile) {
+         Mmsg0(errmsg, _("No droplet profile configured\n"));
+         Emsg0(M_FATAL, 0, errmsg);
+         goto bail_out;
       }
 
       /*
        * Strip any .profile prefix from the libdroplet profile name.
        */
-      len = strlen(m_object_configstring);
-      if (len > 8 && bstrcasecmp(m_object_configstring + (len - 8), ".profile")) {
-         m_object_configstring[len - 8] = '\0';
+      len = strlen(m_profile);
+      if (len > 8 && bstrcasecmp(m_profile + (len - 8), ".profile")) {
+         m_profile[len - 8] = '\0';
       }
    }
 
@@ -170,7 +233,7 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
        * If we failed to allocate a new context fail the open.
        */
       if (!m_ctx) {
-         Mmsg1(errmsg, _("Failed to create a new context using config %s\n"), dev_name);
+         Mmsg1(errmsg, _("Failed to create a new context using config %s\n"), dev_options);
          return -1;
       }
 
@@ -228,6 +291,7 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
                         NULL, /* metadata */
                         NULL, /* sysmd */
                         NULL, /* query_params */
+                        NULL, /* stream_status */
                         &m_vfd);
    } else {
       dpl_flags = DPL_VFILE_FLAG_RDWR;
@@ -239,6 +303,7 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
                         NULL, /* metadata */
                         NULL, /* sysmd */
                         NULL, /* query_params */
+                        NULL, /* stream_status */
                         &m_vfd);
    }
 
@@ -252,6 +317,9 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
       m_vfd = NULL;
       return droplet_errno_to_system_errno(status);
    }
+
+bail_out:
+   return -1;
 }
 
 /*
@@ -260,7 +328,7 @@ int object_store_device::d_open(const char *pathname, int flags, int mode)
 ssize_t object_store_device::d_read(int fd, void *buffer, size_t count)
 {
    if (m_vfd) {
-      int buflen;
+      unsigned int buflen;
       dpl_status_t status;
 
       buflen = count;
@@ -437,6 +505,7 @@ bool object_store_device::d_truncate(DCR *dcr)
                         NULL, /* metadata */
                         NULL, /* sysmd */
                         NULL, /* query_params */
+                        NULL, /* stream_status */
                         &m_vfd);
 
       switch (status) {

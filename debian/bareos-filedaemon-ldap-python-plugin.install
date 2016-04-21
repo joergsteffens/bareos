@@ -1,0 +1,3 @@
+/usr/lib/bareos/plugins/bareos-fd-ldap.py*
+/usr/lib/bareos/plugins/BareosFdPluginLDAP.py*
+/etc/bareos/bareos-dir.d/plugin-python-ldap.conf

@@ -1,0 +1,58 @@
+[Application]
+ID=bareos
+Logo=bareos-logo.svg
+LogoDetailPage=bareos-logo-full.svg
+
+# 2-char Code for this App ID
+Code=BR
+Name=Bareos Backup Server
+Version=@VERSION@
+
+EmailRequired=True
+NotifyVendor=True
+
+Description=Scalable open source network backup solution
+LongDescription=Bareos (Backup Archiving Recovery Open Sourced) is a reliable,
+ network-based open source software for backup, archiving and recovery
+ of data for all well-established operating systems (Linux, UN*X, MacOS, Windows).
+ It has a WebUI and Univention Management Console integration.
+Thumbnails=bareos-webui_screenshot.png
+Categories=Administration
+
+Vendor=Bareos GmbH und Co. KG
+Website=http://www.bareos.org/en/HOWTO/articles/bareos-univention-documentation.html
+WebsiteVendor=http://www.bareos.com
+SupportURL=http://www.bareos.com/en/Support.html
+Contact=sales@bareos.com
+NotificationEmail=info@bareos.com
+LicenseFile=LICENSE_AGREEMENT
+
+WebInterface=/bareos-webui
+WebInterfaceName=Bareos Backup - Web User Interface
+UCSOverviewCategory=admin
+
+ConflictedApps=
+ConflictedSystemPackages=univention-bacula,bacula-director-common,bacula-fd,bacula-sd
+DefaultPackages=univention-bareos
+
+# whether a "Shop" button is displayed in the App details, leading to the ShopURL
+UseShop=True
+ShopURL=https://appcenter.univention.com/bareos.html
+
+ApplianceCreate=True
+# ApplianceName=
+# ApplianceLogo=
+AppliancePagesBlackList=software
+ApplianceFieldsBlackList=basesystem
+# ApplianceBlackList=
+# ApplianceWhiteList=
+# ApplianceMemory=
+# ApplianceAdditionalApps=
+
+[de]
+Description=Leistungsfähige Open-Source-Backup-Lösung
+LongDescription=Bareos (Backup Archiving Recovery Open Sourced) ist eine zuverlässige,
+  netzwerkübergreifende Open Source Software zur Sicherung, Archivierung
+  und Wiederherstellung von Daten aller gängigen Betriebssysteme (Linux, UN*X, MacOS, Windows).
+  Es bietet ein eigenes Webfrontend sowie Integration in die Univention Management Console.
+ShopURL=https://appcenter.univention.de/bareos.html

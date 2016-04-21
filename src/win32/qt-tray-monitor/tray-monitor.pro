@@ -9,7 +9,7 @@ CONFIG( debug, debug|release )  {
 
 bins.path = /$(DESTDIR)@sbindir@
 bins.files = bareos-tray-monitor
-confs.path = /$(DESTDIR)@sysconfdir@
+confs.path = /$(DESTDIR)@confdir@
 confs.commands = ./install_conf_file
 
 TEMPLATE     = app
@@ -20,7 +20,7 @@ INCLUDEPATH += ../.. ../../include ../include ../compat/include \
                ../../qt-tray-monitor
 VPATH        = ../../qt-tray-monitor
 
-LIBS        += -mwindows ../lib/libbareos.a ../lib/libbareos.dll -lwsock32
+LIBS        += -mwindows ../lib/libbareos.a ../lib/libbareos.dll libjansson.dll -lwsock32
 DEFINES     += HAVE_WIN32 HAVE_MINGW _STAT_DEFINED=1
 
 RESOURCES    = main.qrc

@@ -32,9 +32,6 @@
 
 #if defined(WIN32_VSS)
 #include "vss.h"
-
-static pthread_mutex_t vss_mutex = PTHREAD_MUTEX_INITIALIZER;
-static bool enable_vss = false;
 #endif
 
 extern bool backup_only_mode;
@@ -54,6 +51,12 @@ const bool have_acl = false;
 const bool have_xattr = true;
 #else
 const bool have_xattr = false;
+#endif
+
+#ifdef DATA_ENCRYPTION
+const bool have_encryption = true;
+#else
+const bool have_encryption = false;
 #endif
 
 /* Imported functions */
@@ -400,6 +403,22 @@ static inline void cleanup_fileset(JCR *jcr)
 }
 
 /*
+ * Count the number of running jobs.
+ */
+static inline bool count_running_jobs()
+{
+   JCR *jcr;
+   unsigned int cnt = 0;
+
+   foreach_jcr(jcr) {
+      cnt++;
+   }
+   endeach_jcr(jcr);
+
+   return (cnt >= me->MaxConcurrentJobs) ? false : true;
+}
+
+/*
  * Connection request from an director.
  *
  * Accept commands one at a time from the Director and execute them.
@@ -420,7 +439,7 @@ static inline void cleanup_fileset(JCR *jcr)
  *  8. SD/FD disconnects while SD despools data and attributes (optional)
  *  9. FD runs ClientRunAfterJob
  */
-static void *handle_director_connection(BSOCK *dir)
+void *handle_director_connection(BSOCK *dir)
 {
    JCR *jcr;
    bool found;
@@ -431,6 +450,11 @@ static void *handle_director_connection(BSOCK *dir)
 #ifdef HAVE_WIN32
    prevent_os_suspensions();
 #endif
+
+   if (!count_running_jobs()) {
+      Emsg0(M_ERROR, 0, _("Number of Jobs exhausted, please increase MaximumConcurrentJobs\n"));
+      return NULL;
+   }
 
    jcr = new_jcr(sizeof(JCR), filed_free_jcr); /* create JCR */
    jcr->dir_bsock = dir;
@@ -519,7 +543,7 @@ static void *handle_director_connection(BSOCK *dir)
       /* Send termination status back to Dir */
       dir->fsend(EndJob, jcr->JobStatus, jcr->JobFiles,
                  edit_uint64(jcr->ReadBytes, ed1),
-                 edit_uint64(jcr->JobBytes, ed2), jcr->JobErrors, jcr->VSS,
+                 edit_uint64(jcr->JobBytes, ed2), jcr->JobErrors, jcr->enable_vss,
                  jcr->crypto.pki_encrypt);
       Dmsg1(110, "End FD msg: %s\n", dir->msg);
    }
@@ -555,54 +579,6 @@ static void *handle_director_connection(BSOCK *dir)
 #ifdef HAVE_WIN32
    allow_os_suspensions();
 #endif
-
-   return NULL;
-}
-
-/*
- * Connection request. We accept connections either from the Director or the Storage Daemon
- *
- * NOTE! We are running as a separate thread
- *
- * Send output one line at a time followed by a zero length transmission.
- * Return when the connection is terminated or there is an error.
- *
- * Basic tasks done here:
- *  - If it was a connection from an SD, call handle_stored_connection()
- *  - Otherwise it was a connection from the DIR, call handle_director_connection()
- */
-void *handle_connection_request(void *arg)
-{
-   BSOCK *bs = (BSOCK *)arg;
-   char tbuf[100];
-
-   if (bs->recv() <= 0) {
-      Emsg1(M_ERROR, 0, _("Connection request from %s failed.\n"), bs->who());
-      bmicrosleep(5, 0);   /* make user wait 5 seconds */
-      bs->close();
-      delete bs;
-      return NULL;
-   }
-
-   Dmsg1(110, "Conn: %s", bs->msg);
-
-   /*
-    * See if its a director making a connection.
-    */
-   if (bstrncmp(bs->msg, "Hello Director", 14)) {
-      Dmsg1(110, "Got a DIR connection at %s\n", bstrftimes(tbuf, sizeof(tbuf), (utime_t)time(NULL)));
-      return handle_director_connection(bs);
-   }
-
-   /*
-    * See if its a storage daemon making a connection.
-    */
-   if (bstrncmp(bs->msg, "Hello Storage", 13)) {
-      Dmsg1(110, "Got a SD connection at %s\n", bstrftimes(tbuf, sizeof(tbuf), (utime_t)time(NULL)));
-      return handle_stored_connection(bs);
-   }
-
-   Emsg2(M_ERROR, 0, _("Invalid connection from %s. Len=%d\n"), bs->who(), bs->msglen);
 
    return NULL;
 }
@@ -1214,7 +1190,7 @@ static bool fileset_cmd(JCR *jcr)
    }
 
 #if defined(WIN32_VSS)
-   enable_vss = (vss && (count_include_list_file_entries(jcr) > 0)) ? true : false;
+   jcr->enable_vss = (vss && (count_include_list_file_entries(jcr) > 0)) ? true : false;
 #endif
 
    retval = dir->fsend(OKinc);
@@ -1227,7 +1203,7 @@ static bool fileset_cmd(JCR *jcr)
 static void free_bootstrap(JCR *jcr)
 {
    if (jcr->RestoreBootstrap) {
-      unlink(jcr->RestoreBootstrap);
+      secure_erase(jcr, jcr->RestoreBootstrap);
       free_pool_memory(jcr->RestoreBootstrap);
       jcr->RestoreBootstrap = NULL;
    }
@@ -1251,7 +1227,7 @@ static bool bootstrap_cmd(JCR *jcr)
    free_bootstrap(jcr);
    P(bsr_mutex);
    bsr_uniq++;
-   Mmsg(fname, "%s/%s.%s.%d.bootstrap", me->working_directory, me->hdr.name,
+   Mmsg(fname, "%s/%s.%s.%d.bootstrap", me->working_directory, me->name(),
       jcr->Job, bsr_uniq);
    V(bsr_mutex);
    Dmsg1(400, "bootstrap=%s\n", fname);
@@ -1551,15 +1527,185 @@ bail_out:
 }
 
 /**
+ * Clear a flag in the find options.
+ *
+ * We walk the list of include blocks and for each option block
+ * check if a certain flag is set and clear that.
+ */
+static inline void clear_flag_in_fileset(JCR *jcr, int flag, const char *warning)
+{
+   findFILESET *fileset;
+   bool cleared_flag = false;
+
+   fileset = jcr->ff->fileset;
+   if (fileset) {
+      for (int i = 0; i < fileset->include_list.size(); i++) {
+         findINCEXE *incexe = (findINCEXE *)fileset->include_list.get(i);
+
+         for (int j = 0; j < incexe->opts_list.size(); j++) {
+            findFOPTS *fo = (findFOPTS *)incexe->opts_list.get(j);
+
+            if (bit_is_set(flag, fo->flags)) {
+               clear_bit(flag, fo->flags);
+               cleared_flag = true;
+            }
+         }
+      }
+   }
+
+   if (cleared_flag) {
+      Jmsg(jcr, M_WARNING, 0, warning);
+   }
+}
+
+/**
+ * Clear a compression flag in the find options.
+ *
+ * We walk the list of include blocks and for each option block
+ * check if a certain compression flag is set and clear that.
+ */
+static inline void clear_compression_flag_in_fileset(JCR *jcr)
+{
+   findFILESET *fileset;
+
+   fileset = jcr->ff->fileset;
+   if (fileset) {
+      for (int i = 0; i < fileset->include_list.size(); i++) {
+         findINCEXE *incexe = (findINCEXE *)fileset->include_list.get(i);
+
+         for (int j = 0; j < incexe->opts_list.size(); j++) {
+            findFOPTS *fo = (findFOPTS *)incexe->opts_list.get(j);
+
+            /*
+             * See if a compression flag is set in this option block.
+             */
+            if (bit_is_set(FO_COMPRESS, fo->flags)) {
+               switch (fo->Compress_algo) {
+#if defined(HAVE_LIBZ)
+               case COMPRESS_GZIP:
+                  break;
+#endif
+#if defined(HAVE_LZO)
+               case COMPRESS_LZO1X:
+                  break;
+#endif
+#if defined(HAVE_FASTLZ)
+               case COMPRESS_FZFZ:
+               case COMPRESS_FZ4L:
+               case COMPRESS_FZ4H:
+                  break;
+#endif
+               default:
+                  /*
+                   * When we get here its because the wanted compression protocol is not
+                   * supported with the current compile options.
+                   */
+                  Jmsg(jcr, M_WARNING, 0,
+                       "%s compression support requested in fileset but not available on this platform. Disabling ...\n",
+                       cmprs_algo_to_text(fo->Compress_algo));
+                  clear_bit(FO_COMPRESS, fo->flags);
+                  fo->Compress_algo = 0;
+                  break;
+               }
+            }
+         }
+      }
+   }
+}
+
+/**
+ * Find out what encryption cipher to use.
+ */
+static inline bool get_wanted_crypto_cipher(JCR *jcr, crypto_cipher_t *cipher)
+{
+   findFILESET *fileset;
+   bool force_encrypt = false;
+   crypto_cipher_t wanted_cipher = CRYPTO_CIPHER_NONE;
+
+   /*
+    * Walk the fileset and check for the FO_FORCE_ENCRYPT flag and any forced crypto cipher.
+    */
+   fileset = jcr->ff->fileset;
+   if (fileset) {
+      for (int i = 0; i < fileset->include_list.size(); i++) {
+         findINCEXE *incexe = (findINCEXE *)fileset->include_list.get(i);
+
+         for (int j = 0; j < incexe->opts_list.size(); j++) {
+            findFOPTS *fo = (findFOPTS *)incexe->opts_list.get(j);
+
+            if (bit_is_set(FO_FORCE_ENCRYPT, fo->flags)) {
+               force_encrypt = true;
+            }
+
+            if (fo->Encryption_cipher != CRYPTO_CIPHER_NONE) {
+               /*
+                * Make sure we have not found a cipher definition before.
+                */
+               if (wanted_cipher != CRYPTO_CIPHER_NONE) {
+                  Jmsg(jcr, M_FATAL, 0, _("Fileset contains multiple cipher settings\n"));
+                  return false;
+               }
+
+               /*
+                * See if pki_encrypt is already set for this Job.
+                */
+               if (!jcr->crypto.pki_encrypt) {
+                  if (!me->pki_keypair_file) {
+                     Jmsg(jcr, M_FATAL, 0, _("Fileset contains cipher settings but PKI Key Pair is not configured\n"));
+                     return false;
+                  }
+
+                  /*
+                   * Enable encryption and signing for this Job.
+                   */
+                  jcr->crypto.pki_sign = true;
+                  jcr->crypto.pki_encrypt = true;
+               }
+
+               wanted_cipher = (crypto_cipher_t)fo->Encryption_cipher;
+            }
+         }
+      }
+   }
+
+   /*
+    * See if fileset forced a certain cipher.
+    */
+   if (wanted_cipher == CRYPTO_CIPHER_NONE) {
+      wanted_cipher = me->pki_cipher;
+   }
+
+   /*
+    * See if we are in compatible mode then we are hardcoded to CRYPTO_CIPHER_AES_128_CBC.
+    */
+   if (me->compatible) {
+      wanted_cipher = CRYPTO_CIPHER_AES_128_CBC;
+   }
+
+   /*
+    * See if FO_FORCE_ENCRYPT is set and encryption is not configured for the filed.
+    */
+   if (force_encrypt && !jcr->crypto.pki_encrypt) {
+      Jmsg(jcr, M_FATAL, 0, _("Fileset forces encryption but encryption is not configured\n"));
+      return false;
+   }
+
+   *cipher = wanted_cipher;
+
+   return true;
+}
+
+/**
  * Do a backup.
  */
 static bool backup_cmd(JCR *jcr)
 {
-   BSOCK *dir = jcr->dir_bsock;
-   BSOCK *sd = jcr->store_bsock;
    int ok = 0;
    int SDJobStatus;
    int32_t FileIndex;
+   BSOCK *dir = jcr->dir_bsock;
+   BSOCK *sd = jcr->store_bsock;
+   crypto_cipher_t cipher = CRYPTO_CIPHER_NONE;
 
    /*
     * See if we are in restore only mode then we don't allow a backup to be initiated.
@@ -1580,17 +1726,8 @@ static bool backup_cmd(JCR *jcr)
    }
 
 #if defined(WIN32_VSS)
-   /*
-    * Capture state here, if client is backed up by multiple directors
-    * and one enables vss and the other does not then enable_vss can change
-    * between here and where its evaluated after the job completes.
-    */
-   jcr->VSS = g_pVSSClient && enable_vss;
-   if (jcr->VSS) {
-      /*
-       * Run only one at a time
-       */
-      P(vss_mutex);
+   if (jcr->enable_vss) {
+      VSSInit(jcr);
    }
 #endif
 
@@ -1602,13 +1739,26 @@ static bool backup_cmd(JCR *jcr)
    /**
     * Validate some options given to the backup make sense for the compiled in options of this filed.
     */
-   if (bit_is_set(FO_ACL, jcr->ff->flags) && !have_acl) {
-      Jmsg(jcr, M_WARNING, 0, _("ACL support requested in fileset but not available on this platform. Disabling ...\n"));
-      clear_bit(FO_ACL, jcr->ff->flags);
+   if (!have_acl) {
+      clear_flag_in_fileset(jcr, FO_ACL,
+                            _("ACL support requested in fileset but not available on this platform. Disabling ...\n"));
    }
-   if (bit_is_set(FO_XATTR, jcr->ff->flags) && !have_xattr) {
-      Jmsg(jcr, M_WARNING, 0, _("XATTR support requested in fileset but not available on this platform. Disabling ...\n"));
-      clear_bit(FO_XATTR, jcr->ff->flags);
+
+   if (!have_xattr) {
+      clear_flag_in_fileset(jcr, FO_XATTR,
+                            _("XATTR support requested in fileset but not available on this platform. Disabling ...\n"));
+   }
+
+   if (!have_encryption) {
+      clear_flag_in_fileset(jcr, FO_ENCRYPT,
+                            _("Encryption support requested in fileset but not available on this platform. Disabling ...\n"));
+   }
+
+   clear_compression_flag_in_fileset(jcr);
+
+   if (!get_wanted_crypto_cipher(jcr, &cipher)) {
+      dir->fsend(BADcmd, "backup");
+      goto cleanup;
    }
 
    jcr->setJobStatus(JS_Blocked);
@@ -1629,6 +1779,7 @@ static bool backup_cmd(JCR *jcr)
     */
    sd->fsend(append_open);
    Dmsg1(110, ">stored: %s", sd->msg);
+
    /**
     * Expect to receive back the Ticket number
     */
@@ -1665,8 +1816,8 @@ static bool backup_cmd(JCR *jcr)
    /*
     * START VSS ON WIN32
     */
-   if (jcr->VSS) {
-      if (g_pVSSClient->InitializeForBackup(jcr)) {
+   if (jcr->pVSSClient) {
+      if (jcr->pVSSClient->InitializeForBackup(jcr)) {
          int drive_count;
          char szWinDriveLetters[27];
          bool onefs_disabled;
@@ -1689,16 +1840,16 @@ static bool backup_cmd(JCR *jcr)
 
          if (drive_count > 0) {
             Jmsg(jcr, M_INFO, 0, _("Generate VSS snapshots. Driver=\"%s\", Drive(s)=\"%s\"\n"),
-                 g_pVSSClient->GetDriverName(), (drive_count) ? szWinDriveLetters : "None");
+                 jcr->pVSSClient->GetDriverName(), (drive_count) ? szWinDriveLetters : "None");
 
-            if (!g_pVSSClient->CreateSnapshots(szWinDriveLetters, onefs_disabled)) {
+            if (!jcr->pVSSClient->CreateSnapshots(szWinDriveLetters, onefs_disabled)) {
                berrno be;
                Jmsg(jcr, M_FATAL, 0, _("CreateSGenerate VSS snapshots failed. ERR=%s\n"), be.bstrerror());
             } else {
                /*
                 * Inform about VMPs if we have them
                 */
-               g_pVSSClient->ShowVolumeMountPointStats(jcr);
+               jcr->pVSSClient->ShowVolumeMountPointStats(jcr);
 
                /*
                 * Tell user if snapshot creation of a specific drive failed
@@ -1712,9 +1863,9 @@ static bool backup_cmd(JCR *jcr)
                /*
                 * Inform user about writer states
                 */
-               for (int i = 0; i < (int)g_pVSSClient->GetWriterCount(); i++) {
-                  if (g_pVSSClient->GetWriterState(i) < 1) {
-                     Jmsg(jcr, M_INFO, 0, _("VSS Writer (PrepareForBackup): %s\n"), g_pVSSClient->GetWriterInfo(i));
+               for (int i = 0; i < (int)jcr->pVSSClient->GetWriterCount(); i++) {
+                  if (jcr->pVSSClient->GetWriterState(i) < 1) {
+                     Jmsg(jcr, M_INFO, 0, _("VSS Writer (PrepareForBackup): %s\n"), jcr->pVSSClient->GetWriterInfo(i));
                   }
                }
             }
@@ -1739,7 +1890,7 @@ static bool backup_cmd(JCR *jcr)
     * Send Files to Storage daemon
     */
    Dmsg1(110, "begin blast ff=%p\n", (FF_PKT *)jcr->ff);
-   if (!blast_data_to_storage_daemon(jcr, NULL)) {
+   if (!blast_data_to_storage_daemon(jcr, NULL, cipher)) {
       jcr->setJobStatus(JS_ErrorTerminated);
       bnet_suppress_error_messages(sd, 1);
       Dmsg0(110, "Error in blast_data.\n");
@@ -1790,10 +1941,8 @@ static bool backup_cmd(JCR *jcr)
 
 cleanup:
 #if defined(WIN32_VSS)
-   if (jcr->VSS) {
-      Win32ConvCleanupCache();
-      g_pVSSClient->DestroyWriterInfo();
-      V(vss_mutex);
+   if (jcr->pVSSClient) {
+      jcr->pVSSClient->DestroyWriterInfo();
    }
 #endif
 
@@ -1939,31 +2088,13 @@ static bool restore_cmd(JCR *jcr)
       return 0;
    }
 
+   jcr->setJobType(JT_RESTORE);
+
    /**
     * Scan WHERE (base directory for restore) from command
     */
    Dmsg0(100, "restore command\n");
-#if defined(WIN32_VSS)
 
-   /**
-    * No need to enable VSS for restore if we do not have plugin data to restore
-    */
-   enable_vss = jcr->got_metadata;
-
-   Dmsg2(50, "g_pVSSClient = %p, enable_vss = %d\n", g_pVSSClient, enable_vss);
-   /*
-    * Capture state here, if client is backed up by multiple directors
-    * and one enables vss and the other does not then enable_vss can change
-    * between here and where its evaluated after the job completes.
-    */
-   jcr->VSS = g_pVSSClient && enable_vss;
-   if (jcr->VSS) {
-      /*
-       * Run only one at a time
-       */
-      P(vss_mutex);
-   }
-#endif
    /*
     * Pickup where string
     */
@@ -1981,7 +2112,21 @@ static bool restore_cmd(JCR *jcr)
       }
       use_regexwhere = true;
    }
-   /* Turn / into nothing */
+
+#if defined(WIN32_VSS)
+   /**
+    * No need to enable VSS for restore if we do not have plugin data to restore
+    */
+   jcr->enable_vss = jcr->got_metadata;
+
+   if (jcr->enable_vss) {
+      VSSInit(jcr);
+   }
+#endif
+
+   /*
+    * Turn / into nothing
+    */
    if (IsPathSeparator(args[0]) && args[1] == '\0') {
       args[0] = '\0';
    }
@@ -1989,7 +2134,9 @@ static bool restore_cmd(JCR *jcr)
    Dmsg2(150, "Got replace %c, where=%s\n", replace, args);
    unbash_spaces(args);
 
-   /* Keep track of newly created directories to apply them correct attributes */
+   /*
+    * Keep track of newly created directories to apply them correct attributes
+    */
    if (replace == REPLACE_NEVER) {
       jcr->keep_path_list = true;
    }
@@ -2012,8 +2159,6 @@ static bool restore_cmd(JCR *jcr)
    dir->fsend(OKrestore);
    Dmsg1(110, "filed>dird: %s", dir->msg);
 
-   jcr->setJobType(JT_RESTORE);
-
    jcr->setJobStatus(JS_Blocked);
 
    if (!open_sd_read_session(jcr)) {
@@ -2030,13 +2175,15 @@ static bool restore_cmd(JCR *jcr)
    generate_plugin_event(jcr, bEventStartRestoreJob);
 
 #if defined(WIN32_VSS)
-   /* START VSS ON WIN32 */
-   if (jcr->VSS) {
-      if (!g_pVSSClient->InitializeForRestore(jcr)) {
+   /*
+    * START VSS ON WIN32
+    */
+   if (jcr->pVSSClient) {
+      if (!jcr->pVSSClient->InitializeForRestore(jcr)) {
          berrno be;
          Jmsg(jcr, M_WARNING, 0, _("VSS was not initialized properly. VSS support is disabled. ERR=%s\n"), be.bstrerror());
       }
-      //free_and_null_pool_memory(jcr->job_metadata);
+
       run_scripts(jcr, jcr->RunScripts, "ClientAfterVSS",
                  (jcr->director && jcr->director->allowed_script_dirs) ?
                   jcr->director->allowed_script_dirs :
@@ -2067,28 +2214,27 @@ static bool restore_cmd(JCR *jcr)
    /* STOP VSS ON WIN32 */
    /* tell vss to close the restore session */
    Dmsg0(100, "About to call CloseRestore\n");
-   if (jcr->VSS) {
+   if (jcr->pVSSClient) {
 #if 0
       generate_plugin_event(jcr, bEventVssBeforeCloseRestore);
 #endif
       Dmsg0(100, "Really about to call CloseRestore\n");
-      if (g_pVSSClient->CloseRestore()) {
+      if (jcr->pVSSClient->CloseRestore()) {
          Dmsg0(100, "CloseRestore success\n");
 #if 0
          /* inform user about writer states */
-         for (int i=0; i<(int)g_pVSSClient->GetWriterCount(); i++) {
+         for (int i=0; i<(int)jcr->pVSSClient->GetWriterCount(); i++) {
             int msg_type = M_INFO;
-            if (g_pVSSClient->GetWriterState(i) < 1) {
+            if (jcr->pVSSClient->GetWriterState(i) < 1) {
                //msg_type = M_WARNING;
                //jcr->JobErrors++;
             }
-            Jmsg(jcr, msg_type, 0, _("VSS Writer (RestoreComplete): %s\n"), g_pVSSClient->GetWriterInfo(i));
+            Jmsg(jcr, msg_type, 0, _("VSS Writer (RestoreComplete): %s\n"), jcr->pVSSClient->GetWriterInfo(i));
          }
 #endif
-      }
-      else
+      } else {
          Dmsg1(100, "CloseRestore fail - %08x\n", errno);
-      V(vss_mutex);
+      }
    }
 #endif
 
@@ -2183,6 +2329,13 @@ static bool open_sd_read_session(JCR *jcr)
  */
 static void filed_free_jcr(JCR *jcr)
 {
+#if defined(WIN32_VSS)
+   if (jcr->pVSSClient) {
+      delete jcr->pVSSClient;
+      jcr->pVSSClient = NULL;
+   }
+#endif
+
    if (jcr->store_bsock) {
       jcr->store_bsock->close();
       delete jcr->store_bsock;
