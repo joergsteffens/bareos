@@ -1,8 +1,9 @@
-bareos (15.2.3-2) UNRELEASED; urgency=medium
+bareos (15.2.3-2) unstable; urgency=medium
 
+  * Team upload to unstable.
   * Enable all hardening build flags.
 
- -- Felix Geyer <fgeyer@debian.org>  Thu, 21 Apr 2016 23:15:45 +0200
+ -- Felix Geyer <fgeyer@debian.org>  Thu, 21 Apr 2016 23:16:15 +0200
 
 bareos (15.2.3-1) experimental; urgency=medium
 
