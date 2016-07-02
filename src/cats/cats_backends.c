@@ -2,7 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -90,14 +90,15 @@ B_DB *db_init_database(JCR *jcr,
                        const char *db_socket,
                        bool mult_db_connections,
                        bool disable_batch_insert,
-                       bool need_private,
                        bool try_reconnect,
-                       bool exit_on_fatal)
+                       bool exit_on_fatal,
+                       bool need_private)
 {
    struct stat st;
    char *backend_dir;
    void *dl_handle = NULL;
    POOL_MEM shared_library_name(PM_FNAME);
+   POOL_MEM error(PM_FNAME);
    backend_interface_mapping_t *backend_interface_mapping;
    backend_shared_library_t *backend_shared_library;
    t_backend_instantiate backend_instantiate;
@@ -143,9 +144,9 @@ B_DB *db_init_database(JCR *jcr,
                                                                db_socket,
                                                                mult_db_connections,
                                                                disable_batch_insert,
-                                                               need_private,
                                                                try_reconnect,
-                                                               exit_on_fatal);
+                                                               exit_on_fatal,
+                                                               need_private);
          }
       }
    }
@@ -171,8 +172,11 @@ B_DB *db_init_database(JCR *jcr,
 #endif
          dl_handle = dlopen(shared_library_name.c_str(), RTLD_NOW);
          if (!dl_handle) {
+            pm_strcpy(error, dlerror());
             Jmsg(jcr, M_ERROR, 0, _("Unable to load shared library: %s ERR=%s\n"),
-                 shared_library_name.c_str(), NPRT(dlerror()));
+                 shared_library_name.c_str(), error.c_str());
+            Dmsg2(100, _("Unable to load shared library: %s ERR=%s\n"),
+                  shared_library_name.c_str(), error.c_str());
             continue;
          }
 
@@ -181,8 +185,11 @@ B_DB *db_init_database(JCR *jcr,
           */
          backend_instantiate = (t_backend_instantiate)dlsym(dl_handle, "backend_instantiate");
          if (backend_instantiate == NULL) {
+            pm_strcpy(error, dlerror());
             Jmsg(jcr, M_ERROR, 0, _("Lookup of backend_instantiate in shared library %s failed: ERR=%s\n"),
-                 shared_library_name.c_str(), NPRT(dlerror()));
+                 shared_library_name.c_str(), error.c_str());
+            Dmsg2(100, _("Lookup of backend_instantiate in shared library %s failed: ERR=%s\n"),
+                  shared_library_name.c_str(), error.c_str());
             dlclose(dl_handle);
             dl_handle = NULL;
             continue;
@@ -193,8 +200,11 @@ B_DB *db_init_database(JCR *jcr,
           */
          flush_backend = (t_flush_backend)dlsym(dl_handle, "flush_backend");
          if (flush_backend == NULL) {
+            pm_strcpy(error, dlerror());
             Jmsg(jcr, M_ERROR, 0, _("Lookup of flush_backend in shared library %s failed: ERR=%s\n"),
-                 shared_library_name.c_str(), NPRT(dlerror()));
+                 shared_library_name.c_str(), error.c_str());
+            Dmsg2(100, _("Lookup of flush_backend in shared library %s failed: ERR=%s\n"),
+                  shared_library_name.c_str(), error.c_str());
             dlclose(dl_handle);
             dl_handle = NULL;
             continue;
@@ -235,9 +245,9 @@ B_DB *db_init_database(JCR *jcr,
                                                          db_socket,
                                                          mult_db_connections,
                                                          disable_batch_insert,
-                                                         need_private,
                                                          try_reconnect,
-                                                         exit_on_fatal);
+                                                         exit_on_fatal,
+                                                         need_private);
    } else {
       Jmsg(jcr, M_ABORT, 0, _("Unable to load any shared library for libbareoscats-%s%s\n"),
            backend_interface_mapping->interface_name, DYN_LIB_EXTENSION);
@@ -281,9 +291,9 @@ B_DB *db_init_database(JCR *jcr,
                        const char *db_socket,
                        bool mult_db_connections,
                        bool disable_batch_insert,
-                       bool need_private,
                        bool try_reconnect,
-                       bool exit_on_fatal)
+                       bool exit_on_fatal,
+                       bool need_private)
 {
    Jmsg(jcr, M_FATAL, 0, _("Please replace this dummy libbareoscats library with a proper one.\n"));
    Dmsg0(0, _("Please replace this dummy libbareoscats library with a proper one.\n"));

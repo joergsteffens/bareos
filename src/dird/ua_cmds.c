@@ -152,6 +152,7 @@ static struct cmdstruct commands[] = {
          "joblog jobid=<jobid> | joblog ujobid=<complete_name> |\n"
          "jobmedia jobid=<jobid> | jobmedia ujobid=<complete_name> |\n"
          "jobtotals |\n"
+         "log [ limit=<number> [ offset=<number> ] ] [reverse]|\n"
          "media [ jobid=<jobid> | ujobid=<complete_name> | pool=<pool-name> | all ] |\n"
          "media=<media-name> |\n"
          "nextvol job=<job-name> | nextvolume ujobid=<complete_name> |\n"
@@ -2703,6 +2704,8 @@ bool open_db(UAContext *ua, bool use_private)
                                          ua->catalog->db_socket,
                                          mult_db_conn,
                                          ua->catalog->disable_batch_insert,
+                                         ua->catalog->try_reconnect,
+                                         ua->catalog->exit_on_fatal,
                                          use_private);
    if (ua->db == NULL) {
       ua->error_msg(_("Could not open catalog database \"%s\".\n"), ua->catalog->db_name);

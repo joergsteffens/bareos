@@ -2,7 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -39,9 +39,9 @@ typedef B_DB *(*t_backend_instantiate)(JCR *jcr,
                                        const char *db_socket,
                                        bool mult_db_connections,
                                        bool disable_batch_insert,
-                                       bool need_private,
                                        bool try_reconnect,
-                                       bool exit_on_fatal);
+                                       bool exit_on_fatal,
+                                       bool need_private);
 
 typedef void (*t_flush_backend)(void);
 }

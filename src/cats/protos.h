@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2009 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -86,7 +86,7 @@ bool db_find_failed_job_since(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM *stime, 
 
 /* sql_get.c */
 bool db_get_volume_jobids(JCR *jcr, B_DB *mdb,
-                         MEDIA_DBR *mr, db_list_ctx *lst);
+                          MEDIA_DBR *mr, db_list_ctx *lst);
 bool db_get_base_file_list(JCR *jcr, B_DB *mdb, bool use_md5,
                            DB_RESULT_HANDLER *result_handler,void *ctx);
 int db_get_path_record(JCR *jcr, B_DB *mdb);
@@ -137,12 +137,14 @@ void db_list_jobmedia_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
                               OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_joblog_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
                             OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_log_records(JCR *jcr, B_DB *mdb, const char *range, bool reverse,
+                         OUTPUT_FORMATTER *sendit, e_list_type type);
 bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
                        OUTPUT_FORMATTER *sendit, e_list_type type,
                        bool verbose);
 bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
                        OUTPUT_FORMATTER *sendit, e_list_type type,
-                       const char *description, bool verbose=false);
+                       const char *description, bool verbose = false);
 void db_list_client_records(JCR *jcr, B_DB *mdb, char *clientname,
                             OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_copies_records(JCR *jcr, B_DB *mdb, const char *range, char *jobids,
@@ -176,11 +178,11 @@ B_DB *db_sql_get_non_pooled_connection(JCR *jcr,
                                        const char *db_address,
                                        int db_port,
                                        const char *db_socket,
-                                       bool mult_db_connections = false,
-                                       bool disable_batch_insert = false,
-                                       bool need_private = false,
-                                       bool try_reconnect = false,
-                                       bool exit_on_fatal = false);
+                                       bool mult_db_connections,
+                                       bool disable_batch_insert,
+                                       bool try_reconnect,
+                                       bool exit_on_fatal,
+                                       bool need_private = false);
 B_DB *db_sql_get_pooled_connection(JCR *jcr,
                                    const char *db_drivername,
                                    const char *db_name,
@@ -189,12 +191,12 @@ B_DB *db_sql_get_pooled_connection(JCR *jcr,
                                    const char *db_address,
                                    int db_port,
                                    const char *db_socket,
-                                   bool mult_db_connections = false,
-                                   bool disable_batch_insert = false,
-                                   bool need_private = false,
-                                   bool try_reconnect = false,
-                                   bool exit_on_fatal = false);
-void db_sql_close_pooled_connection(JCR *jcr, B_DB *mdb, bool abort=false);
+                                   bool mult_db_connections,
+                                   bool disable_batch_insert,
+                                   bool try_reconnect,
+                                   bool exit_on_fatal,
+                                   bool need_private = false);
+void db_sql_close_pooled_connection(JCR *jcr, B_DB *mdb, bool abort = false);
 
 /* sql_update.c */
 bool db_update_job_start_record(JCR *jcr, B_DB *db, JOB_DBR *jr);

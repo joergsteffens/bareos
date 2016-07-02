@@ -2,7 +2,7 @@ Format: 1.0
 Source: bareos
 Binary: bareos, bareos-bat, bareos-bconsole, bareos-client, bareos-common, bareos-database-common, bareos-database-postgresql, bareos-database-mysql, bareos-database-sqlite3, bareos-database-tools, bareos-devel, bareos-director, bareos-director-python-plugin, bareos-filedaemon, bareos-filedaemon-python-plugin, bareos-storage, bareos-storage-fifo, bareos-storage-tape, bareos-storage-python-plugin, bareos-tools, bareos-traymonitor
 Architecture: any
-Version: 15.2.3
+Version: 15.2.4
 Maintainer: Bareos Packaging Team <packager@bareos.com>
 Homepage: http://www.bareos.org/
 Standards-Version: 3.9.4
@@ -11,6 +11,8 @@ Build-Depends: acl-dev, autotools-dev, bc, chrpath, debhelper (>= 7.0.50~), dpkg
 #   0%{?debian_version} >= 800 || 0%{?ubuntu_version} >= 1404
 #     libcephfs-dev
 #     librados-dev
+#   0%{?ubuntu_version} >= 1604
+#     libradosstriper-dev
 #   0%{?debian_version} >= 800 || 0%{?ubuntu_version} >= 1504
 #     glusterfs-common
 #     dh-systemd
