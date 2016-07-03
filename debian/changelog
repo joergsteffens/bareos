@@ -1,3 +1,10 @@
+bareos (15.2.4-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+    - Fixes a bug when mounting disks by the storage daemon. (Closes: #823344)
+
+ -- Felix Geyer <fgeyer@debian.org>  Sat, 02 Jul 2016 17:03:13 +0200
+
 bareos (15.2.3-2) unstable; urgency=medium
 
   * Team upload to unstable.
