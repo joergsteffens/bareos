@@ -3,6 +3,7 @@ bareos (15.2.4-2) UNRELEASED; urgency=medium
   * Build wth gcc 5 for now. (Closes: #840488)
     - bareos 15.2 is not compatible with optimizations from gcc 6,
       see https://bugs.bareos.org/view.php?id=662#c2365
+  * Disable the fstype test as it's broken in some chroot configurations.
 
  -- Felix Geyer <fgeyer@debian.org>  Sun, 16 Oct 2016 14:23:22 +0200
 

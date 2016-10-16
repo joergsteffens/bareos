@@ -1,0 +1,13 @@
+Description: Disable the fstype test as it's broken in some chroot configurations.
+Author: Felix Geyer <fgeyer@debian.org>
+
+--- a/src/findlib/unittests/test_findlib.c
++++ b/src/findlib/unittests/test_findlib.c
+@@ -36,7 +36,6 @@ extern "C" {
+ 
+ int main(void) {
+    const struct CMUnitTest tests[] = {
+-      cmocka_unit_test(test_fstype),
+       cmocka_unit_test(test_drivetype),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
