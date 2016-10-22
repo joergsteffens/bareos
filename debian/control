@@ -45,7 +45,7 @@ Build-Depends: acl-dev,
 #   Debian >= 8, Ubuntu >= 15.04
 Build-Conflicts: python2.2-dev, python2.3, python2.4, qt3-dev-tools
 Standards-Version: 3.9.6
-Vcs-Git: git://anonscm.debian.org/pkg-bareos/bareos.git
+Vcs-Git: https://anonscm.debian.org/git/pkg-bareos/bareos.git/
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-bareos/bareos.git/
 Homepage: http://www.bareos.org/
 
