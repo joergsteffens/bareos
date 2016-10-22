@@ -4,7 +4,7 @@ Depends: postgresql, bareos-database-postgresql, bareos
 
 Test-Command: test/all
 Restrictions: breaks-testbed needs-root allow-stderr
-Depends: mysql-server, bareos-database-mysql, bareos
+Depends: default-mysql-server | virtual-mysql-server, bareos-database-mysql, bareos
 
 Test-Command: test/all
 Restrictions: breaks-testbed needs-root allow-stderr
