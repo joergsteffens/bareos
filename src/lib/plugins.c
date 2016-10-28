@@ -360,12 +360,26 @@ void unload_plugins(alist *plugin_list)
    }
 }
 
+void unload_plugin(alist *plugin_list, Plugin *plugin, int index)
+{
+   /*
+    * Shut it down and unload it
+    */
+   plugin->unloadPlugin();
+   dlclose(plugin->pHandle);
+   if (plugin->file) {
+      free(plugin->file);
+   }
+   plugin_list->remove(index);
+   free(plugin);
+}
+
 int list_plugins(alist *plugin_list, POOL_MEM &msg)
 {
    int i, len = 0;
    Plugin *plugin;
 
-   if (plugin_list->size() > 0) {
+   if (plugin_list && plugin_list->size() > 0) {
       pm_strcpy(msg, "Plugin Info:\n");
       foreach_alist_index(i, plugin, plugin_list) {
          pm_strcat(msg, " Plugin     : ");

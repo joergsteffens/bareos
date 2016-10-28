@@ -41,7 +41,7 @@ CEPHFS_LIBS = @CEPHFS_LIBS@
 ELASTO_LIBS = @ELASTO_LIBS@
 DROPLET_LIBS = @DROPLET_LIBS@
 GLUSTER_LIBS = @GLUSTER_LIBS@
-RADOS_LIBS = @RADOS_LIBS@
+RADOS_LIBS = @RADOS_STRIPER_LIBS@ @RADOS_LIBS@
 AVAILABLE_BACKEND_LIBS = $(CEPHFS_LIBS) $(ELASTO_LIBS) $(DROPLET_LIBS) $(GLUSTER_LIBS) $(RADOS_LIBS)
 LIBS += @NEEDED_BACKEND_LIBS@
 
@@ -100,6 +100,8 @@ DB_LIBS = @DB_LIBS@
 ACL_LIBS = @ACL_LIBS@
 XATTR_LIBS = @XATTR_LIBS@
 NDMP_LIBS = @NDMP_LIBS@
+
+STORED_RESTYPES = autochanger device director ndmp messages storage
 
 .SUFFIXES:	.c .o .lo
 .PHONY:
@@ -242,19 +244,31 @@ install: all @LIBTOOL_INSTALL_TARGET@
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bcopy $(DESTDIR)$(sbindir)/bcopy
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bscan $(DESTDIR)$(sbindir)/bscan
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) btape $(DESTDIR)$(sbindir)/btape
-	@srcconf=bareos-sd.conf; \
-	$(MKDIR) ${DESTDIR}${confdir}/bareos-sd.d/; \
-	if  test -f ${DESTDIR}${confdir}/$$srcconf; then \
-	   destconf=$$srcconf.new; \
-	   echo "  ==> Found existing $$srcconf, installing new conf file as $$destconf"; \
-	else \
-	   destconf=$$srcconf; \
-	fi; \
-	echo "${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf"; \
-	${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf
-	-@if test "x${sd_group}" != "x"; then \
-	   chgrp -f ${sd_group} ${DESTDIR}${confdir}/$$destconf; \
-	fi
+	# copy configuration resource files to directory structure
+	@SRCCONFDIR=../defaultconfigs/bareos-sd.d/; \
+	DESTCONFDIR=${DESTDIR}${confdir}/bareos-sd.d/; \
+	echo "installing configuration resource files to $$DESTCONFDIR"; \
+	$(MKDIR) $$DESTCONFDIR; \
+	for RESTYPE in $(STORED_RESTYPES); do \
+	   $(MKDIR) "$$DESTCONFDIR/$$RESTYPE"; \
+	   for f in $$SRCCONFDIR/$$RESTYPE/*.conf $$SRCCONFDIR/$$RESTYPE/*.conf.example; do \
+	      if test -f "$$f"; then \
+	         RESDIR="$$DESTCONFDIR/$$RESTYPE"; \
+	         RES=`basename "$$f"`; \
+	         if test -f "$$RESDIR/$$RES"; then \
+	            destconf="$$RESDIR/$$RES.new"; \
+	            echo "    $$RESTYPE/$$RES as \"$$destconf\" (keep existing)"; \
+	         else \
+	            destconf="$$RESDIR/$$RES"; \
+	            echo "    $$RESTYPE/$$RES as \"$$destconf\""; \
+	         fi; \
+	         ${INSTALL_CONFIG} "$$f" "$$destconf"; \
+	         if test "x${sd_group}" != "x"; then \
+	            chgrp -f ${sd_group} $$destconf || true; \
+	         fi; \
+	      fi; \
+	   done; \
+	done
 	@if test -f static-bareos-sd; then \
 	   $(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) static-bareos-sd $(DESTDIR)$(sbindir)/static-bareos-sd; \
 	fi

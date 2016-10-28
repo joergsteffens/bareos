@@ -146,7 +146,6 @@ int do_keyword_prompt(UAContext *ua, const char *msg, const char **list)
    return do_prompt(ua, "", msg, NULL, 0);
 }
 
-
 /*
  * Select a Storage resource from prompt list
  */
@@ -163,7 +162,7 @@ STORERES *select_storage_resource(UAContext *ua, bool autochanger_only)
 
    LockRes();
    foreach_res(store, R_STORAGE) {
-      if (acl_access_ok(ua, Storage_ACL, store->name())) {
+      if (ua->acl_access_ok(Storage_ACL, store->name())) {
          if (autochanger_only && !store->autochanger) {
             continue;
          } else {
@@ -176,7 +175,7 @@ STORERES *select_storage_resource(UAContext *ua, bool autochanger_only)
    if (do_prompt(ua, _("Storage"),  _("Select Storage resource"), name, sizeof(name)) < 0) {
       return NULL;
    }
-   store = (STORERES *)GetResWithName(R_STORAGE, name);
+   store = ua->GetStoreResWithName(name);
 
    return store;
 }
@@ -193,7 +192,7 @@ FILESETRES *select_fileset_resource(UAContext *ua)
 
    LockRes();
    foreach_res(fs, R_FILESET) {
-      if (acl_access_ok(ua, FileSet_ACL, fs->name())) {
+      if (ua->acl_access_ok(FileSet_ACL, fs->name())) {
          add_prompt(ua, fs->name());
       }
    }
@@ -203,7 +202,7 @@ FILESETRES *select_fileset_resource(UAContext *ua)
       return NULL;
    }
 
-   fs = (FILESETRES *)GetResWithName(R_FILESET, name);
+   fs = ua->GetFileSetResWithName(name);
 
    return fs;
 }
@@ -218,8 +217,8 @@ CATRES *get_catalog_resource(UAContext *ua)
 
    for (int i = 1; i < ua->argc; i++) {
       if (bstrcasecmp(ua->argk[i], NT_("catalog")) && ua->argv[i]) {
-         if (acl_access_ok(ua, Catalog_ACL, ua->argv[i])) {
-            catalog = (CATRES *)GetResWithName(R_CATALOG, ua->argv[i]);
+         catalog = ua->GetCatalogResWithName(ua->argv[i]);
+         if (catalog) {
             break;
          }
       }
@@ -233,7 +232,7 @@ CATRES *get_catalog_resource(UAContext *ua)
       if (!catalog) {
          ua->error_msg(_("Could not find a Catalog resource\n"));
          return NULL;
-      } else if (!acl_access_ok(ua, Catalog_ACL, catalog->name())) {
+      } else if (!ua->acl_access_ok(Catalog_ACL, catalog->name())) {
          ua->error_msg(_("You must specify a \"use <catalog-name>\" command before continuing.\n"));
          return NULL;
       }
@@ -246,7 +245,7 @@ CATRES *get_catalog_resource(UAContext *ua)
 
       LockRes();
       foreach_res(catalog, R_CATALOG) {
-         if (acl_access_ok(ua, Catalog_ACL, catalog->name())) {
+         if (ua->acl_access_ok(Catalog_ACL, catalog->name())) {
             add_prompt(ua, catalog->name());
          }
       }
@@ -256,7 +255,7 @@ CATRES *get_catalog_resource(UAContext *ua)
          return NULL;
       }
 
-      catalog = (CATRES *)GetResWithName(R_CATALOG, name);
+      catalog = ua->GetCatalogResWithName(name);
    }
 
    return catalog;
@@ -274,7 +273,7 @@ JOBRES *select_enable_disable_job_resource(UAContext *ua, bool enable)
 
    LockRes();
    foreach_res(job, R_JOB) {
-      if (!acl_access_ok(ua, Job_ACL, job->name())) {
+      if (!ua->acl_access_ok(Job_ACL, job->name())) {
          continue;
       }
       if (job->enabled == enable) {   /* Already enabled/disabled? */
@@ -288,7 +287,7 @@ JOBRES *select_enable_disable_job_resource(UAContext *ua, bool enable)
       return NULL;
    }
 
-   job = (JOBRES *)GetResWithName(R_JOB, name);
+   job = ua->GetJobResWithName(name);
 
    return job;
 }
@@ -305,7 +304,7 @@ JOBRES *select_job_resource(UAContext *ua)
 
    LockRes();
    foreach_res(job, R_JOB) {
-      if (acl_access_ok(ua, Job_ACL, job->name())) {
+      if (ua->acl_access_ok(Job_ACL, job->name())) {
          add_prompt(ua, job->name());
       }
    }
@@ -315,7 +314,7 @@ JOBRES *select_job_resource(UAContext *ua)
       return NULL;
    }
 
-   job = (JOBRES *)GetResWithName(R_JOB, name);
+   job = ua->GetJobResWithName(name);
 
    return job;
 }
@@ -329,8 +328,8 @@ JOBRES *get_restore_job(UAContext *ua)
    JOBRES *job;
 
    i = find_arg_with_value(ua, NT_("restorejob"));
-   if (i >= 0 && acl_access_ok(ua, Job_ACL, ua->argv[i])) {
-      job = (JOBRES *)GetResWithName(R_JOB, ua->argv[i]);
+   if (i >= 0) {
+      job = ua->GetJobResWithName(ua->argv[i]);
       if (job && job->JobType == JT_RESTORE) {
          return job;
       }
@@ -352,7 +351,7 @@ JOBRES *select_restore_job_resource(UAContext *ua)
 
    LockRes();
    foreach_res(job, R_JOB) {
-      if (job->JobType == JT_RESTORE && acl_access_ok(ua, Job_ACL, job->name())) {
+      if (job->JobType == JT_RESTORE && ua->acl_access_ok(Job_ACL, job->name())) {
          add_prompt(ua, job->name());
       }
    }
@@ -362,7 +361,7 @@ JOBRES *select_restore_job_resource(UAContext *ua)
       return NULL;
    }
 
-   job = (JOBRES *)GetResWithName(R_JOB, name);
+   job = ua->GetJobResWithName(name);
 
    return job;
 }
@@ -379,7 +378,7 @@ CLIENTRES *select_client_resource(UAContext *ua)
 
    LockRes();
    foreach_res(client, R_CLIENT) {
-      if (acl_access_ok(ua, Client_ACL, client->name())) {
+      if (ua->acl_access_ok(Client_ACL, client->name())) {
          add_prompt(ua, client->name());
       }
    }
@@ -389,7 +388,7 @@ CLIENTRES *select_client_resource(UAContext *ua)
       return NULL;
    }
 
-   client = (CLIENTRES *)GetResWithName(R_CLIENT, name);
+   client = ua->GetClientResWithName(name);
 
    return client;
 }
@@ -406,7 +405,7 @@ CLIENTRES *select_enable_disable_client_resource(UAContext *ua, bool enable)
 
    LockRes();
    foreach_res(client, R_CLIENT) {
-      if (!acl_access_ok(ua, Client_ACL, client->name())) {
+      if (!ua->acl_access_ok(Client_ACL, client->name())) {
          continue;
       }
       if (client->enabled == enable) {   /* Already enabled/disabled? */
@@ -420,7 +419,7 @@ CLIENTRES *select_enable_disable_client_resource(UAContext *ua, bool enable)
       return NULL;
    }
 
-   client = (CLIENTRES *)GetResWithName(R_CLIENT, name);
+   client = ua->GetClientResWithName(name);
 
    return client;
 }
@@ -437,11 +436,7 @@ CLIENTRES *get_client_resource(UAContext *ua)
    for (int i = 1; i < ua->argc; i++) {
       if ((bstrcasecmp(ua->argk[i], NT_("client")) ||
            bstrcasecmp(ua->argk[i], NT_("fd"))) && ua->argv[i]) {
-         if (!acl_access_ok(ua, Client_ACL, ua->argv[i])) {
-            break;
-         }
-
-         client = (CLIENTRES *)GetResWithName(R_CLIENT, ua->argv[i]);
+         client = ua->GetClientResWithName(ua->argv[i]);
          if (client) {
             return client;
          }
@@ -467,7 +462,7 @@ SCHEDRES *select_enable_disable_schedule_resource(UAContext *ua, bool enable)
 
    LockRes();
    foreach_res(sched, R_SCHEDULE) {
-      if (!acl_access_ok(ua, Schedule_ACL, sched->name())) {
+      if (!ua->acl_access_ok(Schedule_ACL, sched->name())) {
          continue;
       }
       if (sched->enabled == enable) {   /* Already enabled/disabled? */
@@ -481,7 +476,7 @@ SCHEDRES *select_enable_disable_schedule_resource(UAContext *ua, bool enable)
       return NULL;
    }
 
-   sched = (SCHEDRES *)GetResWithName(R_SCHEDULE, name);
+   sched = ua->GetScheduleResWithName(name);
 
    return sched;
 }
@@ -508,7 +503,7 @@ bool get_client_dbr(UAContext *ua, CLIENT_DBR *cr)
    for (int i = 1; i < ua->argc; i++) {
       if ((bstrcasecmp(ua->argk[i], NT_("client")) ||
            bstrcasecmp(ua->argk[i], NT_("fd"))) && ua->argv[i]) {
-         if (!acl_access_ok(ua, Client_ACL, ua->argv[i])) {
+         if (!ua->acl_access_ok(Client_ACL, ua->argv[i])) {
             break;
          }
          bstrncpy(cr->Name, ua->argv[i], sizeof(cr->Name));
@@ -537,7 +532,7 @@ bool get_client_dbr(UAContext *ua, CLIENT_DBR *cr)
  */
 bool select_client_dbr(UAContext *ua, CLIENT_DBR *cr)
 {
-   uint32_t *ids;
+   DBId_t *ids;
    CLIENT_DBR ocr;
    int num_clients;
    char name[MAX_NAME_LENGTH];
@@ -557,7 +552,7 @@ bool select_client_dbr(UAContext *ua, CLIENT_DBR *cr)
    for (int i = 0; i < num_clients; i++) {
       ocr.ClientId = ids[i];
       if (!db_get_client_record(ua->jcr, ua->db, &ocr) ||
-          !acl_access_ok(ua, Client_ACL, ocr.Name)) {
+          !ua->acl_access_ok(Client_ACL, ocr.Name)) {
          continue;
       }
       add_prompt(ua, ocr.Name);
@@ -584,6 +579,35 @@ bool select_client_dbr(UAContext *ua, CLIENT_DBR *cr)
 /*
  * Scan what the user has entered looking for:
  *
+ * argk=<storage-name>
+ *
+ * where argk can be : storage
+ *
+ * If error or not found, put up a list of storage DBRs to choose from.
+ *
+ * returns: false on error
+ *          true  on success and fills in STORAGE_DBR
+ */
+bool get_storage_dbr(UAContext *ua, STORAGE_DBR *sr, const char *argk)
+{
+   if (sr->Name[0]) {                 /* If name already supplied */
+      if (db_get_storage_record(ua->jcr, ua->db, sr) &&
+          ua->acl_access_ok(Pool_ACL, sr->Name)) {
+         return true;
+      }
+      ua->error_msg(_("Could not find Storage \"%s\": ERR=%s"), sr->Name, db_strerror(ua->db));
+   }
+
+   if (!select_storage_dbr(ua, sr, argk)) {  /* try once more */
+      return false;
+   }
+
+   return true;
+}
+
+/*
+ * Scan what the user has entered looking for:
+ *
  * argk=<pool-name>
  *
  * where argk can be : pool, recyclepool, scratchpool, nextpool etc..
@@ -597,7 +621,7 @@ bool get_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk)
 {
    if (pr->Name[0]) {                 /* If name already supplied */
       if (db_get_pool_record(ua->jcr, ua->db, pr) &&
-          acl_access_ok(ua, Pool_ACL, pr->Name)) {
+          ua->acl_access_ok(Pool_ACL, pr->Name)) {
          return true;
       }
       ua->error_msg(_("Could not find Pool \"%s\": ERR=%s"), pr->Name, db_strerror(ua->db));
@@ -617,13 +641,13 @@ bool get_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk)
 bool select_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk)
 {
    POOL_DBR opr;
-   uint32_t *ids;
+   DBId_t *ids;
    int num_pools;
    char name[MAX_NAME_LENGTH];
 
    for (int i = 1; i < ua->argc; i++) {
       if (bstrcasecmp(ua->argk[i], argk) && ua->argv[i] &&
-          acl_access_ok(ua, Pool_ACL, ua->argv[i])) {
+          ua->acl_access_ok(Pool_ACL, ua->argv[i])) {
          bstrncpy(pr->Name, ua->argv[i], sizeof(pr->Name));
          if (!db_get_pool_record(ua->jcr, ua->db, pr)) {
             ua->error_msg(_("Could not find Pool \"%s\": ERR=%s"), ua->argv[i], db_strerror(ua->db));
@@ -653,7 +677,7 @@ bool select_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk)
    for (int i = 0; i < num_pools; i++) {
       opr.PoolId = ids[i];
       if (!db_get_pool_record(ua->jcr, ua->db, &opr) ||
-          !acl_access_ok(ua, Pool_ACL, opr.Name)) {
+          !ua->acl_access_ok(Pool_ACL, opr.Name)) {
          continue;
       }
       add_prompt(ua, opr.Name);
@@ -701,10 +725,85 @@ bool select_pool_and_media_dbr(UAContext *ua, POOL_DBR *pr, MEDIA_DBR *mr)
       return false;
    }
 
-   if (!acl_access_ok(ua, Pool_ACL, pr->Name, true)) {
+   if (!ua->acl_access_ok(Pool_ACL, pr->Name, true)) {
       ua->error_msg(_("No access to Pool \"%s\"\n"), pr->Name);
       return false;
    }
+
+   return true;
+}
+
+/*
+ * Select a Storage record from catalog
+ * argk can be storage
+ */
+bool select_storage_dbr(UAContext *ua, STORAGE_DBR *sr, const char *argk)
+{
+   STORAGE_DBR osr;
+   DBId_t *ids;
+   int num_storages;
+   char name[MAX_NAME_LENGTH];
+
+   for (int i = 1; i < ua->argc; i++) {
+      if (bstrcasecmp(ua->argk[i], argk) && ua->argv[i] &&
+          ua->acl_access_ok(Storage_ACL, ua->argv[i])) {
+         bstrncpy(sr->Name, ua->argv[i], sizeof(sr->Name));
+         if (!db_get_storage_record(ua->jcr, ua->db, sr)) {
+            ua->error_msg(_("Could not find Storage \"%s\": ERR=%s"), ua->argv[i], db_strerror(ua->db));
+            sr->StorageId = 0;
+            break;
+         }
+         return true;
+      }
+   }
+
+   sr->StorageId = 0;
+   if (!db_get_storage_ids(ua->jcr, ua->db, &num_storages, &ids)) {
+      ua->error_msg(_("Error obtaining storage ids. ERR=%s\n"), db_strerror(ua->db));
+      return 0;
+   }
+
+   if (num_storages <= 0) {
+      ua->error_msg(_("No storages defined. Use the \"create\" command to create one.\n"));
+      return false;
+   }
+
+   start_prompt(ua, _("Defined Storages:\n"));
+   if (bstrcmp(argk, NT_("recyclestorage"))) {
+      add_prompt(ua, _("*None*"));
+   }
+
+   for (int i = 0; i < num_storages; i++) {
+      osr.StorageId = ids[i];
+      if (!db_get_storage_record(ua->jcr, ua->db, &osr) ||
+          !ua->acl_access_ok(Storage_ACL, osr.Name)) {
+         continue;
+      }
+      add_prompt(ua, osr.Name);
+   }
+   free(ids);
+
+   if (do_prompt(ua, _("Storage"),  _("Select the Storage"), name, sizeof(name)) < 0) {
+      return false;
+   }
+
+   memset(&osr, 0, sizeof(osr));
+
+   /*
+    * *None* is only returned when selecting a recyclestorage, and in that case
+    * the calling code is only interested in osr.Name, so then we can leave
+    * sr as all zero.
+    */
+   if (!bstrcmp(name, _("*None*"))) {
+     bstrncpy(osr.Name, name, sizeof(osr.Name));
+
+     if (!db_get_storage_record(ua->jcr, ua->db, &osr)) {
+        ua->error_msg(_("Could not find Storage \"%s\": ERR=%s"), name, db_strerror(ua->db));
+        return false;
+     }
+   }
+
+   memcpy(sr, &osr, sizeof(osr));
 
    return true;
 }
@@ -722,7 +821,7 @@ bool select_media_dbr(UAContext *ua, MEDIA_DBR *mr)
    memset(mr, 0, sizeof(MEDIA_DBR));
    i = find_arg_with_value(ua, NT_("volume"));
    if (i >= 0) {
-      if (is_name_valid(ua->argv[i], &err)) {
+      if (is_name_valid(ua->argv[i], err)) {
          bstrncpy(mr->VolumeName, ua->argv[i], sizeof(mr->VolumeName));
       } else {
          goto bail_out;
@@ -749,7 +848,7 @@ bool select_media_dbr(UAContext *ua, MEDIA_DBR *mr)
 
       if (ua->cmd[0] == '*' && is_a_number(ua->cmd+1)) {
          mr->MediaId = str_to_int64(ua->cmd+1);
-      } else if (is_name_valid(ua->cmd, &err)) {
+      } else if (is_name_valid(ua->cmd, err)) {
          bstrncpy(mr->VolumeName, ua->cmd, sizeof(mr->VolumeName));
       } else {
          goto bail_out;
@@ -776,21 +875,24 @@ bail_out:
  */
 POOLRES *select_pool_resource(UAContext *ua)
 {
-   char name[MAX_NAME_LENGTH];
    POOLRES *pool;
+   char name[MAX_NAME_LENGTH];
 
    start_prompt(ua, _("The defined Pool resources are:\n"));
    LockRes();
    foreach_res(pool, R_POOL) {
-      if (acl_access_ok(ua, Pool_ACL, pool->name())) {
+      if (ua->acl_access_ok(Pool_ACL, pool->name())) {
          add_prompt(ua, pool->name());
       }
    }
    UnlockRes();
+
    if (do_prompt(ua, _("Pool"), _("Select Pool resource"), name, sizeof(name)) < 0) {
       return NULL;
    }
-   pool = (POOLRES *)GetResWithName(R_POOL, name);
+
+   pool = ua->GetPoolResWithName(name);
+
    return pool;
 }
 
@@ -801,17 +903,18 @@ POOLRES *select_pool_resource(UAContext *ua)
  */
 POOLRES *get_pool_resource(UAContext *ua)
 {
-   POOLRES *pool = NULL;
    int i;
+   POOLRES *pool = NULL;
 
    i = find_arg_with_value(ua, NT_("pool"));
-   if (i >= 0 && acl_access_ok(ua, Pool_ACL, ua->argv[i])) {
-      pool = (POOLRES *)GetResWithName(R_POOL, ua->argv[i]);
+   if (i >= 0 && ua->acl_access_ok(Pool_ACL, ua->argv[i])) {
+      pool = ua->GetPoolResWithName(ua->argv[i]);
       if (pool) {
          return pool;
       }
       ua->error_msg(_("Error: Pool resource \"%s\" does not exist.\n"), ua->argv[i]);
    }
+
    return select_pool_resource(ua);
 }
 
@@ -1095,7 +1198,6 @@ STORERES *get_storage_resource(UAContext *ua, bool use_default, bool autochanger
              bstrcasecmp(ua->argk[i], NT_("sd"))) {
             store_name = ua->argv[i];
             break;
-
          } else if (bstrcasecmp(ua->argk[i], NT_("jobid"))) {
             jobid = str_to_int64(ua->argv[i]);
             if (jobid <= 0) {
@@ -1109,7 +1211,6 @@ STORERES *get_storage_resource(UAContext *ua, bool use_default, bool autochanger
             store = jcr->res.wstore;
             free_jcr(jcr);
             break;
-
          } else if (bstrcasecmp(ua->argk[i], NT_("job")) ||
                     bstrcasecmp(ua->argk[i], NT_("jobname"))) {
             if (!ua->argv[i]) {
@@ -1139,18 +1240,19 @@ STORERES *get_storage_resource(UAContext *ua, bool use_default, bool autochanger
       }
    }
 
-   if (store && !acl_access_ok(ua, Storage_ACL, store->name())) {
+   if (store && !ua->acl_access_ok(Storage_ACL, store->name())) {
       store = NULL;
    }
 
    if (!store && store_name && store_name[0] != 0) {
-      store = (STORERES *)GetResWithName(R_STORAGE, store_name);
+      store = ua->GetStoreResWithName(store_name);
+
       if (!store) {
          ua->error_msg(_("Storage resource \"%s\": not found\n"), store_name);
       }
    }
 
-   if (store && !acl_access_ok(ua, Storage_ACL, store->name())) {
+   if (store && !ua->acl_access_ok(Storage_ACL, store->name())) {
       store = NULL;
    }
 
@@ -1167,11 +1269,11 @@ STORERES *get_storage_resource(UAContext *ua, bool use_default, bool autochanger
 /*
  * Get drive that we are working with for this storage
  */
-int get_storage_drive(UAContext *ua, STORERES *store)
+drive_number_t get_storage_drive(UAContext *ua, STORERES *store)
 {
-   int i, drive = -1;
-   unsigned int cnt;
+   int i;
    char drivename[10];
+   drive_number_t drive = -1;
 
    /*
     * Get drive for autochanger if possible
@@ -1180,31 +1282,28 @@ int get_storage_drive(UAContext *ua, STORERES *store)
    if (i >= 0) {
       drive = atoi(ua->argv[i]);
    } else if (store && store->autochanger) {
-      /*
-       * If our structure is not set ask SD for # drives
-       */
-      if (store->drives == 0) {
-         store->drives = get_num_drives_from_SD(ua);
-      }
+      drive_number_t drives;
+
+      drives = get_num_drives(ua, store);
 
       /*
        * If only one drive, default = 0
        */
-      if (store->drives == 1) {
+      if (drives == 1) {
          drive = 0;
       } else {
          /*
           * Ask user to enter drive number
           */
          start_prompt(ua, _("Select Drive:\n"));
-         for (cnt = 0; cnt < store->drives; cnt++) {
-            bsnprintf(drivename, sizeof(drivename), "Drive %d", cnt);
+         for (drive_number_t cnt = 0; cnt < drives; cnt++) {
+            bsnprintf(drivename, sizeof(drivename), "Drive %hd", cnt);
             add_prompt(ua, drivename);
          }
          if (do_prompt(ua, _("Drive"), _("Select drive"), drivename, sizeof(drivename)) < 0) {
             drive = -1; /* None */
          } else {
-            sscanf(drivename, "Drive %d", &drive);
+            sscanf(drivename, "Drive %hd", &drive);
          }
       }
    } else {
@@ -1220,9 +1319,10 @@ int get_storage_drive(UAContext *ua, STORERES *store)
 /*
  * Get slot that we are working with for this storage
  */
-int get_storage_slot(UAContext *ua, STORERES *store)
+slot_number_t get_storage_slot(UAContext *ua, STORERES *store)
 {
-   int i, slot = -1;
+   int i;
+   slot_number_t slot = -1;
 
    /*
     * Get slot for autochanger if possible
@@ -1268,7 +1368,9 @@ int get_media_type(UAContext *ua, char *MediaType, int max_media)
 
    LockRes();
    foreach_res(store, R_STORAGE) {
-      add_prompt(ua, store->media_type);
+      if (ua->acl_access_ok(Storage_ACL, store->name())) {
+         add_prompt(ua, store->media_type);
+      }
    }
    UnlockRes();
 
@@ -1401,7 +1503,7 @@ alist *select_jobs(UAContext *ua, const char *reason)
          }
 
          if (jcr) {
-            if (jcr->res.job && !acl_access_ok(ua, Job_ACL, jcr->res.job->name(), true)) {
+            if (jcr->res.job && !ua->acl_access_ok(Job_ACL, jcr->res.job->name(), true)) {
                ua->error_msg(_("Unauthorized command from this console.\n"));
                goto bail_out;
             }
@@ -1431,7 +1533,7 @@ alist *select_jobs(UAContext *ua, const char *reason)
             continue;
          }
          tjobs++;                      /* Count of all jobs */
-         if (!acl_access_ok(ua, Job_ACL, jcr->res.job->name())) {
+         if (!ua->acl_access_ok(Job_ACL, jcr->res.job->name())) {
             continue;                  /* Skip not authorized */
          }
          njobs++;                      /* Count of authorized jobs */
@@ -1488,7 +1590,7 @@ alist *select_jobs(UAContext *ua, const char *reason)
                continue;
             }
 
-            if (!acl_access_ok(ua, Job_ACL, jcr->res.job->name())) {
+            if (!ua->acl_access_ok(Job_ACL, jcr->res.job->name())) {
                continue;            /* Skip not authorized */
             }
 
@@ -1535,7 +1637,7 @@ alist *select_jobs(UAContext *ua, const char *reason)
           * Only ask for confirmation when not in batch mode and there is no yes on the cmdline.
           */
          if (!ua->batch && find_arg(ua, NT_("yes")) == -1) {
-            if (!get_yesno(ua, _("Confirm cancel (yes/no): ")) || ua->pint32_val == 0) {
+            if (!get_yesno(ua, _("Confirm cancel (yes/no): ")) || !ua->pint32_val) {
                goto bail_out;
             }
          }
@@ -1552,7 +1654,7 @@ alist *select_jobs(UAContext *ua, const char *reason)
             if (jcr->JobId == 0) {    /* This is us */
                continue;
             }
-            if (!acl_access_ok(ua, Job_ACL, jcr->res.job->name())) {
+            if (!ua->acl_access_ok(Job_ACL, jcr->res.job->name())) {
                continue;              /* Skip not authorized */
             }
             bsnprintf(buf, sizeof(buf), _("JobId=%s Job=%s"), edit_int64(jcr->JobId, ed1), jcr->Job);
@@ -1570,12 +1672,12 @@ alist *select_jobs(UAContext *ua, const char *reason)
                char nbuf[1000];
 
                bsnprintf(nbuf, sizeof(nbuf), _("Cancel: %s\n\n%s"), buf, _("Confirm cancel?"));
-               if (!get_yesno(ua, nbuf) || ua->pint32_val == 0) {
+               if (!get_yesno(ua, nbuf) || !ua->pint32_val) {
                   goto bail_out;
                }
             } else {
                if (njobs == 1) {
-                  if (!get_yesno(ua, _("Confirm cancel (yes/no): ")) || ua->pint32_val == 0) {
+                  if (!get_yesno(ua, _("Confirm cancel (yes/no): ")) || !ua->pint32_val) {
                      goto bail_out;
                   }
                }

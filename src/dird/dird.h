@@ -26,6 +26,7 @@
  * Kern Sibbald, December MM
  */
 
+#include "lib/connection_pool.h"
 #include "lib/runscript.h"
 #include "lib/breg.h"
 #include "lib/bsr.h"
@@ -93,29 +94,85 @@ enum e_move_op {
    VOLUME_MOVE
 };
 
+enum e_slot_flag {
+   can_import = 0x01,
+   can_export = 0x02,
+   by_oper = 0x04,
+   by_mte = 0x08
+};
+
 typedef enum {
-   slot_type_unknown,     /* unknown slot type */
-   slot_type_drive,       /* drive slot */
-   slot_type_normal,      /* normal slot */
-   slot_type_import       /* import/export slot */
+   VOL_LIST_ALL,
+   VOL_LIST_PARTIAL
+} vol_list_type;
+
+typedef enum {
+   slot_type_unknown,             /* Unknown slot type */
+   slot_type_drive,               /* Drive slot */
+   slot_type_normal,              /* Normal slot */
+   slot_type_import,              /* Import/export slot */
+   slot_type_picker               /* Robotics */
 } slot_type;
 
 typedef enum {
-   slot_content_unknown,  /* slot content is unknown */
-   slot_content_empty,    /* slot is empty */
-   slot_content_full      /* slot is full */
+   slot_content_unknown,          /* Slot content is unknown */
+   slot_content_empty,            /* Slot is empty */
+   slot_content_full              /* Slot is full */
 } slot_content;
 
-/* Slot list definition */
-typedef struct s_vol_list {
-   dlink link;            /* link for list */
-   int Index;             /* Unique index */
-   slot_type Type;        /* See slot_type_* */
-   slot_content Content;  /* See slot_content_* */
-   int Slot;              /* Drive number when slot_type_drive or actual slot number */
-   int Loaded;            /* Volume loaded in drive when slot_type_drive */
-   char *VolName;         /* Actual Volume Name */
-} vol_list_t;
+enum s_mapping_type {
+   LOGICAL_TO_PHYSICAL,
+   PHYSICAL_TO_LOGICAL
+};
+
+/*
+ * Slot list definition
+ */
+struct vol_list_t {
+   dlink link;                    /* Link for list */
+   slot_number_t Index;           /* Unique index */
+   slot_flags_t Flags;            /* Slot specific flags see e_slot_flag enum */
+   slot_type Type;                /* See slot_type_* */
+   slot_content Content;          /* See slot_content_* */
+   slot_number_t Slot;            /* Drive number when slot_type_drive or actual slot number */
+   slot_number_t Loaded;          /* Volume loaded in drive when slot_type_drive */
+   char *VolName;                 /* Actual Volume Name */
+};
+
+struct changer_vol_list_t {
+   int16_t reference_count;       /* Number of references to this vol_list */
+   vol_list_type type;            /* Type of vol_list see vol_list_type enum */
+   utime_t timestamp;             /* When was this vol_list created */
+   dlist *contents;               /* Contents of autochanger */
+};
+
+/*
+ * Mapping from logical to physical storage address
+ */
+struct storage_mapping_t {
+   dlink link;                   /* Link for list */
+   slot_type Type;               /* See slot_type_* */
+   slot_number_t Index;          /* Unique index */
+   slot_number_t Slot;           /* Drive number when slot_type_drive or actual slot number */
+};
+
+struct runtime_storage_status_t {
+   int32_t NumConcurrentJobs;     /* Number of concurrent jobs running */
+   int32_t NumConcurrentReadJobs; /* Number of jobs reading */
+   drive_number_t drives;         /* Number of drives in autochanger */
+   slot_number_t slots;           /* Number of slots in autochanger */
+   dlist *storage_mappings;       /* Mappings from logical to physical storage address */
+   changer_vol_list_t *vol_list;  /* Cached content of autochanger */
+   pthread_mutex_t changer_lock;  /* Any access to the autochanger is controlled by this lock */
+};
+
+struct runtime_client_status_t {
+   int32_t NumConcurrentJobs;     /* Number of concurrent jobs running */
+};
+
+struct runtime_job_status_t {
+   int32_t NumConcurrentJobs;     /* Number of concurrent jobs running */
+};
 
 #define INDEX_DRIVE_OFFSET 0
 #define INDEX_MAX_DRIVES 100
@@ -129,5 +186,6 @@ typedef struct s_vol_list {
 #define FD_VERSION_51 51
 #define FD_VERSION_52 52
 #define FD_VERSION_53 53
+#define FD_VERSION_54 54
 
 #include "protos.h"

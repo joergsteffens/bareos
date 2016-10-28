@@ -85,7 +85,6 @@ static bool do_unfill();
 
 /* Static variables */
 
-#define CONFIG_FILE "bareos-sd.conf"
 #define MAX_CMD_ARGS 30
 
 static POOLMEM *cmd;
@@ -251,10 +250,6 @@ int main(int margc, char *margv[])
 
    if (signals) {
       init_signals(terminate_btape);
-   }
-
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
    }
 
    daemon_start_time = time(NULL);
@@ -1476,7 +1471,8 @@ static int append_test()
 static int autochanger_test()
 {
    POOLMEM *results, *changer;
-   int slot, status, loaded;
+   slot_number_t slot, loaded;
+   int status;
    int timeout = dcr->device->max_changer_wait;
    int sleep_time = 0;
 
@@ -1532,9 +1528,9 @@ try_again:
       /* We are going to load a new tape, so close the device */
       dev->close(dcr);
       Pmsg2(-1, _("3302 Issuing autochanger \"unload %d %d\" command.\n"),
-         loaded, dev->drive_index);
+            loaded, dev->drive);
       changer = edit_device_codes(dcr, changer,
-                   dcr->device->changer_command, "unload");
+                                  dcr->device->changer_command, "unload");
       status = run_program(changer, timeout, results);
       Pmsg2(-1, _("unload status=%s %d\n"), status==0?_("OK"):_("Bad"), status);
       if (status != 0) {
@@ -1551,15 +1547,15 @@ try_again:
    slot = 1;
    dcr->VolCatInfo.Slot = slot;
    Pmsg2(-1, _("3303 Issuing autochanger \"load %d %d\" command.\n"),
-      slot, dev->drive_index);
+         slot, dev->drive);
    changer = edit_device_codes(dcr, changer,
-                dcr->device->changer_command, "load");
+                               dcr->device->changer_command, "load");
    Dmsg1(100, "Changer=%s\n", changer);
    dev->close(dcr);
    status = run_program(changer, timeout, results);
    if (status == 0) {
       Pmsg2(-1,  _("3303 Autochanger \"load %d %d\" status is OK.\n"),
-         slot, dev->drive_index);
+            slot, dev->drive);
    } else {
       berrno be;
       Pmsg1(-1, _("3993 Bad autochanger command: %s\n"), changer);
@@ -2982,7 +2978,7 @@ do_tape_cmds()
    while (!quit && get_cmd("*")) {
       Dsm_check(200);
       found = false;
-      parse_args(cmd, &args, &argc, argk, argv, MAX_CMD_ARGS);
+      parse_args(cmd, args, &argc, argk, argv, MAX_CMD_ARGS);
       for (i=0; i<comsize; i++)       /* search for command */
          if (argc > 0 && fstrsch(argk[0],  commands[i].key)) {
             (*commands[i].func)();    /* go execute command */
@@ -3013,7 +3009,7 @@ PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
 "Usage: btape <options> <device_name>\n"
 "       -b <file>     specify bootstrap file\n"
-"       -c <file>     set Storage configuration file to file\n"
+"       -c <path>     specify Storage configuration file or directory\n"
 "       -D <director> specify a director name specified in the Storage\n"
 "                     configuration file for the Key Encryption Key selection\n"
 "       -d <nn>       set debug level to <nn>\n"

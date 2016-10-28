@@ -1,3 +1,4 @@
 /usr/lib/bareos/backends/libbareossd-rados*.so
 /usr/lib/bareos/backends/libbareossd-cephfs*.so
-/etc/bareos/bareos-sd.d/device-ceph-rados.conf
+/etc/bareos/bareos-dir.d/storage/Rados.conf.example
+/etc/bareos/bareos-sd.d/device/RadosStorage.conf.example

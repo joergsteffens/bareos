@@ -22,13 +22,12 @@
  * BAREOS Director -- admin.c -- responsible for doing admin jobs
  *
  * Kern Sibbald, May MMIII
- *
- * Basic tasks done here:
- *    Display the job report.
  */
 
 #include "bareos.h"
 #include "dird.h"
+
+static const int dbglvl = 100;
 
 bool do_admin_init(JCR *jcr)
 {
@@ -36,12 +35,13 @@ bool do_admin_init(JCR *jcr)
    if (!allow_duplicate_job(jcr)) {
       return false;
    }
+
    return true;
 }
 
 /*
- *  Returns:  false on failure
- *            true  on success
+ * Returns: false on failure
+ *          true  on success
  */
 bool do_admin(JCR *jcr)
 {
@@ -50,12 +50,14 @@ bool do_admin(JCR *jcr)
 
    jcr->fname = (char *)get_pool_memory(PM_FNAME);
 
-   /* Print Job Start message */
-   Jmsg(jcr, M_INFO, 0, _("Start Admin JobId %d, Job=%s\n"),
-        jcr->JobId, jcr->Job);
+   /*
+    * Print Job Start message
+    */
+   Jmsg(jcr, M_INFO, 0, _("Start Admin JobId %d, Job=%s\n"), jcr->JobId, jcr->Job);
 
    jcr->setJobStatus(JS_Running);
    admin_cleanup(jcr, JS_Terminated);
+
    return true;
 }
 
@@ -69,13 +71,12 @@ void admin_cleanup(JCR *jcr, int TermCode)
    const char *term_msg;
    int msg_type;
 
-   Dmsg0(100, "Enter backup_cleanup()\n");
+   Dmsg0(dbglvl, "Enter admin_cleanup()\n");
 
    update_job_end(jcr, TermCode);
 
    if (!db_get_job_record(jcr, jcr->db, &jcr->jr)) {
-      Jmsg(jcr, M_WARNING, 0, _("Error getting Job record for Job report: ERR=%s"),
-         db_strerror(jcr->db));
+      Jmsg(jcr, M_WARNING, 0, _("Error getting Job record for Job report: ERR=%s"), db_strerror(jcr->db));
       jcr->setJobStatus(JS_ErrorTerminated);
    }
 
@@ -102,12 +103,12 @@ void admin_cleanup(JCR *jcr, int TermCode)
    bstrftimes(edt, sizeof(edt), jcr->jr.EndTime);
 
    Jmsg(jcr, msg_type, 0, _("BAREOS " VERSION " (" LSMDATE "): %s\n"
-"  JobId:                  %d\n"
-"  Job:                    %s\n"
-"  Scheduled time:         %s\n"
-"  Start time:             %s\n"
-"  End time:               %s\n"
-"  Termination:            %s\n\n"),
+        "  JobId:                  %d\n"
+        "  Job:                    %s\n"
+        "  Scheduled time:         %s\n"
+        "  Start time:             %s\n"
+        "  End time:               %s\n"
+        "  Termination:            %s\n\n"),
         edt,
         jcr->jr.JobId,
         jcr->jr.Job,
@@ -116,5 +117,5 @@ void admin_cleanup(JCR *jcr, int TermCode)
         edt,
         term_msg);
 
-   Dmsg0(100, "Leave admin_cleanup()\n");
+   Dmsg0(dbglvl, "Leave admin_cleanup()\n");
 }

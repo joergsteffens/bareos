@@ -1,7 +1,7 @@
 ;
-;   BAREOS?? - Backup Archiving REcovery Open Sourced
+;   BAREOS - Backup Archiving REcovery Open Sourced
 ;
-;   Copyright (C) 2012-2014 Bareos GmbH & Co. KG
+;   Copyright (C) 2012-2016 Bareos GmbH & Co. KG
 ;
 ;   This program is Free Software; you can redistribute it and/or
 ;   modify it under the terms of version three of the GNU Affero General Public
@@ -50,7 +50,7 @@ Var ClientName            #XXX_REPLACE_WITH_HOSTNAME_XXX
 Var ClientPassword        #XXX_REPLACE_WITH_FD_PASSWORD_XXX
 Var ClientMonitorPassword #XXX_REPLACE_WITH_FD_MONITOR_PASSWORD_XXX
 Var ClientAddress         #XXX_REPLACE_WITH_FD_MONITOR_PASSWORD_XXX
-Var ClientCompatible      # is  client compatible?
+Var ClientCompatible      # is client compatible?
 
 # Needed for configuring the storage config file
 Var StorageName        # name of the storage in the director config (Device)
@@ -84,6 +84,13 @@ Var DbAdminUser
 # do we need to install Director/Storage (Cmdline setting)
 Var InstallDirector
 Var InstallStorage
+
+# Install the webui (cmdline setting)
+Var InstallWebUI
+Var WebUIListenAddress
+Var WebUIListenPort
+Var WebUILogin
+Var WebUIPassword
 
 # Generated configuration snippet for bareos director config (client ressource)
 Var ConfigSnippet
@@ -150,16 +157,16 @@ ${StrRep}
 !insertmacro MUI_PAGE_COMPONENTS
 
 
-; Custom für Abfragen benötigter Parameter für den Client
+; Custom page to get Client parameter
 Page custom getClientParameters
 
-; Custom für Abfragen benötigter Parameter für den Zugriff auf director
+; Custom page to get parameter to access the bareos-director
 Page custom getDirectorParameters
 
-
+; Custom page to get parameter for a local database
 Page custom getDatabaseParameters getDatabaseParametersLeave
 
-; Custom für Abfragen benötigter Parameter für den Storage
+; Custom page to get parameter to for a local bareos-storage
 Page custom getStorageParameters
 
 ; Instfiles page
@@ -170,14 +177,16 @@ Page custom getStorageParameters
 Page custom displayDirconfSnippet
 
 Function LaunchLink
+  StrCmp $InstallWebUI "no" skipLaunchWebui
+    ExecShell "open" "http://$WebUIListenAddress:$WebUIListenPort"
+  skipLaunchWebui:
   ExecShell "open" "http://www.bareos.com"
 FunctionEnd
 
 !define MUI_FINISHPAGE_RUN
 #!define MUI_FINISHPAGE_RUN_NOTCHECKED
-!define MUI_FINISHPAGE_RUN_TEXT "Open www.bareos.com"
+!define MUI_FINISHPAGE_RUN_TEXT "open Bareos websites"
 !define MUI_FINISHPAGE_RUN_FUNCTION "LaunchLink"
-
 !insertmacro MUI_PAGE_FINISH
 
 ; Uninstaller pages
@@ -191,7 +200,9 @@ FunctionEnd
 
 ; MUI end ------
 
-
+!macro "CreateURLShortCut" "URLFile" "URLSite" "URLDesc"
+  WriteINIStr "${URLFile}.URL" "InternetShortcut" "URL" "${URLSite}"
+!macroend
 
 # check if postgres is installed and set the postgres variables if so
 !macro getPostgresVars
@@ -375,6 +386,40 @@ skipmsgbox:
   ${EndIf}
 !macroend
 
+
+!macro AllowAccessForAll fname
+  # This is important to have $APPDATA variable
+  # point to ProgramData folder
+  # instead of current user's Roaming folder
+  SetShellVarContext all
+
+    # Disable file access inheritance
+    AccessControl::DisableFileInheritance "${fname}"
+    Pop $R0
+    ${If} $R0 == error
+       Pop $R0
+       DetailPrint `AccessControl error: $R0`
+    ${EndIf}
+
+    # Set file owner to Users
+    AccessControl::SetFileOwner "${fname}" "(S-1-5-32-545)"  # user
+    Pop $R0
+    ${If} $R0 == error
+       Pop $R0
+       DetailPrint `AccessControl error: $R0`
+    ${EndIf}
+
+    # Set fullaccess for Users (S-1-5-32-545)
+    AccessControl::SetOnFile "${fname}" "(S-1-5-32-545)" "FullAccess"
+    Pop $R0
+    ${If} $R0 == error
+       Pop $R0
+       DetailPrint `AccessControl error: $R0`
+    ${EndIf}
+!macroend
+
+
+
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 OutFile "${PRODUCT_NAME}-${PRODUCT_VERSION}.exe"
 InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
@@ -389,11 +434,11 @@ InstType "Minimal - FileDaemon + Plugins, no Traymonitor"
 
 
 Section -StopDaemon
-#  nsExec::ExecToLog "net stop bareos-fd"
-# looks like this does not work on win7 sp1
-# if the service doesnt exist, it fails and the installation
-# cannot start
-# so we use the shotgun:
+  #  nsExec::ExecToLog "net stop bareos-fd"
+  # looks like this does not work on win7 sp1
+  # if the service doesnt exist, it fails and the installation
+  # cannot start
+  # so we use the shotgun:
   KillProcWMI::KillProc "bareos-fd.exe"
   KillProcWMI::KillProc "bareos-sd.exe"
   KillProcWMI::KillProc "bareos-dir.exe"
@@ -405,103 +450,59 @@ SectionEnd
 
 Section -SetPasswords
   SetShellVarContext all
-  # Write sed file to replace the preconfigured variables by the configured values
-  #
-  # File Daemon and Tray Monitor configs
-  #
-  FileOpen $R1 $PLUGINSDIR\config.sed w
-  #FileOpen $R1 config.sed w
 
-  FileWrite $R1 "s#@VERSION@#${PRODUCT_VERSION}#g$\r$\n"
-  FileWrite $R1 "s#@DATE@#${__DATE__}#g$\r$\n"
-  FileWrite $R1 "s#@DISTNAME@#Windows#g$\r$\n"
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DIRECTOR_PASSWORD_XXX#$DirectorPassword#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DIRECTOR_MONITOR_PASSWORD_XXX#$DirectorMonPassword#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_CLIENT_PASSWORD_XXX#$ClientPassword#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_CLIENT_MONITOR_PASSWORD_XXX#$ClientMonitorPassword#g$\r$\n"
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_HOSTNAME_XXX#$HostName#g$\r$\n"
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_BASENAME_XXX-fd#$ClientName#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_BASENAME_XXX-dir#$DirectorName#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_BASENAME_XXX-mon#$HostName-mon#g$\r$\n"
-
-  #
-  # If we want to be compatible we uncomment the setting for "compatible = yes"
-  #
-  ${If} $ClientCompatible == ${BST_CHECKED}
-    FileWrite $R1 "s@# compatible@compatible@g$\r$\n"
-  ${EndIf}
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_SD_MONITOR_PASSWORD_XXX#$StorageMonitorPassword#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_STORAGE_PASSWORD_XXX#$StoragePassword#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_BASENAME_XXX-sd#$StorageDaemonName#g$\r$\n"
-
-  # Director DB Connection Setup
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DATABASE_DRIVER_XXX#$DbDriver#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DB_PORT_XXX#$DbPort#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DB_USER_XXX#$DbUser#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DB_PASSWORD_XXX#$DbPassword#g$\r$\n"
-  FileWrite $R1 "s#QueryFile = #Working Directory = $\"C:/ProgramData/Bareos/Working$\"\n  QueryFile = #g$\r$\n"
-
-  # backupcatalog backup scripts
-  ${StrRep} '$0' "$APPDATA" '\' '/' # replace \ with / in APPDATA
-  FileWrite $R1 "s#C:/Program Files/Bareos/make_catalog_backup.pl MyCatalog#$0/${PRODUCT_NAME}/scripts/make_catalog_backup.bat#g$\r$\n"
-  FileWrite $R1 "s#C:/Program Files/Bareos/delete_catalog_backup#$0/${PRODUCT_NAME}/scripts/delete_catalog_backup.bat#g$\r$\n"
-
-
-  FileClose $R1
-
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\bareos-dir.conf"'
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\bareos-fd.conf"'
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\bareos-sd.conf"'
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\tray-monitor.fd.conf"'
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\tray-monitor.fd-sd.conf"'
-  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\config.sed" -i-template "$PLUGINSDIR\tray-monitor.fd-sd-dir.conf"'
-
-  #Delete config.sed
+  # TODO: replace by ConfigureConfiguration ?
 
   FileOpen $R1 $PLUGINSDIR\postgres.sed w
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DB_USER_XXX#$DbUser#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DB_PASSWORD_XXX#with password '$DbPassword'#g$\r$\n"
+  FileWrite $R1 "s#@DB_USER@#$DbUser#g$\r$\n"
+  FileWrite $R1 "s#@DB_PASS@#with password '$DbPassword'#g$\r$\n"
   FileClose $R1
+
   #
   # config files for bconsole and bat to access remote director
   #
   FileOpen $R1 $PLUGINSDIR\bconsole.sed w
-
-  FileWrite $R1 "s#XXX_REPLACE_WITH_BASENAME_XXX-dir#$DirectorName#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_HOSTNAME_XXX#$DirectorAddress#g$\r$\n"
-  FileWrite $R1 "s#XXX_REPLACE_WITH_DIRECTOR_PASSWORD_XXX#$DirectorPassword#g$\r$\n"
-
+  FileWrite $R1 "s#@basename@-dir#$DirectorName#g$\r$\n"
+  FileWrite $R1 "s#@dir_port@#9101#g$\r$\n"
+  FileWrite $R1 "s#@hostname@#$DirectorAddress#g$\r$\n"
+  FileWrite $R1 "s#@dir_password@#$DirectorPassword#g$\r$\n"
   FileClose $R1
-
 
   nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\bconsole.sed" -i-template "$PLUGINSDIR\bconsole.conf"'
   nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\bconsole.sed" -i-template "$PLUGINSDIR\bat.conf"'
 
-  #Delete bconsole.sed
+  # Configure webui
 
-#
-#  write client config snippet for director
-#
-#
-#  FileOpen $R1 import_this_file_into_your_director_config.txt w
-#
-#  FileWrite $R1 'Client {$\n'
-#  FileWrite $R1 '  Name = $ClientName$\n'
-#  FileWrite $R1 '  Address = $ClientAddress$\n'
-#  FileWrite $R1 '  Password = "$ClientPassword"$\n'
-#  FileWrite $R1 '  Catalog = "MyCatalog"$\n'
-#  FileWrite $R1 '}$\n'
-#
-#  FileClose $R1
+  FileOpen $R1 $PLUGINSDIR\webui.sed w
+
+  FileWrite $R1 "s#/etc/bareos-webui/directors.ini#C:/ProgramData/Bareos/directors.ini#g$\r$\n"
+  FileWrite $R1 "s#/etc/bareos-webui/configuration.ini#C:/ProgramData/Bareos/configuration.ini#g$\r$\n"
+  FileWrite $R1 "s#;include_path = $\".;c.*#include_path = $\".;c:/php/includes;C:/Program Files/Bareos/bareos-webui/vendor/ZendFramework$\"#g$\r$\n"
+  FileWrite $R1 "s#; extension_dir = $\"ext$\"#extension_dir = $\"ext$\"#g$\r$\n"
+  FileWrite $R1 "s#;extension=php_gettext.dll#extension=php_gettext.dll#g$\r$\n"
+
+  # set username/password to bareos/bareos
+  FileWrite $R1 "s#user1#bareos#g$\r$\n"
+  FileWrite $R1 "s#CHANGEME#bareos#g$\r$\n"
+
+  # configure webui login
+  #  Name = admin
+  #  Password = "admin"
+  #
+  FileWrite $R1 "s#Name = admin#Name = $WebUILogin#g$\r$\n"
+  FileWrite $R1 "s#Password = $\"admin$\"#Password = $WebUIPassword#g$\r$\n"
+
+  FileClose $R1
+
+
+  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\webui.sed" -i-template "$PLUGINSDIR\php.ini"'
+  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\webui.sed" -i-template "$PLUGINSDIR\global.php"'
+  nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$PLUGINSDIR\webui.sed" -i-template "$PLUGINSDIR\admin.conf"'
+
 SectionEnd
 
-
-#; Check if database server is installed only in silent mode
+#
+# Check if database server is installed only in silent mode
 # otherwise this is done in the database dialog
 #
 Section -DataBaseCheck
@@ -539,10 +540,11 @@ SectionIn 1 2 3 4
   #  sleep 3000
   #  nsExec::ExecToLog '"$INSTDIR\bareos-fd.exe" /remove'
 
-  SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateDirectory "$APPDATA\${PRODUCT_NAME}"
+  SetOutPath "$INSTDIR"
+  File "bareos-config-deploy.bat"
   File "bareos-fd.exe"
   File "libbareos.dll"
   File "libbareosfind.dll"
@@ -551,7 +553,7 @@ SectionIn 1 2 3 4
   File "libgcc_s_*-1.dll"
   File "libssl-*.dll"
   File "libstdc++-6.dll"
-  File "pthreadGCE2.dll"
+  File "libwinpthread-1.dll"
   File "zlib1.dll"
   File "liblzo2-2.dll"
   File "libfastlz.dll"
@@ -561,26 +563,41 @@ SectionIn 1 2 3 4
   File "openssl.exe"
   File "sed.exe"
 
-# install unittests
+  # install unittests
   File "test_*.exe"
   File "/oname=cmocka.dll" "libcmocka.dll"
 
-  !insertmacro InstallConfFile bareos-fd.conf
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\bareos-fd.d"
+  File /r config\bareos-fd.d\*.*
+
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\tray-monitor.d\client\"
+  File config\tray-monitor.d\client\FileDaemon-local.conf
+
+  SetOutPath "$APPDATA\${PRODUCT_NAME}"
+  File "config\fillup.sed"
+
 SectionEnd
+
+
 
 Section /o "File Daemon Plugins " SEC_FDPLUGINS
 SectionIn 1 2 3 4
   SetShellVarContext all
   SetOutPath "$INSTDIR\Plugins"
   SetOverwrite ifnewer
-  File "bpipe-fd.dll"
-  File "mssqlvdi-fd.dll"
+  #File "bpipe-fd.dll"
+  #File "mssqlvdi-fd.dll"
+  #File "python-fd.dll"
+  File "*-fd.dll"
 
-  File "python-fd.dll"
-  File "BareosFd*.py"
-  File "bareos-fd*.py"
-  File "bareos_fd*.py"
+  File "Plugins\BareosFd*.py"
+  File "Plugins\bareos-fd*.py"
+  File "Plugins\bareos_fd*.py"
 SectionEnd
+
+
 
 Section "Open Firewall for File Daemon" SEC_FIREWALL_FD
 SectionIn 1 2 3 4
@@ -622,7 +639,14 @@ SectionIn 2 3
 
   CreateDirectory "C:\bareos-storage"
 
-  !insertmacro InstallConfFile bareos-sd.conf
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\bareos-sd.d"
+  File /r config\bareos-sd.d\*.*
+
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\tray-monitor.d\storage"
+  File config\tray-monitor.d\storage\StorageDaemon-local.conf
+
 SectionEnd
 
 Section /o "Storage Daemon Plugins " SEC_SDPLUGINS
@@ -630,12 +654,10 @@ SectionIn 2 3
   SetShellVarContext all
   SetOutPath "$INSTDIR\Plugins"
   SetOverwrite ifnewer
-  File "autoxflate-sd.dll"
-
-  File "python-sd.dll"
-  File "BareosSd*.py"
-  File "bareos-sd*.py"
-  File "bareos_sd*.py"
+  File "*-sd.dll"
+  File "Plugins\BareosSd*.py"
+  File "Plugins\bareos-sd*.py"
+  File "Plugins\bareos_sd*.py"
 SectionEnd
 
 
@@ -657,6 +679,8 @@ SectionEnd
 
 SubSectionEnd # Storage Daemon Subsection
 
+
+
 SubSection "Director" SUBSEC_DIR
 
 Section /o "Director" SEC_DIR
@@ -675,7 +699,13 @@ SectionIn 2 3
   File "bwild.exe"
   File "libbareoscats.dll"
 
-  !insertmacro InstallConfFile bareos-dir.conf
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\bareos-dir.d"
+  File /r config\bareos-dir.d\*.*
+
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\tray-monitor.d\director"
+  File config\tray-monitor.d\director\Director-local.conf
 
 SectionEnd
 
@@ -684,6 +714,7 @@ Section /o "Director PostgreSQL Backend Support " SEC_DIR_POSTGRES
 SectionIn 3
   SetShellVarContext all
 
+  SetOutPath "$INSTDIR"
   File "libbareoscats-postgresql.dll"
 
   # edit sql ddl files
@@ -721,6 +752,10 @@ SectionIn 3
 
   DetailPrint "libeay32.dll"
   CopyFiles /SILENT "$PostgresBinPath\libeay32.dll" "$INSTDIR"
+
+  # needed since postgresql 9.5
+  DetailPrint "libiconv-2.dll"
+  CopyFiles /SILENT "$PostgresBinPath\libiconv-2.dll" "$INSTDIR"
 
   # Since PostgreSQL 9.4 unfortunately setting the PATH Variable is not enough
   # to execute psql.exe It always complains about:
@@ -783,6 +818,7 @@ Section /o "Director SQLite Backend Support " SEC_DIR_SQLITE
 SectionIn 2
   SetShellVarContext all
 
+  SetOutPath "$INSTDIR"
   File "sqlite3.exe"
   File "libsqlite3-0.dll"
   File "libbareoscats-sqlite3.dll"
@@ -825,16 +861,18 @@ SectionIn 2
 
 SectionEnd
 
+
 Section /o "Director Plugins" SEC_DIRPLUGINS
 SectionIn 2 3
   SetShellVarContext all
   SetOutPath "$INSTDIR\Plugins"
   SetOverwrite ifnewer
 
-  File "python-dir.dll"
-  File "BareosDir*.py"
-  File "bareos-dir*.py"
-  File "bareos_dir*.py"
+  #File "python-dir.dll"
+  File "*-dir.dll"
+  File "Plugins\BareosDir*.py"
+  File "Plugins\bareos-dir*.py"
+  File "Plugins\bareos_dir*.py"
 SectionEnd
 
 
@@ -854,17 +892,115 @@ SectionIn 2 3
   ${EndIf}
 SectionEnd
 
-
 SubSectionEnd # Director Subsection
 
-SubSection "Consoles" SUBSEC_CONSOLES
+
+
+SubSection "User Interfaces" SUBSEC_CONSOLES
+
+Section /o "Tray-Monitor" SEC_TRAYMON
+SectionIn 1 2 3
+  SetShellVarContext all
+  SetOutPath "$INSTDIR"
+  SetOverwrite ifnewer
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\bareos-tray-monitor.lnk" "$INSTDIR\bareos-tray-monitor.exe"
+
+  # autostart
+  CreateShortCut "$SMSTARTUP\bareos-tray-monitor.lnk" "$INSTDIR\bareos-tray-monitor.exe"
+
+  File "bareos-tray-monitor.exe"
+  File "libpng*.dll"
+  File "QtCore4.dll"
+  File "QtGui4.dll"
+
+  # install configuration as templates
+  SetOutPath "$INSTDIR\defaultconfigs\tray-monitor.d\monitor"
+  File config\tray-monitor.d\monitor\bareos-mon.conf
+SectionEnd
+
+
+Section "Bareos Webui" SEC_WEBUI
+   SectionIn 2 3
+   ; set to yes, needed for MUI_FINISHPAGE_RUN_FUNCTION
+   StrCpy $InstallWebUI "yes"
+   SetShellVarContext all
+   SetOutPath "$INSTDIR"
+   SetOverwrite ifnewer
+   File /r "nssm.exe"
+   File /r "bareos-webui"
+
+IfSilent skip_vc_redist_check
+   # check  for Visual C++ Redistributable für Visual Studio 2012 x86 (32 Bit)
+   ReadRegDword $R1 HKLM "SOFTWARE\Wow6432Node\Microsoft\VisualStudio\11.0\VC\Runtimes\x86" "Installed"
+check_for_vc_redist:
+   ${If} $R1 == ""
+      ExecShell "open" "https://www.microsoft.com/en-us/download/details.aspx?id=30679"
+      MessageBox MB_OK|MB_ICONSTOP "Visual C++ Redistributable for Visual Studio 2012 x86 was not found$\r$\n\
+                                 It is needed by the bareos-webui service.$\r$\n\
+                                 Please install vcredist_x86.exe from $\r$\n\
+                                 https://www.microsoft.com/en-us/download/details.aspx?id=30679$\r$\n\
+                                 and click OK when done." /SD IDOK
+   ${EndIf}
+   ReadRegDword $R1 HKLM "SOFTWARE\Wow6432Node\Microsoft\VisualStudio\11.0\VC\Runtimes\x86" "Installed"
+   ${If} $R1 == ""
+      goto check_for_vc_redist
+   ${EndIf}
+
+skip_vc_redist_check:
+   Rename  "$INSTDIR\bareos-webui\config\autoload\global.php" "$INSTDIR\bareos-webui\config\autoload\global.php.orig"
+   Rename  "$PLUGINSDIR\global.php" "$INSTDIR\bareos-webui\config\autoload\global.php"
+
+   Rename  "$PLUGINSDIR\php.ini"   "$APPDATA\${PRODUCT_NAME}\php.ini"
+   Rename  "$PLUGINSDIR\directors.ini" "$APPDATA\${PRODUCT_NAME}\directors.ini"
+   Rename  "$PLUGINSDIR\configuration.ini" "$APPDATA\${PRODUCT_NAME}\configuration.ini"
+
+
+   CreateDirectory "$INSTDIR\defaultconfigs\bareos-dir.d\profile"
+   Rename  "$PLUGINSDIR\webui-admin.conf" "$INSTDIR\defaultconfigs\bareos-dir.d\profile\webui-admin.conf"
+
+   CreateDirectory "$INSTDIR\defaultconfigs\bareos-dir.d\console"
+   Rename  "$PLUGINSDIR\admin.conf"       "$INSTDIR\defaultconfigs\bareos-dir.d\console\admin.conf"
+
+   FileClose $R1
+
+   ExecWait '$INSTDIR\nssm.exe install bareos-webui $INSTDIR\bareos-webui\php\php.exe'
+   ExecWait '$INSTDIR\nssm.exe set bareos-webui AppDirectory \"$INSTDIR\bareos-webui\"'
+   ExecWait '$INSTDIR\nssm.exe set bareos-webui Application  $INSTDIR\bareos-webui\php\php.exe'
+   # nssm.exe wants """ """ around parameters with spaces, the executable itself without quotes
+   # see https://nssm.cc/usage -> quoting issues
+   ExecWait '$INSTDIR\nssm.exe set bareos-webui AppParameters \
+      -S $WebUIListenAddress:$WebUIListenPort \
+      -c $\"$\"$\"$APPDATA\${PRODUCT_NAME}\php.ini$\"$\"$\" \
+      -t $\"$\"$\"$INSTDIR\bareos-webui\public$\"$\"$\"'
+   ExecWait '$INSTDIR\nssm.exe set bareos-webui AppStdout $\"$\"$\"$APPDATA\${PRODUCT_NAME}\logs\bareos-webui.log$\"$\"$\"'
+   ExecWait '$INSTDIR\nssm.exe set bareos-webui AppStderr $\"$\"$\"$APPDATA\${PRODUCT_NAME}\logs\bareos-webui.log$\"$\"$\"'
+
+   WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\Bareos-webui" \
+                     "Description" "Bareos Webui php service"
+
+   nsExec::ExecToLog "net start Bareos-webui"
+
+   # Shortcuts
+   !insertmacro "CreateURLShortCut" "bareos-webui" "http://$WebUIListenAddress:$WebUIListenPort" "Bareos Backup Server Web Interface"
+   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\bareos-webui.lnk" "http://$WebUIListenAddress:$WebUIListenPort"
+
+   # WebUI Firewall
+
+   DetailPrint  "Opening Firewall for WebUI"
+   DetailPrint  "netsh advfirewall firewall add rule name=$\"Bareos WebUI access$\" dir=in action=allow program=$\"$INSTDIR\bareos-webui\php\php.exe$\" enable=yes protocol=TCP localport=$WEBUILISTENPORT description=$\"Bareos WebUI rule$\""
+   # profile=[private,domain]"
+   nsExec::Exec "netsh advfirewall firewall add rule name=$\"Bareos WebUI access$\" dir=in action=allow program=$\"$INSTDIR\bareos-webui\php\php.exe$\" enable=yes protocol=TCP localport=$WEBUILISTENPORT description=$\"Bareos WebUI rule$\""
+   # profile=[private,domain]"
+
+SectionEnd
+
 
 Section /o "Text Console (bconsole)" SEC_BCONSOLE
 SectionIn 2 3
   SetShellVarContext all
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\bconsole.lnk" "$INSTDIR\bconsole.exe" '-c "$APPDATA\${PRODUCT_NAME}\bconsole.conf"'
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\bconsole.lnk" "$INSTDIR\bconsole.exe"
 
   File "bconsole.exe"
   File "libhistory6.dll"
@@ -874,40 +1010,14 @@ SectionIn 2 3
   !insertmacro InstallConfFile "bconsole.conf"
 SectionEnd
 
-Section /o "Tray-Monitor" SEC_TRAYMON
-SectionIn 1 2 3
+
+Section /o "Qt Console (BAT, deprecated)" SEC_BAT
+#SectionIn 2 3
   SetShellVarContext all
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\bareos-tray-monitor.lnk" "$INSTDIR\bareos-tray-monitor.exe" '-c "$APPDATA\${PRODUCT_NAME}\tray-monitor.conf"'
-
-  # autostart
-  CreateShortCut "$SMSTARTUP\bareos-tray-monitor.lnk" "$INSTDIR\bareos-tray-monitor.exe" '-c "$APPDATA\${PRODUCT_NAME}\tray-monitor.conf"'
-
-  File "bareos-tray-monitor.exe"
-  File "libpng*.dll"
-  File "QtCore4.dll"
-  File "QtGui4.dll"
-  rename "$PLUGINSDIR\tray-monitor.fd.conf" "$PLUGINSDIR\tray-monitor.conf"
-${If} ${SectionIsSelected} ${SEC_SD}
-  delete "$PLUGINSDIR\tray-monitor.conf"
-  rename "$PLUGINSDIR\tray-monitor.fd-sd.conf" "$PLUGINSDIR\tray-monitor.conf"
-${EndIf}
-${If} ${SectionIsSelected} ${SEC_DIR}
-  delete "$PLUGINSDIR\tray-monitor.conf"
-  rename "$PLUGINSDIR\tray-monitor.fd-sd-dir.conf" "$PLUGINSDIR\tray-monitor.conf"
-${EndIf}
-
-  !insertmacro InstallConfFile "tray-monitor.conf"
-SectionEnd
-
-Section /o "Qt Console (BAT)" SEC_BAT
-SectionIn 2 3
-  SetShellVarContext all
-  SetOutPath "$INSTDIR"
-  SetOverwrite ifnewer
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\BAT.lnk" "$INSTDIR\bat.exe" '-c "$APPDATA\${PRODUCT_NAME}\bat.conf"'
-  CreateShortCut "$DESKTOP\BAT.lnk" "$INSTDIR\bat.exe" '-c "$APPDATA\${PRODUCT_NAME}\bat.conf"'
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\BAT.lnk" "$INSTDIR\bat.exe"
+  CreateShortCut "$DESKTOP\BAT.lnk" "$INSTDIR\bat.exe"
 
   File "bat.exe"
   File "libpng*.dll"
@@ -916,8 +1026,8 @@ SectionIn 2 3
 
   !insertmacro InstallConfFile "bat.conf"
 SectionEnd
-SubSectionEnd # Consoles Subsection
 
+SubSectionEnd # Consoles Subsection
 
 
 
@@ -990,22 +1100,115 @@ Section -Post
   nsExec::ExecToLog '"$INSTDIR\bareos-fd.exe" /kill'
   sleep 3000
   nsExec::ExecToLog '"$INSTDIR\bareos-fd.exe" /remove'
-  nsExec::ExecToLog '"$INSTDIR\bareos-fd.exe" /install -c "$APPDATA\${PRODUCT_NAME}\bareos-fd.conf"'
+  nsExec::ExecToLog '"$INSTDIR\bareos-fd.exe" /install'
 
   ${If} ${SectionIsSelected} ${SEC_SD}
     nsExec::ExecToLog '"$INSTDIR\bareos-sd.exe" /kill'
     sleep 3000
     nsExec::ExecToLog '"$INSTDIR\bareos-sd.exe" /remove'
-    nsExec::ExecToLog '"$INSTDIR\bareos-sd.exe" /install -c "$APPDATA\${PRODUCT_NAME}\bareos-sd.conf"'
+    nsExec::ExecToLog '"$INSTDIR\bareos-sd.exe" /install'
   ${EndIf}
 
   ${If} ${SectionIsSelected} ${SEC_DIR}
     nsExec::ExecToLog '"$INSTDIR\bareos-dir.exe" /kill'
     sleep 3000
     nsExec::ExecToLog '"$INSTDIR\bareos-dir.exe" /remove'
-    nsExec::ExecToLog '"$INSTDIR\bareos-dir.exe" /install -c "$APPDATA\${PRODUCT_NAME}\bareos-dir.conf"'
+    nsExec::ExecToLog '"$INSTDIR\bareos-dir.exe" /install'
   ${EndIf}
 SectionEnd
+
+Section -ConfigureConfiguration
+  SetShellVarContext all
+
+  # copy the existing template file to configure.sed
+  CopyFiles "$APPDATA\${PRODUCT_NAME}\fillup.sed" "$APPDATA\${PRODUCT_NAME}\configure.sed"
+
+  #
+  # path in Bareos readable format (replace \ with /)
+  #
+  Var /GLOBAL BareosAppdata
+  ${StrRep} '$BareosAppdata' "$APPDATA/${PRODUCT_NAME}" '\' '/'
+  Var /GLOBAL BareosInstdir
+  ${StrRep} '$BareosInstdir' "$INSTDIR" '\' '/'
+
+  # open or sed file and append additional rules
+  FileOpen $R1 "$APPDATA\${PRODUCT_NAME}\configure.sed" a
+  # move to end of file
+  FileSeek $R1 0 END
+
+  FileWrite $R1 "s#@basename@-fd#$ClientName#g$\r$\n"
+  FileWrite $R1 "s#bareos-dir#$DirectorName#g$\r$\n"
+  FileWrite $R1 "s#bareos-mon#$HostName-mon#g$\r$\n"
+  FileWrite $R1 "s#@basename@-sd#$StorageDaemonName#g$\r$\n"
+
+  FileWrite $R1 "s#XXX_REPLACE_WITH_DATABASE_DRIVER_XXX#$DbDriver#g$\r$\n"
+
+  # add "Working Directory" directive
+  FileWrite $R1 "s#QueryFile = #Working Directory = $\"$BareosAppdata/working$\"\n  QueryFile = #g$\r$\n"
+
+
+  #
+  # catalog backup scripts
+  #
+  FileWrite $R1 "s#make_catalog_backup.pl#make_catalog_backup.bat#g$\r$\n"
+  FileWrite $R1 "s#delete_catalog_backup#delete_catalog_backup.bat#g$\r$\n"
+
+  FileWrite $R1 "s#/tmp/bareos-restores#C:/temp/bareos-restores#g$\r$\n"
+
+  #
+  # If we want to be compatible we uncomment the setting for "compatible = yes"
+  #
+  ${If} $ClientCompatible == ${BST_CHECKED}
+    FileWrite $R1 "s@# compatible@compatible@g$\r$\n"
+  ${EndIf}
+
+  #
+  # generated by
+  # find -type f -exec sed -r -n 's/.*(@.*@).*/  FileWrite $R1 "s#\1##g\$\\r\$\\n"/p' {} \; | sort | uniq
+  #
+
+  FileWrite $R1 "s#@DEFAULT_DB_TYPE@#$DbDriver#g$\r$\n"
+  # FileWrite $R1 "s#@DISTVER@##g$\r$\n"
+  # FileWrite $R1 "s#@TAPEDRIVE@##g$\r$\n"
+  FileWrite $R1 "s#@archivedir@#C:/bareos-storage#g$\r$\n"
+  FileWrite $R1 "s#@backenddir@#$BareosInstdir#g$\r$\n"
+  FileWrite $R1 "s#@basename@#$HostName#g$\r$\n"
+  FileWrite $R1 "s#@bindir@#$BareosInstdir#g$\r$\n"
+  FileWrite $R1 "s#@confdir@#$BareosAppdata#g$\r$\n"
+  # FileWrite $R1 "s#@db_name@##g$\r$\n"
+  FileWrite $R1 "s#@db_password@#$DbPassword#g$\r$\n"
+  FileWrite $R1 "s#@db_port@#$DbPort#g$\r$\n"
+  FileWrite $R1 "s#@db_user@#$DbUser#g$\r$\n"
+  FileWrite $R1 "s#@dir_password@#$DirectorPassword#g$\r$\n"
+  FileWrite $R1 "s#@fd_password@#$ClientPassword#g$\r$\n"
+  FileWrite $R1 "s#@hostname@#$HostName#g$\r$\n"
+  # FileWrite $R1 "s#@job_email@##g$\r$\n"
+  FileWrite $R1 "s#@logdir@#$BareosAppdata/logs#g$\r$\n"
+  FileWrite $R1 "s#@mon_dir_password@#$DirectorMonPassword#g$\r$\n"
+  FileWrite $R1 "s#@mon_fd_password@#$ClientMonitorPassword#g$\r$\n"
+  FileWrite $R1 "s#@mon_sd_password@#StorageMonitorPassword#g$\r$\n"
+  FileWrite $R1 "s#@plugindir@#$BareosInstdir/Plugins#g$\r$\n"
+  FileWrite $R1 "s#@sbindir@#$BareosInstdir#g$\r$\n"
+  FileWrite $R1 "s#@scriptdir@#$BareosAppdata/scripts#g$\r$\n"
+  FileWrite $R1 "s#@sd_password@#$StoragePassword#g$\r$\n"
+  # FileWrite $R1 "s#@smtp_host@#localhost#g$\r$\n"
+  FileWrite $R1 "s#@working_dir@#$BareosAppdata/working#g$\r$\n"
+
+
+  FileClose $R1
+
+  nsExec::ExecToLog '"$INSTDIR\bareos-config-deploy.bat" "$INSTDIR\defaultconfigs" "$APPDATA\${PRODUCT_NAME}"'
+
+  #nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$APPDATA\${PRODUCT_NAME}\configure.sed" -i-template "$PLUGINSDIR\bconsole.conf"'
+  #nsExec::ExecToLog '$PLUGINSDIR\sed.exe -f "$APPDATA\${PRODUCT_NAME}\configure.sed" -i-template "$PLUGINSDIR\bat.conf"'
+
+  #FileOpen $R1 $PLUGINSDIR\postgres.sed w
+  #FileWrite $R1 "s#XXX_REPLACE_WITH_DB_USER_XXX#$DbUser#g$\r$\n"
+  #FileWrite $R1 "s#XXX_REPLACE_WITH_DB_PASSWORD_XXX#with password '$DbPassword'#g$\r$\n"
+  #FileClose $R1
+
+SectionEnd
+
 
 Section -StartDaemon
   nsExec::ExecToLog "net start bareos-fd"
@@ -1119,34 +1322,38 @@ Function .onInit
   ClearErrors
   ${GetOptions} $cmdLineParams '/?' $R0
   IfErrors +3 0
-  MessageBox MB_OK|MB_ICONINFORMATION "[/CLIENTNAME=Name of the client ressource] $\r$\n\
-                    [/CLIENTPASSWORD=Password to access the client]  $\r$\n\
-                    [/DIRECTORNAME=Name of Director to access the client and of the Director accessed by bconsole/BAT]  $\r$\n\
-                    [/CLIENTADDRESS=Network Address of the client] $\r$\n\
-                    [/CLIENTMONITORPASSWORD=Password for monitor access] $\r$\n\
+  MessageBox MB_OK|MB_ICONINFORMATION "[/CLIENTNAME=Name of the client ressource]$\r$\n\
+                    [/CLIENTPASSWORD=Password to access the client]$\r$\n\
+                    [/CLIENTADDRESS=Network Address of the client]$\r$\n\
+                    [/CLIENTMONITORPASSWORD=Password for monitor access]$\r$\n\
                     [/CLIENTCOMPATIBLE=(0/1) client compatible setting (0=no,1=yes)]$\r$\n\
                     $\r$\n\
-                    [/DIRECTORADDRESS=Network Address of the Director (for bconsole or BAT)] $\r$\n\
+                    [/DIRECTORADDRESS=Network Address of the Director (for bconsole or BAT)]$\r$\n\
+                    [/DIRECTORNAME=Name of Director to access the client and of the Director accessed by bconsole/BAT]$\r$\n\
                     [/DIRECTORPASSWORD=Password to access Director]$\r$\n\
                     $\r$\n\
-                    [/STORAGENAME=Name of the storage ressource] $\r$\n\
-                    [/STORAGEPASSWORD=Password to access the storage]  $\r$\n\
-                    [/STORAGEADDRESS=Network Address of the storage] $\r$\n\
-                    [/STORAGEMONITORPASSWORD=Password for monitor access] $\r$\n\
+                    [/STORAGENAME=Name of the storage ressource]$\r$\n\
+                    [/STORAGEPASSWORD=Password to access the storage]$\r$\n\
+                    [/STORAGEADDRESS=Network Address of the storage]$\r$\n\
+                    [/STORAGEMONITORPASSWORD=Password for monitor access]$\r$\n\
                     $\r$\n\
-                    [/INSTALLDIRECTOR Installs Director and Components, needs postgresql installed locally! ]  $\r$\n\
-                    [/DBDRIVER=Database Driver <postgresql|sqlite3>, postgresql is default if not specified]  $\r$\n\
-                    [/DBADMINUSER=Database Admin User (not needed for sqlite3)]  $\r$\n\
-                    [/DBADMINPASSWORD=Database Admin Password (not needed for sqlite3)]  $\r$\n\
-                    [/INSTALLSTORAGE  Installs Storage Daemon and Components]  $\r$\n\
+                    [/INSTALLDIRECTOR Installs Director and Components, needs postgresql installed locally! ]$\r$\n\
+                    [/INSTALLWEBUI Installs Bareos WebUI Components, REQUIRES Visual C++ Redistributable for Visual Studio 2012 x86, implicitly sets /INSTALLDIRECTOR]$\r$\n\
+                    [/WEBUILISTENADDRESS=webui listen address, default 127.0.0.1]$\r$\n\
+                    [/WEBUILISTENPORT=webui listen port, default 9100]$\r$\n\
+                    [/WEBUILOGIN=Login Name for WebUI, default admin]$\r$\n\
+                    [/WEBUIPASSWORD=Password for WebUI, default admin]$\r$\n\
+                    [/DBDRIVER=Database Driver <postgresql|sqlite3>, postgresql is default if not specified]$\r$\n\
+                    [/DBADMINUSER=Database Admin User (not needed for sqlite3)]$\r$\n\
+                    [/DBADMINPASSWORD=Database Admin Password (not needed for sqlite3)]$\r$\n\
+                    [/INSTALLSTORAGE  Installs Storage Daemon and Components]$\r$\n\
                     $\r$\n\
                     [/S silent install without user interaction]$\r$\n\
-                        (deletes config files on uinstall, moves existing config files away and uses newly new ones) $\r$\n\
+                        (deletes config files on uinstall, moves existing config files away and uses newly new ones)$\r$\n\
                     [/SILENTKEEPCONFIG keep configuration files on silent uninstall and use existing config files during silent install]$\r$\n\
                     [/D=C:\specify\installation\directory (! HAS TO BE THE LAST OPTION !)$\r$\n\
                     [/? (this help dialog)] $\r$\n\
-                    [/WRITELOGS lets the installer create log files in INSTDIR"
-#                   [/DIRECTORNAME=Name of the Director to be accessed from bconsole/BAT]"
+                    [/WRITELOGS lets the installer create log files in INSTDIR]"
   Abort
 
   # Check if this is Windows NT.
@@ -1226,6 +1433,7 @@ uninst:
   # Exec $INSTDIR\uninst.exe
 
 no_remove_uninstaller:
+
   MessageBox MB_OK|MB_ICONEXCLAMATION "Error during uninstall of ${PRODUCT_NAME} version $0. Aborting"
       FileOpen $R1 $TEMP\abortreason.txt w
       FileWrite $R1 "Error during uninstall of ${PRODUCT_NAME} version $0. Aborting"
@@ -1234,16 +1442,11 @@ no_remove_uninstaller:
 
 done:
 
-
-
   ${GetOptions} $cmdLineParams "/CLIENTNAME="  $ClientName
   ClearErrors
 
   ${GetOptions} $cmdLineParams "/CLIENTPASSWORD=" $ClientPassword
   ClearErrors
-
-#  ${GetOptions} $cmdLineParams "/CLIENTDIRECTORNAME=" $DirectorName
-#  ClearErrors
 
   ${GetOptions} $cmdLineParams "/CLIENTADDRESS=" $ClientAddress
   ClearErrors
@@ -1285,6 +1488,19 @@ done:
   ${GetOptions} $cmdLineParams "/DBADMINUSER=" $DbAdminUser
   ClearErrors
 
+  ${GetOptions} $cmdLineParams "/WEBUILISTENADDRESS=" $WebUIListenAddress
+  ClearErrors
+
+  ${GetOptions} $cmdLineParams "/WEBUILISTENPORT=" $WebUIListenPort
+  ClearErrors
+
+  ${GetOptions} $cmdLineParams "/WEBUILOGIN=" $WebUILogin
+  ClearErrors
+
+  ${GetOptions} $cmdLineParams "/WEBUIPASSWORD=" $WebUIPassword
+  ClearErrors
+
+
   ${GetOptions} $cmdLineParams "/DBDRIVER=" $DbDriver
   ClearErrors
 
@@ -1304,6 +1520,12 @@ done:
     StrCpy $InstallDirector "no"
   ClearErrors
 
+  StrCpy $InstallWebUI "yes"
+  ${GetOptions} $cmdLineParams "/INSTALLWEBUI" $R0
+  IfErrors 0 +2         # error is set if NOT found
+    StrCpy $InstallWebUI "no"
+  ClearErrors
+
   StrCpy $InstallStorage "yes"
   ${GetOptions} $cmdLineParams "/INSTALLSTORAGE" $R0
   IfErrors 0 +2         # error is set if NOT found
@@ -1312,7 +1534,7 @@ done:
 
 
   StrCpy $SilentKeepConfig "yes"
-  ${GetOptions} $cmdLineParams "/SILENTKEEPCONFIG"  $R0
+  ${GetOptions} $cmdLineParams "/SILENTKEEPCONFIG" $R0
   IfErrors 0 +2         # error is set if NOT found
     StrCpy $SilentKeepConfig "no"
   ClearErrors
@@ -1339,15 +1561,8 @@ done:
   File "/oname=$PLUGINSDIR\libstdc++-6.dll" "libstdc++-6.dll"
   File "/oname=$PLUGINSDIR\zlib1.dll" "zlib1.dll"
 
-  File "/oname=$PLUGINSDIR\bareos-fd.conf" "bareos-fd.conf"
-  File "/oname=$PLUGINSDIR\bareos-sd.conf" "bareos-sd.conf"
-  File "/oname=$PLUGINSDIR\bareos-dir.conf" "bareos-dir.conf"
-  File "/oname=$PLUGINSDIR\bconsole.conf" "bconsole.conf"
-  File "/oname=$PLUGINSDIR\bat.conf" "bat.conf"
-
-  File "/oname=$PLUGINSDIR\tray-monitor.fd.conf" "tray-monitor.fd.conf"
-  File "/oname=$PLUGINSDIR\tray-monitor.fd-sd.conf" "tray-monitor.fd-sd.conf"
-  File "/oname=$PLUGINSDIR\tray-monitor.fd-sd-dir.conf" "tray-monitor.fd-sd-dir.conf"
+  File "/oname=$PLUGINSDIR\bconsole.conf" "config/bconsole.conf"
+  File "/oname=$PLUGINSDIR\bat.conf" "config/bat.conf"
 
   File "/oname=$PLUGINSDIR\postgresql-create.sql" ".\ddl\creates\postgresql.sql"
   File "/oname=$PLUGINSDIR\postgresql-drop.sql" ".\ddl\drops\postgresql.sql"
@@ -1356,6 +1571,13 @@ done:
 
   File "/oname=$PLUGINSDIR\sqlite3.sql" ".\ddl\creates\sqlite3.sql"
 
+  # webui
+  File "/oname=$PLUGINSDIR\php.ini" ".\bareos-webui\php\php.ini"
+  File "/oname=$PLUGINSDIR\global.php" ".\bareos-webui\config\autoload\global.php"
+  File "/oname=$PLUGINSDIR\directors.ini" ".\bareos-webui\install\directors.ini"
+  File "/oname=$PLUGINSDIR\configuration.ini" ".\bareos-webui\install\configuration.ini"
+  File "/oname=$PLUGINSDIR\webui-admin.conf" ".\bareos-webui/install/bareos/bareos-dir.d/profile/webui-admin.conf"
+  File "/oname=$PLUGINSDIR\admin.conf" ".\bareos-webui/install/bareos/bareos-dir.d/console/admin.conf.example"
 
   # make first section mandatory
   SectionSetFlags ${SEC_FD} 17 # SF_SELECTED & SF_RO
@@ -1363,13 +1585,19 @@ done:
   SectionSetFlags ${SEC_FDPLUGINS} ${SF_SELECTED} #  fd plugins
   SectionSetFlags ${SEC_FIREWALL_SD} ${SF_UNSELECTED} # unselect sd firewall (is selected by default, why?)
   SectionSetFlags ${SEC_FIREWALL_DIR} ${SF_UNSELECTED} # unselect dir firewall (is selected by default, why?)
+  SectionSetFlags ${SEC_WEBUI} ${SF_UNSELECTED} # unselect webinterface (is selected by default, why?)
+
+  StrCmp $InstallWebUI "no" dontInstWebUI
+    SectionSetFlags ${SEC_WEBUI} ${SF_SELECTED} # webui
+    StrCpy $InstallDirector "yes"               # webui needs director
+  dontInstWebUI:
 
   StrCmp $InstallDirector "no" dontInstDir
     SectionSetFlags ${SEC_DIR} ${SF_SELECTED} # director
     SectionSetFlags ${SEC_FIREWALL_DIR} ${SF_SELECTED} # director firewall
     SectionSetFlags ${SEC_DIRPLUGINS} ${SF_SELECTED} # director plugins
 
-  # also install bconsole if director is selected
+    # also install bconsole if director is selected
     SectionSetFlags ${SEC_BCONSOLE} ${SF_SELECTED} # bconsole
 
 IfSilent 0 DbDriverCheckEnd
@@ -1509,7 +1737,7 @@ ${EndIf}
   StrCpy $ClientAddress "$HostName"
 
   strcmp $DirectorName   "" +1 +2
-  StrCpy $DirectorName  "$HostName-dir"
+  StrCpy $DirectorName  "bareos-dir"
 
   strcmp $DirectorAddress  "" +1 +2
   StrCpy $DirectorAddress  "$HostName"
@@ -1518,7 +1746,7 @@ ${EndIf}
   StrCpy $DirectorPassword "$DirectorPassword"
 
   strcmp $StorageDaemonName     "" +1 +2
-  StrCpy $StorageDaemonName    "$HostName-sd"
+  StrCpy $StorageDaemonName    "bareos-sd"
 
   strcmp $StorageName     "" +1 +2
   StrCpy $StorageName    "File"
@@ -1534,6 +1762,18 @@ ${EndIf}
 
   strcmp $DbUser "" +1 +2
   StrCpy $DbUser "bareos"
+
+  strcmp $WebUIListenAddress "" +1 +2
+  StrCpy $WebUIListenAddress "127.0.0.1"
+
+  strcmp $WebUIListenPort "" +1 +2
+  StrCpy $WebUIListenPort "9100"
+
+  strcmp $WebUILogin "" +1 +2
+  StrCpy $WebUILogin "admin"
+
+  strcmp $WebUIPassword "" +1 +2
+  StrCpy $WebUIPassword "$\"admin$\""
 
   strcmp $DbEncoding "" +1 +2
   StrCpy $DbEncoding "ENCODING 'SQL_ASCII' LC_COLLATE 'C' LC_CTYPE 'C'"
@@ -1560,25 +1800,23 @@ FunctionEnd
 
 
 
-
-
 #
 # Client Configuration Dialog
 #
 Function getClientParameters
-push $R0
-# skip if we are upgrading
-strcmp $Upgrading "yes" skip
+  push $R0
+  # skip if we are upgrading
+  strcmp $Upgrading "yes" skip
 
-# prefill the dialog fields with our passwords and other
-# information
+  # prefill the dialog fields with our passwords and other
+  # information
 
   WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 2" "state" $ClientName
   WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 3" "state" $DirectorName
   WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 4" "state" $ClientPassword
   WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 14" "state" $ClientMonitorPassword
   WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 5" "state" $ClientAddress
-#  WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 7" "state" "Director console password"
+  # WriteINIStr "$PLUGINSDIR\clientdialog.ini" "Field 7" "state" "Director console password"
 
 
 ${If} ${SectionIsSelected} ${SEC_FD}
@@ -1602,19 +1840,19 @@ FunctionEnd
 # Storage Configuration Dialog
 #
 Function getStorageParameters
-push $R0
-# skip if we are upgrading
-strcmp $Upgrading "yes" skip
+  push $R0
+  # skip if we are upgrading
+  strcmp $Upgrading "yes" skip
 
-# prefill the dialog fields with our passwords and other
-# information
+  # prefill the dialog fields with our passwords and other
+  # information
 
   WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 2" "state" $StorageDaemonName
   WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 3" "state" $DirectorName
   WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 4" "state" $StoragePassword
   WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 14" "state" $StorageMonitorPassword
   WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 5" "state" $StorageAddress
-#  WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 7" "state" "Director console password"
+  # WriteINIStr "$PLUGINSDIR\storagedialog.ini" "Field 7" "state" "Director console password"
 
 
 ${If} ${SectionIsSelected} ${SEC_SD}
@@ -1637,8 +1875,9 @@ FunctionEnd
 #
 Function getDirectorParameters
   Push $R0
-strcmp $Upgrading "yes" skip
-# prefill the dialog fields
+  strcmp $Upgrading "yes" skip
+
+  # prefill the dialog fields
   WriteINIStr "$PLUGINSDIR\directordialog.ini" "Field 2" "state" $DirectorAddress
   WriteINIStr "$PLUGINSDIR\directordialog.ini" "Field 3" "state" $DirectorPassword
 #TODO: also do this if BAT is selected alone
@@ -1648,6 +1887,7 @@ ${If} ${SectionIsSelected} ${SEC_BCONSOLE}
   ReadINIStr  $DirectorAddress        "$PLUGINSDIR\directordialog.ini" "Field 2" "state"
   ReadINIStr  $DirectorPassword       "$PLUGINSDIR\directordialog.ini" "Field 3" "state"
 ${EndIf}
+
 skip:
   Pop $R0
 FunctionEnd
@@ -1659,11 +1899,12 @@ FunctionEnd
 #
 Function getDatabaseParameters
   Push $R0
-strcmp $Upgrading "yes" skip
-strcmp $InstallDirector "no" skip
+
+  strcmp $Upgrading "yes" skip
+  strcmp $InstallDirector "no" skip
 
 ${If} ${SectionIsSelected} ${SEC_DIR_POSTGRES}
-# prefill the dialog fields
+  # prefill the dialog fields
   WriteINIStr "$PLUGINSDIR\databasedialog.ini" "Field 3" "state" $DbAdminUser
   WriteINIStr "$PLUGINSDIR\databasedialog.ini" "Field 4" "state" $DbAdminPassword
   WriteINIStr "$PLUGINSDIR\databasedialog.ini" "Field 5" "state" $DbUser
@@ -1671,16 +1912,14 @@ ${If} ${SectionIsSelected} ${SEC_DIR_POSTGRES}
   WriteINIStr "$PLUGINSDIR\databasedialog.ini" "Field 7" "state" $DbName
   WriteINIStr "$PLUGINSDIR\databasedialog.ini" "Field 8" "state" $DbPort
   InstallOptions::dialog $PLUGINSDIR\databasedialog.ini
-
 ${EndIF}
-#  Pop $R0
 
 skip:
   Pop $R0
 FunctionEnd
 
 Function getDatabaseParametersLeave
-# read values just configured
+  # read values just configured
   ReadINIStr  $DbAdminUser            "$PLUGINSDIR\databasedialog.ini" "Field 3" "state"
   ReadINIStr  $DbAdminPassword        "$PLUGINSDIR\databasedialog.ini" "Field 4" "state"
   ReadINIStr  $DbUser                 "$PLUGINSDIR\databasedialog.ini" "Field 5" "state"
@@ -1691,10 +1930,11 @@ dbcheckend:
 
    StrCmp $InstallDirector "no" SkipDbCheck # skip DbConnection if not instaling director
    StrCmp $DbDriver "sqlite3" SkipDbCheck   # skip DbConnection of using sqlite3
-${If} ${SectionIsSelected} ${SEC_DIR_POSTGRES}
-   !insertmacro CheckDbAdminConnection
-   MessageBox MB_OK|MB_ICONINFORMATION "Connection to db server with DbAdmin credentials was successful."
-${EndIF}
+
+   ${If} ${SectionIsSelected} ${SEC_DIR_POSTGRES}
+     !insertmacro CheckDbAdminConnection
+     MessageBox MB_OK|MB_ICONINFORMATION "Connection to db server with DbAdmin credentials was successful."
+   ${EndIF}
 SkipDbCheck:
 
 FunctionEnd
@@ -1769,11 +2009,11 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
-# UnInstaller Options
-   ${GetParameters} $cmdLineParams
-   ClearErrors
+  # UnInstaller Options
+  ${GetParameters} $cmdLineParams
+  ClearErrors
 
-# check cmdline parameters
+  # check cmdline parameters
   StrCpy $SilentKeepConfig "yes"
   ${GetOptions} $cmdLineParams "/SILENTKEEPCONFIG"  $R0
   IfErrors 0 +2         # error is set if NOT found
@@ -1801,6 +2041,8 @@ Section Uninstall
   sleep 3000
   nsExec::ExecToLog '"$INSTDIR\bareos-dir.exe" /remove'
 
+  ExecWait '$INSTDIR\nssm.exe stop bareos-webui'
+  ExecWait '$INSTDIR\nssm.exe remove bareos-webui confirm'
 
   # kill tray monitor
   KillProcWMI::KillProc "bareos-tray-monitor.exe"
@@ -1819,19 +2061,31 @@ Section Uninstall
     "Do you want to keep the existing configuration files?" /SD IDNO IDYES ConfDeleteSkip
 
   Delete "$APPDATA\${PRODUCT_NAME}\bareos-fd.conf"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\bareos-fd.d"
   Delete "$APPDATA\${PRODUCT_NAME}\bareos-sd.conf"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\bareos-sd.d"
   Delete "$APPDATA\${PRODUCT_NAME}\bareos-dir.conf"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\bareos-dir.d"
   Delete "$APPDATA\${PRODUCT_NAME}\tray-monitor.conf"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\tray-monitor.d"
   Delete "$APPDATA\${PRODUCT_NAME}\bconsole.conf"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\bconsole.d"
   Delete "$APPDATA\${PRODUCT_NAME}\bat.conf"
 
+  Delete "$APPDATA\${PRODUCT_NAME}\php.ini"
+  Delete "$APPDATA\${PRODUCT_NAME}\directors.ini"
+  Delete "$APPDATA\${PRODUCT_NAME}\configuration.ini"
+  Delete "$APPDATA\${PRODUCT_NAME}\bareos-dir.d\profile\webui-admin.conf"
+  Delete "$APPDATA\${PRODUCT_NAME}\bareos-dir.d\console\admin.conf"
+
 ConfDeleteSkip:
-  Delete "$APPDATA\${PRODUCT_NAME}\bareos-fd.conf.old"
-  Delete "$APPDATA\${PRODUCT_NAME}\bareos-sd.conf.old"
-  Delete "$APPDATA\${PRODUCT_NAME}\bareos-dir.conf.old"
-  Delete "$APPDATA\${PRODUCT_NAME}\tray-monitor.conf.old"
-  Delete "$APPDATA\${PRODUCT_NAME}\bconsole.conf.old"
-  Delete "$APPDATA\${PRODUCT_NAME}\bat.conf.old"
+  # delete config files *.conf.old and *.conf.new, ...
+  Delete "$APPDATA\${PRODUCT_NAME}\bareos-fd.conf.*"
+  Delete "$APPDATA\${PRODUCT_NAME}\bareos-sd.conf.*"
+  Delete "$APPDATA\${PRODUCT_NAME}\bareos-dir.conf.*"
+  Delete "$APPDATA\${PRODUCT_NAME}\tray-monitor.conf.*"
+  Delete "$APPDATA\${PRODUCT_NAME}\bconsole.conf.*"
+  Delete "$APPDATA\${PRODUCT_NAME}\bat.conf.*"
 
   Delete "$INSTDIR\${PRODUCT_NAME}.url"
   Delete "$INSTDIR\uninst.exe"
@@ -1846,24 +2100,7 @@ ConfDeleteSkip:
   Delete "$INSTDIR\bextract.exe"
   Delete "$INSTDIR\bscan.exe"
   Delete "$INSTDIR\bconsole.exe"
-  Delete "$INSTDIR\Plugins\bpipe-fd.dll"
-  Delete "$INSTDIR\Plugins\mssqlvdi-fd.dll"
-  Delete "$INSTDIR\Plugins\autoxflate-sd.dll"
-
-  Delete "$INSTDIR\Plugins\python-dir.dll"
-  Delete "$INSTDIR\Plugins\BareosDir*.py"
-  Delete "$INSTDIR\Plugins\bareos-dir*.py"
-  Delete "$INSTDIR\Plugins\bareos_dir*.py"
-
-  Delete "$INSTDIR\Plugins\python-sd.dll"
-  Delete "$INSTDIR\Plugins\BareosSd*.py"
-  Delete "$INSTDIR\Plugins\bareos-sd*.py"
-  Delete "$INSTDIR\Plugins\bareos_sd*.py"
-
-  Delete "$INSTDIR\Plugins\python-fd.dll"
-  Delete "$INSTDIR\Plugins\BareosFd*.py"
-  Delete "$INSTDIR\Plugins\bareos-fd*.py"
-  Delete "$INSTDIR\Plugins\bareos_fd*.py"
+  Delete "$INSTDIR\bareos-config-deploy.bat"
 
   Delete "$INSTDIR\libbareos.dll"
   Delete "$INSTDIR\libbareossd.dll"
@@ -1883,7 +2120,7 @@ ConfDeleteSkip:
   Delete "$INSTDIR\libssl-*.dll"
   Delete "$INSTDIR\libstdc++-6.dll"
   Delete "$INSTDIR\libtermcap-0.dll"
-  Delete "$INSTDIR\pthreadGCE2.dll"
+  Delete "$INSTDIR\libwinpthread-1.dll"
   Delete "$INSTDIR\zlib1.dll"
   Delete "$INSTDIR\QtCore4.dll"
   Delete "$INSTDIR\QtGui4.dll"
@@ -1908,18 +2145,27 @@ ConfDeleteSkip:
   Delete "$INSTDIR\libintl*.dll"
   Delete "$INSTDIR\ssleay32.dll"
   Delete "$INSTDIR\libeay32.dll"
+  Delete "$INSTDIR\libiconv-2.dll"
 
-# batch scripts and sql files
+# logs
+  Delete "$INSTDIR\*.log"
+
+  RMDir /r "$INSTDIR\Plugins"
+  RMDir /r "$INSTDIR\defaultconfigs"
+
+  Delete "$APPDATA\${PRODUCT_NAME}\configure.sed"
+  Delete "$APPDATA\${PRODUCT_NAME}\fillup.sed"
+
+  # batch scripts and sql files
   Delete "$APPDATA\${PRODUCT_NAME}\scripts\*.bat"
   Delete "$APPDATA\${PRODUCT_NAME}\scripts\*.sql"
-# log
-  Delete "$APPDATA\${PRODUCT_NAME}\logs\*.log"
-
-  RMDir "$APPDATA\${PRODUCT_NAME}\logs"
-  RMDir "$APPDATA\${PRODUCT_NAME}\working"
   RMDir "$APPDATA\${PRODUCT_NAME}\scripts"
-  RMDir "$APPDATA\${PRODUCT_NAME}"
 
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\logs"
+  RMDir /r "$APPDATA\${PRODUCT_NAME}\working"
+
+  # removed only if empty, to keep configs
+  RMDir "$APPDATA\${PRODUCT_NAME}"
 
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Website.lnk"
@@ -1935,6 +2181,10 @@ ConfDeleteSkip:
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\bareos-tray-monitor.lnk"
   # traymon autostart
   Delete "$SMSTARTUP\bareos-tray-monitor.lnk"
+
+  Delete "$INSTDIR\nssm.exe"
+  RMDir /r "$INSTDIR\bareos-webui"
+
 
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Website.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
@@ -1954,6 +2204,8 @@ ConfDeleteSkip:
     nsExec::Exec "netsh advfirewall firewall delete rule name=$\"Bareos storage daemon (bareos-sd) access$\""
     DetailPrint  "netsh advfirewall firewall delete rule name=$\"Bareos director (bareos-dir) access$\""
     nsExec::Exec "netsh advfirewall firewall delete rule name=$\"Bareos director (bareos-dir) access$\""
+    DetailPrint  "netsh advfirewall firewall delete rule name=$\"Bareos WebUI access$\""
+    nsExec::Exec "netsh advfirewall firewall delete rule name=$\"Bareos WebUI access$\""
 
   ${Else}
     DetailPrint  "Closing Firewall, OS is < Win7"
@@ -1974,25 +2226,31 @@ ConfDeleteSkip:
 SectionEnd
 
 Function .onSelChange
-Push $R0
-Push $R1
+  Push $R0
+  Push $R1
 
-#  !insertmacro StartRadioButtons $1
-#    !insertmacro RadioButton ${SEC_DIR_POSTGRES}
-#    !insertmacro RadioButton ${SEC_DIR_SQLITE}
-#  !insertmacro EndRadioButtons
+  # !insertmacro StartRadioButtons $1
+  # !insertmacro RadioButton ${SEC_DIR_POSTGRES}
+  # !insertmacro RadioButton ${SEC_DIR_SQLITE}
+  # !insertmacro EndRadioButtons
 
-# if Postgres was not detected always disable postgresql backend
+  # if Postgres was not detected always disable postgresql backend
 
-${If} $IsPostgresInstalled == no
-  SectionSetFlags ${SEC_DIR_POSTGRES} ${SF_RO}
-${EndIf}
+  ${If} $IsPostgresInstalled == no
+    SectionSetFlags ${SEC_DIR_POSTGRES} ${SF_RO}
+  ${EndIf}
 
   # Check if BAT was just selected then select SEC_BCONSOLE
   SectionGetFlags ${SEC_BAT} $R0
   IntOp $R0 $R0 & ${SF_SELECTED}
   StrCmp $R0 ${SF_SELECTED} 0 +2
   SectionSetFlags ${SEC_BCONSOLE} $R0
+
+  # Check if WEBUI was just selected then select SEC_DIR
+  SectionGetFlags ${SEC_WEBUI} $R0
+  IntOp $R0 $R0 & ${SF_SELECTED}
+  StrCmp $R0 ${SF_SELECTED} 0 +2
+  SectionSetFlags ${SEC_DIR} $R0
 
   # if director is selected, we set InstallDirector to yes and select textconsole
   StrCpy $InstallDirector "no"
@@ -2012,6 +2270,6 @@ ${EndIf}
   StrCmp $R0 ${SF_SELECTED} 0 +2
   StrCpy $DbDriver "postgresql"
 
-Pop $R1
-Pop $R0
+  Pop $R1
+  Pop $R0
 FunctionEnd

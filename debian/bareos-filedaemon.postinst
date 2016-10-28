@@ -17,37 +17,12 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-daemon_user=bareos
-daemon_group=bareos
-
-#director_daemon_user=$daemon_user
-#storage_daemon_user=$daemon_user
-file_daemon_user=root
-#storage_daemon_group=$daemon_group
-
-DEFCONFIGDIR="/usr/lib/bareos/defaultconfigs"
-CONFIG="bareos-fd.conf"
-TARGET="/etc/bareos/${CONFIG}"
-
-
-permissions()
-{
-  if [ -f "$TARGET" ]; then
-    chown ${file_daemon_user}:${daemon_group} $TARGET
-    chmod 640 $TARGET
-  fi
-}
+DEFCONFIGDIR="/usr/lib/bareos/defaultconfigs/bareos-fd.d/"
+CONFIGDIR="/etc/bareos/bareos-fd.d/"
 
 case "$1" in
     configure)
-        if [ ! -f "$TARGET" ]; then
-            cat ${DEFCONFIGDIR}/${CONFIG} > ${TARGET}
-            /usr/lib/bareos/scripts/bareos-config initialize_local_hostname
-            /usr/lib/bareos/scripts/bareos-config initialize_passwords
-        else
-            cat ${DEFCONFIGDIR}/${CONFIG} > ${TARGET}.dist
-        fi
-        permissions
+        /usr/lib/bareos/scripts/bareos-config deploy_config "$DEFCONFIGDIR" "$CONFIGDIR" || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

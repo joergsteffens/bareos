@@ -1,7 +1,7 @@
 #
 # BAREOS® - Backup Archiving REcovery Open Sourced
 #
-# Copyright (C) 2014-2014 Bareos GmbH & Co. KG
+# Copyright (C) 2014-2016 Bareos GmbH & Co. KG
 #
 # This program is Free Software; you can redistribute it and/or
 # modify it under the terms of version three of the GNU Affero General Public
@@ -28,7 +28,7 @@ INCLUDES = -I../.. \
 	   -I../compat/include
 LDLIBS = $(MINGW_LIB)/libssl.dll.a \
          $(MINGW_LIB)/libcrypto.dll.a \
-         $(MINGW_LIB)/libpthreadGCE2.a \
+         $(MINGW_LIB)/libwinpthread.a \
          $(MINGW_LIB)/libz.dll.a \
          $(MINGW_LIB)/liblzo2.dll.a \
          $(MINGW_LIB)/libfastlz.dll.a \
@@ -39,22 +39,22 @@ LIBBAREOS_SRCS = address_conf.c alist.c attr.c attribs.c base64.c \
 		 berrno.c bget_msg.c binflate.c bnet_server_tcp.c bnet.c \
 		 bpipe.c breg.c bregex.c bsnprintf.c bsock.c bsock_sctp.c \
 		 bsock_tcp.c bsock_udt.c bsys.c btime.c btimers.c \
-		 compression.c cram-md5.c cbuf.c crypto.c crypto_cache.c \
-		 crypto_gnutls.c crypto_none.c crypto_nss.c crypto_openssl.c \
-		 crypto_wrap.c daemon.c devlock.c dlist.c edit.c fnmatch.c \
-		 guid_to_name.c hmac.c htable.c jcr.c json.c lockmgr.c md5.c \
-		 mem_pool.c message.c mntent_cache.c output_formatter.c \
-		 passphrase.c path_list.c \
-		 plugins.c poll.c priv.c queue.c rblist.c runscript.c rwlock.c \
-		 scan.c scsi_crypto.c scsi_lli.c sellist.c serial.c sha1.c \
-		 signal.c smartall.c tls_gnutls.c tls_none.c tls_nss.c \
-		 tls_openssl.c tree.c util.c var.c watchdog.c workq.c
+		 compression.c connection_pool.c cram-md5.c cbuf.c crypto.c \
+		 crypto_cache.c crypto_gnutls.c crypto_none.c crypto_nss.c \
+		 crypto_openssl.c crypto_wrap.c daemon.c devlock.c dlist.c \
+		 edit.c fnmatch.c guid_to_name.c hmac.c htable.c jcr.c json.c \
+		 lockmgr.c md5.c mem_pool.c message.c mntent_cache.c \
+		 output_formatter.c passphrase.c path_list.c plugins.c poll.c \
+		 priv.c queue.c rblist.c runscript.c rwlock.c scan.c \
+		 scsi_crypto.c scsi_lli.c sellist.c serial.c sha1.c signal.c \
+		 smartall.c tls_gnutls.c tls_none.c tls_nss.c tls_openssl.c \
+		 tree.c util.c var.c watchdog.c workq.c
 LIBBAREOS_OBJS = $(LIBBAREOS_SRCS:.c=.o)
 
 LIBBAREOSCFG_SRCS = ini.c lex.c parse_bsr.c
 LIBBAREOSCFG_OBJS = $(LIBBAREOSCFG_SRCS:.c=.o)
 
-COMPAT_SRCS = compat.c print.c winapi.c
+COMPAT_SRCS = compat.c glob.c print.c winapi.c
 COMPAT_OBJS = $(COMPAT_SRCS:.c=.o)
 
 DYNAMIC_OBJS = $(LIBBAREOS_OBJS) $(LIBBAREOSCFG_OBJS) $(COMPAT_OBJS)

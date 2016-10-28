@@ -52,8 +52,6 @@ static SESSION_LABEL sessrec;
 static uint32_t num_files = 0;
 static ATTR *attr;
 
-#define CONFIG_FILE "bareos-sd.conf"
-
 static FF_PKT *ff;
 static BSR *bsr = NULL;
 
@@ -64,7 +62,7 @@ PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
 "Usage: bls [options] <device-name>\n"
 "       -b <file>       specify a bootstrap file\n"
-"       -c <file>       specify a Storage configuration file\n"
+"       -c <path>       specify a Storage configuration file or directory\n"
 "       -D <director>   specify a director name specified in the Storage\n"
 "                       configuration file for the Key Encryption Key selection\n"
 "       -d <nn>         set debug level to <nn>\n"
@@ -205,10 +203,6 @@ int main (int argc, char *argv[])
    if (!argc) {
       Pmsg0(0, _("No archive name specified\n"));
       usage();
-   }
-
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
    }
 
    my_config = new_config_parser();

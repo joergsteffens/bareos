@@ -3,7 +3,7 @@
 
    Copyright (C) 2002-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -83,9 +83,7 @@ const char *list_pool = "SELECT * FROM Pool WHERE PoolId=%s";
  * JOIN with Media is required for filter to Media.Volumename.
  */
 const char *list_jobs =
-   "SELECT DISTINCT "
-   "Job.JobId,Job.Name, "
-   "Client.Name as Client, "
+   "SELECT DISTINCT Job.JobId,Job.Name, Client.Name as Client, "
    "Job.StartTime,Job.Type,Job.Level,Job.JobFiles,Job.JobBytes,Job.JobStatus "
    "FROM Job "
    "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
@@ -96,9 +94,31 @@ const char *list_jobs =
    "%s "
    "ORDER BY StartTime%s";
 
+const char *list_jobs_last =
+   "SELECT DISTINCT Job.JobId,Job.Name, Client.Name as Client, "
+   "Job.StartTime,Job.Type,Job.Level,Job.JobFiles,Job.JobBytes,Job.JobStatus "
+   "FROM Job "
+   "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+   "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+   "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+   "INNER JOIN ( "
+      "SELECT MAX(Job.JobId) as MaxJobId "
+      "FROM Job "
+      "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+      "LEFT JOIN Pool ON Pool.PoolId=Job.PoolId "
+      "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+      "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+      "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+      "WHERE Job.JobId > 0 "
+      "%s "
+      "GROUP BY Job.Name "
+   ") LastJob "
+   "ON Job.JobId = LastJob.MaxJobId "
+   "ORDER BY StartTime%s";
+
 const char *list_jobs_count =
-   "SELECT DISTINCT "
-   "COUNT(DISTINCT Job.JobId) as count "
+   "SELECT DISTINCT COUNT(DISTINCT Job.JobId) as count "
    "FROM Job "
    "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
    "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
@@ -109,17 +129,11 @@ const char *list_jobs_count =
    "%s";
 
 const char *list_jobs_long =
-   "SELECT DISTINCT "
-   "Job.JobId, Job.Job, Job.Name, "
-   "Job.PurgedFiles, Job.Type, Job.Level, "
-   "Job.ClientId, Client.Name as Client, "
-   "Job.JobStatus,"
-   "Job.SchedTime, Job.StartTime, Job.EndTime, Job.RealEndTime, Job.JobTDate, "
-   "Job.VolSessionId, Job.VolSessionTime, "
-   "Job.JobFiles, Job.JobBytes, Job.JobErrors, Job.JobMissingFiles, "
-   "Job.PoolId, Pool.Name as PoolName,"
-   "Job.PriorJobId, "
-   "Job.FileSetId, FileSet.FileSet "
+   "SELECT DISTINCT Job.JobId, Job.Job, Job.Name, Job.PurgedFiles, Job.Type, Job.Level, "
+   "Job.ClientId, Client.Name as Client, Job.JobStatus, Job.SchedTime, Job.StartTime, "
+   "Job.EndTime, Job.RealEndTime, Job.JobTDate, Job.VolSessionId, Job.VolSessionTime, "
+   "Job.JobFiles, Job.JobBytes, Job.JobErrors, Job.JobMissingFiles, Job.PoolId, "
+   "Pool.Name as PoolName, Job.PriorJobId, Job.FileSetId, FileSet.FileSet "
    "FROM Job "
    "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
    "LEFT JOIN Pool ON Pool.PoolId=Job.PoolId "
@@ -130,21 +144,61 @@ const char *list_jobs_long =
    "%s "
    "ORDER BY StartTime%s";
 
-/*
- * Get the last JobId of each Job.Name matching the given criteria.
- */
-const char *list_jobs_last =
-   "SELECT DISTINCT "
-   "MAX(DISTINCT Job.JobId) as MaxJobId "
+const char *list_jobs_long_last =
+   "SELECT DISTINCT Job.JobId, Job.Job, Job.Name, Job.PurgedFiles, Job.Type, Job.Level, "
+   "Job.ClientId, Client.Name as Client, Job.JobStatus, Job.SchedTime, Job.StartTime, "
+   "Job.EndTime, Job.RealEndTime, Job.JobTDate, Job.VolSessionId, Job.VolSessionTime, "
+   "Job.JobFiles, Job.JobBytes, Job.JobErrors, Job.JobMissingFiles, Job.PoolId, "
+   "Pool.Name as PoolName, Job.PriorJobId, Job.FileSetId, FileSet.FileSet "
    "FROM Job "
    "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+   "LEFT JOIN Pool ON Pool.PoolId=Job.PoolId "
    "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
    "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
    "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
-   "WHERE Job.JobId > 0 "
+   "INNER JOIN ( "
+      "SELECT MAX(Job.JobId) as MaxJobId "
+      "FROM Job "
+      "LEFT JOIN Client ON Client.ClientId=Job.ClientId "
+      "LEFT JOIN Pool ON Pool.PoolId=Job.PoolId "
+      "LEFT JOIN JobMedia ON JobMedia.JobId=Job.JobId "
+      "LEFT JOIN Media ON JobMedia.MediaId=Media.MediaId "
+      "LEFT JOIN FileSet ON FileSet.FileSetId=Job.FileSetId "
+      "WHERE Job.JobId > 0 "
+      "%s "
+      "GROUP BY Job.Name "
+   ") LastJob "
+   "ON Job.JobId = LastJob.MaxJobId "
+   "ORDER BY StartTime%s";
+
+const char *get_jobstatus_details =
+   "SELECT DISTINCT "
+     "JobStatus,JobStatusLong,Severity,"
+      /*
+       * JS_Error 'e'  Non-fatal error
+       * JS_FatalError 'f' Fatal error
+       * JS_Canceled 'A'
+       * JS_ErrorTerminated 'E'
+       * JS_Terminated 'T'
+       * JS_Warnings 'W'
+       */
+      "CASE "
+         /* Ok */
+         "WHEN JobStatus in ('T') THEN '0' "
+         /* Warning */
+         "WHEN JobStatus in ('W') THEN '1' "
+         /* Critical */
+         "WHEN JobStatus in ('e', 'f', 'A', 'E') THEN '2' "
+      "END as ExitLevel, "
+      "CASE "
+         "WHEN JobStatus in ('T') THEN 'Ok' "
+         "WHEN JobStatus in ('W') THEN 'Warning' "
+         "WHEN JobStatus in ('e', 'f', 'A', 'E') THEN 'Error' "
+      "END as ExitStatus "
+   "FROM Status "
+   /* optional WHERE */
    "%s "
-   "GROUP BY Job.Name "
-   "%s";
+   "ORDER BY JobStatus";
 
 /* ====== ua_prune.c */
 
@@ -204,7 +258,7 @@ const char *uar_del_temp  = "DROP TABLE temp";
 const char *uar_del_temp1 = "DROP TABLE temp1";
 
 const char *uar_last_full =
-   "INSERT INTO temp1 SELECT Job.JobId,JobTdate "
+   "INSERT INTO temp1 SELECT Job.JobId,Job.JobTdate "
    "FROM Job,JobMedia,Media,FileSet "
    "WHERE Job.ClientId=%s "
    "AND Job.StartTime < '%s' "
@@ -218,7 +272,7 @@ const char *uar_last_full =
    "ORDER BY Job.JobTDate DESC LIMIT 1";
 
 const char *uar_last_full_no_pool =
-   "INSERT INTO temp1 SELECT Job.JobId,JobTdate "
+   "INSERT INTO temp1 SELECT Job.JobId,Job.JobTdate "
    "FROM Job,FileSet "
    "WHERE Job.ClientId=%s "
    "AND Job.StartTime < '%s' "
@@ -228,21 +282,16 @@ const char *uar_last_full_no_pool =
    "ORDER BY Job.JobTDate DESC LIMIT 1";
 
 const char *uar_full =
-   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,"
-   "Job.ClientId,Job.Level,Job.JobFiles,Job.JobBytes,"
-   "StartTime,VolumeName,JobMedia.StartFile,VolSessionId,VolSessionTime "
+   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,Job.StartTime "
    "FROM temp1,Job,JobMedia,Media "
    "WHERE temp1.JobId=Job.JobId "
    "AND Level='F' AND JobStatus IN ('T','W') AND Type='B' "
-   "AND Media.Enabled=1 "
    "AND JobMedia.JobId=Job.JobId "
+   "AND Media.Enabled=1 "
    "AND JobMedia.MediaId=Media.MediaId";
 
 const char *uar_dif =
-   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,Job.ClientId,"
-   "Job.Level,Job.JobFiles,Job.JobBytes,"
-   "Job.StartTime,Media.VolumeName,JobMedia.StartFile,"
-   "Job.VolSessionId,Job.VolSessionTime "
+   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,Job.StartTime "
    "FROM Job,JobMedia,Media,FileSet "
    "WHERE Job.JobTDate>%s AND Job.StartTime<'%s' "
    "AND Job.ClientId=%s "
@@ -256,26 +305,17 @@ const char *uar_dif =
    "ORDER BY Job.JobTDate DESC LIMIT 1";
 
 const char *uar_inc =
-   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,Job.ClientId,"
-   "Job.Level,Job.JobFiles,Job.JobBytes,"
-   "Job.StartTime,Media.VolumeName,JobMedia.StartFile,"
-   "Job.VolSessionId,Job.VolSessionTime "
+   "INSERT INTO temp SELECT Job.JobId,Job.JobTDate,Job.StartTime "
    "FROM Job,JobMedia,Media,FileSet "
    "WHERE Job.JobTDate>%s AND Job.StartTime<'%s' "
    "AND Job.ClientId=%s "
-   "AND Media.Enabled=1 "
    "AND JobMedia.JobId=Job.JobId "
+   "AND Media.Enabled=1 "
    "AND JobMedia.MediaId=Media.MediaId "
    "AND Job.Level='I' AND JobStatus IN ('T','W') AND Type='B' "
    "AND Job.FileSetId=FileSet.FileSetId "
    "AND FileSet.FileSet='%s' "
    "%s";
-
-const char *uar_list_temp =
-   "SELECT DISTINCT JobId,Level,JobFiles,JobBytes,StartTime,VolumeName"
-   " FROM temp"
-   " ORDER BY StartTime ASC";
-
 
 const char *uar_sel_jobid_temp =
    "SELECT DISTINCT JobId,StartTime FROM temp ORDER BY StartTime ASC";
@@ -284,12 +324,28 @@ const char *uar_sel_all_temp1 = "SELECT * FROM temp1";
 
 const char *uar_sel_all_temp = "SELECT * FROM temp";
 
+const char *uar_sel_jobid_copies =
+   "SELECT DISTINCT JobId,StartTime "
+   "FROM Job "
+   "WHERE Type = 'C' "
+   "AND (PriorJobId IN (%s)) "
+   "ORDER BY StartTime ASC";
 
+const char *uar_list_jobs_by_idlist =
+   "SELECT DISTINCT Job.JobId,Job.Level,Job.JobFiles,Job.JobBytes,"
+   "Job.StartTime,Media.VolumeName "
+   "FROM Job,JobMedia,Media "
+   "WHERE Job.JobId IN (%s) "
+   "AND JobMedia.JobId=Job.JobId "
+   "AND Media.Enabled=1 "
+   "AND JobMedia.MediaId=Media.MediaId "
+   "ORDER BY StartTime ASC";
 
 /* Select FileSet names for this Client */
 const char *uar_sel_fileset =
-   "SELECT DISTINCT FileSet.FileSet FROM Job,"
-   "Client,FileSet WHERE Job.FileSetId=FileSet.FileSetId "
+   "SELECT DISTINCT FileSet.FileSet "
+   "FROM Job,Client,FileSet "
+   "WHERE Job.FileSetId=FileSet.FileSetId "
    "AND Job.ClientId=%s AND Client.ClientId=%s "
    "ORDER BY FileSet.FileSet";
 
@@ -740,57 +796,25 @@ const char *uar_create_temp[] = {
    "CREATE TEMPORARY TABLE temp ("
    "JobId INTEGER UNSIGNED NOT NULL,"
    "JobTDate BIGINT UNSIGNED,"
-   "ClientId INTEGER UNSIGNED,"
-   "Level CHAR,"
-   "JobFiles INTEGER UNSIGNED,"
-   "JobBytes BIGINT UNSIGNED,"
-   "StartTime TEXT,"
-   "VolumeName TEXT,"
-   "StartFile INTEGER UNSIGNED,"
-   "VolSessionId INTEGER UNSIGNED,"
-   "VolSessionTime INTEGER UNSIGNED)",
+   "StartTime TEXT)",
 
    /* Postgresql */
    "CREATE TEMPORARY TABLE temp ("
    "JobId INTEGER NOT NULL,"
    "JobTDate BIGINT,"
-   "ClientId INTEGER,"
-   "Level CHAR,"
-   "JobFiles INTEGER,"
-   "JobBytes BIGINT,"
-   "StartTime TEXT,"
-   "VolumeName TEXT,"
-   "StartFile INTEGER,"
-   "VolSessionId INTEGER,"
-   "VolSessionTime INTEGER)",
+   "StartTime TEXT)",
 
    /* SQLite3 */
    "CREATE TEMPORARY TABLE temp ("
    "JobId INTEGER UNSIGNED NOT NULL,"
    "JobTDate BIGINT UNSIGNED,"
-   "ClientId INTEGER UNSIGNED,"
-   "Level CHAR,"
-   "JobFiles INTEGER UNSIGNED,"
-   "JobBytes BIGINT UNSIGNED,"
-   "StartTime TEXT,"
-   "VolumeName TEXT,"
-   "StartFile INTEGER UNSIGNED,"
-   "VolSessionId INTEGER UNSIGNED,"
-   "VolSessionTime INTEGER UNSIGNED)",
+   "StartTime TEXT)",
 
    /* Ingres */
    "DECLARE GLOBAL TEMPORARY TABLE temp ("
    "JobId INTEGER NOT NULL,"
    "JobTDate BIGINT,"
-   "ClientId INTEGER,"
-   "Level CHAR(1),"
-   "JobFiles INTEGER,"
-   "JobBytes BIGINT,"
-   "StartTime TIMESTAMP WITHOUT TIME ZONE,"
-   "VolumeName VARBYTE(128),"
-   "StartFile INTEGER,"
-   "VolSessionId INTEGER,"
-   "VolSessionTime INTEGER) "
+   "StartTime TIMESTAMP WITHOUT TIME ZONE) "
    "ON COMMIT PRESERVE ROWS WITH NORECOVERY"
 };
 

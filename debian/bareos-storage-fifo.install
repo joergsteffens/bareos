@@ -1,2 +1,3 @@
-/etc/bareos/bareos-sd.d/device-fifo.conf
 /usr/lib/bareos/backends/libbareossd-fifo*.so
+/etc/bareos/bareos-dir.d/storage/NULL.conf.example
+/etc/bareos/bareos-sd.d/device/NULL.conf.example

@@ -121,7 +121,7 @@ void drop(char *uid, char *gid, bool keep_readall_caps);
 int bmicrosleep(int32_t sec, int32_t usec);
 char *bfgets(char *s, int size, FILE *fd);
 char *bfgets(POOLMEM *&s, FILE *fd);
-void make_unique_filename(POOLMEM **name, int Id, char *what);
+void make_unique_filename(POOLMEM *&name, int Id, char *what);
 #ifndef HAVE_STRTOLL
 long long int strtoll(const char *ptr, char **endptr, int base);
 #endif
@@ -134,6 +134,18 @@ void stack_trace();
 int safer_unlink(const char *pathname, const char *regex);
 int secure_erase(JCR *jcr, const char *pathname);
 void set_secure_erase_cmdline(const char *cmdline);
+bool path_exists(const char *path);
+bool path_exists(POOL_MEM &path);
+bool path_is_directory(const char *path);
+bool path_is_directory(POOL_MEM &path);
+bool path_is_absolute(const char *path);
+bool path_is_absolute(POOL_MEM &path);
+bool path_get_directory(POOL_MEM &directory, POOL_MEM &path);
+bool path_append(char *path, const char *extra, unsigned int max_path);
+bool path_append(POOL_MEM &path, const char *extra);
+bool path_append(POOL_MEM &path, POOL_MEM &extra);
+bool path_create(const char *path, mode_t mode = 0750);
+bool path_create(POOL_MEM &path, mode_t mode = 0750);
 
 /* compression.c */
 const char *cmprs_algo_to_text(uint32_t compression_algorithm);
@@ -209,6 +221,7 @@ void daemon_start();
 /* edit.c */
 uint64_t str_to_uint64(const char *str);
 int64_t str_to_int64(const char *str);
+#define str_to_int16(str)((int16_t)str_to_int64(str))
 #define str_to_int32(str)((int32_t)str_to_int64(str))
 char *edit_uint64_with_commas(uint64_t val, char *buf);
 char *edit_uint64_with_suffix(uint64_t val, char *buf);
@@ -223,7 +236,8 @@ char *edit_utime(utime_t val, char *buf, int buf_len);
 bool is_a_number(const char *num);
 bool is_a_number_list(const char *n);
 bool is_an_integer(const char *n);
-bool is_name_valid(const char *name, POOLMEM **msg);
+bool is_name_valid(const char *name, POOLMEM *&msg);
+bool is_name_valid(const char *name);
 
 /* jcr.c (most definitions are in src/jcr.h) */
 void init_last_jobs_list();
@@ -251,17 +265,21 @@ void initialize_json();
 
 /* lex.c */
 LEX *lex_close_file(LEX *lf);
+LEX *lex_close_buffer(LEX *lf);
 LEX *lex_open_file(LEX *lf,
                    const char *fname,
                    LEX_ERROR_HANDLER *scan_error,
                    LEX_WARNING_HANDLER *scan_warning);
+LEX *lex_new_buffer(LEX *lf,
+                    LEX_ERROR_HANDLER *scan_error,
+                    LEX_WARNING_HANDLER *scan_warning);
 int lex_get_char(LEX *lf);
 void lex_unget_char(LEX *lf);
 const char *lex_tok_to_str(int token);
 int lex_get_token(LEX *lf, int expect);
 void lex_set_default_error_handler(LEX *lf);
 void lex_set_default_warning_handler(LEX *lf);
-int lex_set_error_handler_error_type(LEX *lf, int err_type);
+void lex_set_error_handler_error_type(LEX *lf, int err_type);
 
 /* message.c */
 void my_name_is(int argc, char *argv[], const char *name);
@@ -310,12 +328,12 @@ bool skip_spaces(char **msg);
 bool skip_nonspaces(char **msg);
 int fstrsch(const char *a, const char *b);
 char *next_arg(char **s);
-int parse_args(POOLMEM *cmd, POOLMEM **args, int *argc,
+int parse_args(POOLMEM *cmd, POOLMEM *&args, int *argc,
                char **argk, char **argv, int max_args);
-int parse_args_only(POOLMEM *cmd, POOLMEM **args, int *argc,
+int parse_args_only(POOLMEM *cmd, POOLMEM *&args, int *argc,
                     char **argk, char **argv, int max_args);
-void split_path_and_filename(const char *fname, POOLMEM **path,
-                             int *pnl, POOLMEM **file, int *fnl);
+void split_path_and_filename(const char *fname, POOLMEM *&path,
+                             int *pnl, POOLMEM *&file, int *fnl);
 int bsscanf(const char *buf, const char *fmt, ...);
 
 /* scsi_crypto.c */
@@ -365,9 +383,9 @@ TLS_CONTEXT *new_tls_context(const char *ca_certfile,
                              bool verify_peer);
 void free_tls_context(TLS_CONTEXT *ctx);
 #ifdef HAVE_TLS
-bool tls_postconnect_verify_host(JCR *jcr, TLS_CONNECTION *tls,
+bool tls_postconnect_verify_host(JCR *jcr, TLS_CONNECTION *tls_conn,
                                  const char *host);
-bool tls_postconnect_verify_cn(JCR *jcr, TLS_CONNECTION *tls,
+bool tls_postconnect_verify_cn(JCR *jcr, TLS_CONNECTION *tls_conn,
                                alist *verify_list);
 TLS_CONNECTION *new_tls_connection(TLS_CONTEXT *ctx, int fd, bool server);
 bool tls_bsock_accept(BSOCK *bsock);
@@ -376,7 +394,7 @@ int tls_bsock_readn(BSOCK *bsock, char *ptr, int32_t nbytes);
 #endif /* HAVE_TLS */
 bool tls_bsock_connect(BSOCK *bsock);
 void tls_bsock_shutdown(BSOCK *bsock);
-void free_tls_connection(TLS_CONNECTION *tls);
+void free_tls_connection(TLS_CONNECTION *tls_conn);
 bool get_tls_require(TLS_CONTEXT *ctx);
 void set_tls_require(TLS_CONTEXT *ctx, bool value);
 bool get_tls_enable(TLS_CONTEXT *ctx);
@@ -384,7 +402,7 @@ void set_tls_enable(TLS_CONTEXT *ctx, bool value);
 bool get_tls_verify_peer(TLS_CONTEXT *ctx);
 
 /* util.c */
-void escape_string(char *snew, char *old, int len);
+void escape_string(POOL_MEM &snew, char *old, int len);
 bool is_buf_zero(char *buf, int len);
 void lcase(char *str);
 void bash_spaces(char *str);
@@ -392,6 +410,7 @@ void bash_spaces(POOL_MEM &pm);
 void unbash_spaces(char *str);
 void unbash_spaces(POOL_MEM &pm);
 char *encode_time(utime_t time, char *buf);
+bool convert_timeout_to_timespec(timespec &timeout, int timeout_in_seconds);
 char *encode_mode(mode_t mode, char *buf);
 int do_shell_expansion(char *name, int name_len);
 void jobstatus_to_ascii(int JobStatus, char *msg, int maxlen);

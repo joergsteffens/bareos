@@ -30,17 +30,17 @@ GNUTLS_LIBS_NONSHARED = @GNUTLS_LIBS_NONSHARED@
 first_rule: all
 dummy:
 
-SVRSRCS = admin.c authenticate.c autoprune.c backup.c bsr.c catreq.c \
-	  dir_plugins.c dird_conf.c dird.c expand.c fd_cmds.c getmsg.c \
-	  inc_conf.c job.c jobq.c migrate.c mountreq.c msgchan.c \
+SVRSRCS = admin.c archive.c authenticate.c autoprune.c backup.c bsr.c catreq.c \
+	  consolidate.c dir_plugins.c dird_conf.c dird.c expand.c fd_cmds.c \
+	  getmsg.c inc_conf.c job.c jobq.c migrate.c mountreq.c msgchan.c \
 	  ndmp_dma_backup.c ndmp_dma_generic.c ndmp_dma_restore.c \
-	  ndmp_dma_storage.c ndmp_fhdb_helpers.c ndmp_fhdb_mem.c \
-	  ndmp_fhdb_lmdb.c newvol.c next_vol.c quota.c socket_server.c \
-	  recycle.c restore.c run_conf.c sd_cmds.c scheduler.c stats.c \
-	  ua_acl.c ua_audit.c ua_cmds.c ua_configure.c ua_dotcmds.c \
-	  ua_input.c ua_impexp.c ua_label.c ua_output.c ua_prune.c ua_purge.c \
-	  ua_query.c ua_restore.c ua_run.c ua_select.c ua_server.c ua_status.c \
-	  ua_tree.c ua_update.c vbackup.c verify.c
+	  ndmp_dma_storage.c ndmp_fhdb_helpers.c ndmp_fhdb_mem.c ndmp_fhdb_lmdb.c \
+	  newvol.c next_vol.c quota.c socket_server.c recycle.c restore.c \
+	  run_conf.c sd_cmds.c scheduler.c stats.c storage.c ua_acl.c ua_audit.c \
+	  ua_cmds.c ua_configure.c ua_db.c ua_dotcmds.c ua_input.c ua_impexp.c \
+	  ua_label.c ua_output.c ua_prune.c ua_purge.c ua_query.c ua_restore.c \
+	  ua_run.c ua_select.c ua_server.c ua_status.c ua_tree.c ua_update.c \
+	  vbackup.c verify.c
 SVROBJS = $(SVRSRCS:.c=.o)
 
 DBCHKSRCS = dbcheck.c dird_conf.c ua_acl.c ua_audit.c run_conf.c inc_conf.c
@@ -52,6 +52,8 @@ TSTFNDOBJS = $(TSTFNDSRCS:.c=.o)
 INCLUDES += -I$(srcdir) -I$(basedir) -I$(basedir)/include -I$(basedir)/lmdb -I$(basedir)/ndmp
 
 JANSSON_CPPFLAGS = @JANSSON_INC@
+
+DIRD_RESTYPES = catalog client console counter director fileset job jobdefs messages pool profile schedule storage
 
 .SUFFIXES:	.c .o
 .PHONY:
@@ -143,19 +145,32 @@ devclean: realclean
 install: all
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bareos-dir $(DESTDIR)$(sbindir)/bareos-dir
 	$(LIBTOOL_INSTALL) $(INSTALL_PROGRAM) bareos-dbcheck $(DESTDIR)$(sbindir)/bareos-dbcheck
-	@srcconf=bareos-dir.conf; \
-	   $(MKDIR) ${DESTDIR}${confdir}/bareos-dir.d/; \
-	   if  test -f ${DESTDIR}${confdir}/$$srcconf; then \
-	      destconf=$$srcconf.new; \
-	      echo "  ==> Found existing $$srcconf, installing new conf file as $$destconf"; \
-	   else \
-	      destconf=$$srcconf; \
-	   fi; \
-	   echo "${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf"; \
-	   ${INSTALL_CONFIG} $$srcconf ${DESTDIR}${confdir}/$$destconf
-	   -@if test "x${dir_group}" != "x"; then \
-	      chgrp -f ${dir_group} ${DESTDIR}${confdir}/$$destconf ; \
-	   fi
+	# copy configuration resource files to directory structure
+	@SRCCONFDIR=../defaultconfigs/bareos-dir.d/; \
+	DESTCONFDIR=${DESTDIR}${confdir}/bareos-dir.d/; \
+	echo "installing configuration resource files to $$DESTCONFDIR"; \
+	$(MKDIR) $$DESTCONFDIR; \
+	for RESTYPE in $(DIRD_RESTYPES); do \
+	   $(MKDIR) "$$DESTCONFDIR/$$RESTYPE"; \
+	   for f in $$SRCCONFDIR/$$RESTYPE/*.conf; do \
+	      if test -f "$$f"; then \
+	         RESDIR="$$DESTCONFDIR/$$RESTYPE"; \
+	         RES=`basename "$$f"`; \
+	         if test -f "$$RESDIR/$$RES"; then \
+	            destconf="$$RESDIR/$$RES.new"; \
+	            echo "    $$RESTYPE/$$RES as \"$$destconf\" (keep existing)"; \
+	         else \
+	            destconf="$$RESDIR/$$RES"; \
+	            echo "    $$RESTYPE/$$RES as \"$$destconf\""; \
+	         fi; \
+	         ${INSTALL_CONFIG} "$$f" "$$destconf"; \
+	         if test "x${dir_group}" != "x"; then \
+	            chgrp -f ${dir_group} $$destconf || true; \
+	         fi; \
+	      fi; \
+	   done; \
+	done
+	$(MKDIR) ${DESTDIR}${confdir}/bareos-dir-export/client/
 	@if  test -f ${DESTDIR}${scriptdir}/query.sql; then \
 	   echo "  ==> Saving existing query.sql to query.sql.old"; \
 	   $(MV) -f ${DESTDIR}${scriptdir}/query.sql ${DESTDIR}${scriptdir}/query.sql.old; \

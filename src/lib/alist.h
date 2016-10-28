@@ -33,25 +33,36 @@
  */
 #ifdef HAVE_TYPEOF
 #define foreach_alist(var, list) \
-        for ((var)=(typeof((var)))(list)->first(); (var); (var) = (typeof(var))(list)->next())
+        for ( (var)=list ? (typeof((var)))(list)->first() : NULL; \
+              (var); \
+              (var) = (typeof(var))(list)->next() )
 
 #define foreach_alist_index(inx, var, list) \
-        for ((inx) = 0; ((var) = (typeof((var)))(list)->get((inx))); (inx)++ )
+        for ( (inx) = 0; \
+              list ? ((var) = (typeof((var)))(list)->get((inx))) : NULL; \
+              (inx)++ )
 
 #define foreach_alist_rindex(inx, var, list) \
-        for ((inx) = ((list)->size() - 1); ((var) = (typeof((var)))(list)->get((inx))); (inx)--)
+        for ( list ? (inx) = ((list)->size() - 1) : 0; \
+              list ? ((var) = (typeof((var)))(list)->get((inx))) : NULL; \
+              (inx)--)
 
 #else
 #define foreach_alist(var, list) \
-        for ((*((void **)&(var))=(void*)((list)->first())); \
-            (var); \
-            (*((void **)&(var))=(void*)((list)->next())))
+        for ( list ? (*((void **)&(var))=(void*)((list)->first())) : NULL; \
+              (var); \
+              (*((void **)&(var))=(void*)((list)->next())) )
+
 
 #define foreach_alist_index(inx, var, list) \
-        for ((inx) = 0; ((*((void **)&(var)) = (void*)((list)->get((inx))))); (inx)++)
+        for ( (inx) = 0; \
+              list ? ((*((void **)&(var)) = (void*)((list)->get((inx))))) : NULL; \
+              (inx)++ )
 
 #define foreach_alist_rindex(inx, var, list) \
-        for ((inx) = ((list)->size() - 1); ((*((void **)&(var)) = (void*)((list)->get((inx))))); (inx)--)
+        for ( list ? (inx) = ((list)->size() - 1) : 0; \
+              list ? ((*((void **)&(var)) = (void*)((list)->get((inx))))) : NULL; \
+              (inx)-- )
 
 #endif
 
@@ -113,8 +124,7 @@ inline void * alist::operator [](int index) const {
 
 inline bool alist::empty() const
 {
-   /* Check for null pointer */
-   return this ? num_items == 0 : true;
+   return num_items == 0;
 }
 
 /*
@@ -153,7 +163,7 @@ inline int alist::size() const
     *  on size to succeed even if nothing put in
     *  alist.
     */
-   return this ? num_items : 0;
+   return num_items;
 }
 
 /* How much to grow by each time */

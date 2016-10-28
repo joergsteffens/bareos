@@ -1462,40 +1462,38 @@ void e_msg(const char *file, int line, int type, int level, const char *fmt,...)
    va_list ap;
    int len, maxlen;
    POOL_MEM buf(PM_EMSG),
-            more(PM_EMSG);
-
-   /*
-    * Check if we have a message destination defined.
-    * We always report M_ABORT and M_ERROR_TERM
-    */
-   if (!daemon_msgs || ((type != M_ABORT && type != M_ERROR_TERM) &&
-                        !bit_is_set(type, daemon_msgs->send_msg))) {
-      return;                        /* no destination */
-   }
+            more(PM_EMSG),
+            typestr(PM_EMSG);
 
    switch (type) {
    case M_ABORT:
+      Mmsg(typestr, "ABORT");
       Mmsg(buf, _("%s: ABORTING due to ERROR in %s:%d\n"), my_name, get_basename(file), line);
       break;
    case M_ERROR_TERM:
+      Mmsg(typestr, "ERROR TERMINATION");
       Mmsg(buf, _("%s: ERROR TERMINATION at %s:%d\n"), my_name, get_basename(file), line);
       break;
    case M_FATAL:
+      Mmsg(typestr, "FATAL ERROR");
       if (level == -1)            /* skip details */
          Mmsg(buf, _("%s: Fatal Error because: "), my_name);
       else
          Mmsg(buf, _("%s: Fatal Error at %s:%d because:\n"), my_name, get_basename(file), line);
       break;
    case M_ERROR:
+      Mmsg(typestr, "ERROR");
       if (level == -1)            /* skip details */
          Mmsg(buf, _("%s: ERROR: "), my_name);
       else
          Mmsg(buf, _("%s: ERROR in %s:%d "), my_name, get_basename(file), line);
       break;
    case M_WARNING:
+      Mmsg(typestr, "WARNING");
       Mmsg(buf, _("%s: Warning: "), my_name);
       break;
    case M_SECURITY:
+      Mmsg(typestr, "Security violation");
       Mmsg(buf, _("%s: Security violation: "), my_name);
       break;
    default:
@@ -1515,6 +1513,20 @@ void e_msg(const char *file, int line, int type, int level, const char *fmt,...)
       }
 
       break;
+   }
+
+   /*
+    * show error message also as debug message (level 10)
+    */
+   d_msg(file, line, 10, "%s: %s", typestr.c_str(), more.c_str());
+
+   /*
+    * Check if we have a message destination defined.
+    * We always report M_ABORT and M_ERROR_TERM
+    */
+   if (!daemon_msgs || ((type != M_ABORT && type != M_ERROR_TERM) &&
+                        !bit_is_set(type, daemon_msgs->send_msg))) {
+      return;                        /* no destination */
    }
 
    pm_strcat(buf, more.c_str());
@@ -1709,34 +1721,6 @@ void j_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const 
 /*
  * Edit a message into a Pool memory buffer, with file:lineno
  */
-int m_msg(const char *file, int line, POOLMEM **pool_buf, const char *fmt, ...)
-{
-   va_list ap;
-   int len, maxlen;
-   POOL_MEM buf(PM_EMSG),
-            more(PM_EMSG);
-
-   Mmsg(buf, "%s:%d ", get_basename(file), line);
-   while (1) {
-      maxlen = more.max_size() - 1;
-      va_start(ap, fmt);
-      len = bvsnprintf(more.c_str(), maxlen, fmt, ap);
-      va_end(ap);
-
-      if (len < 0 || len >= (maxlen - 5)) {
-         more.realloc_pm(maxlen + maxlen / 2);
-         continue;
-      }
-
-      break;
-   }
-
-   pm_strcpy(*pool_buf, buf.c_str());
-   len = pm_strcat(*pool_buf, more.c_str());
-
-   return len;
-}
-
 int m_msg(const char *file, int line, POOLMEM *&pool_buf, const char *fmt, ...)
 {
    va_list ap;
@@ -1771,27 +1755,6 @@ int m_msg(const char *file, int line, POOLMEM *&pool_buf, const char *fmt, ...)
  * Returns: string length of what was edited.
  *          -1 when the buffer isn't enough to hold the edited string.
  */
-int Mmsg(POOLMEM **pool_buf, const char *fmt, ...)
-{
-   int len, maxlen;
-   va_list ap;
-
-   while (1) {
-      maxlen = sizeof_pool_memory(*pool_buf) - 1;
-      va_start(ap, fmt);
-      len = bvsnprintf(*pool_buf, maxlen, fmt, ap);
-      va_end(ap);
-
-      if (len < 0 || len >= (maxlen - 5)) {
-         *pool_buf = realloc_pool_memory(*pool_buf, maxlen + maxlen / 2);
-         continue;
-      }
-
-      break;
-   }
-   return len;
-}
-
 int Mmsg(POOLMEM *&pool_buf, const char *fmt, ...)
 {
    int len, maxlen;
@@ -1827,6 +1790,28 @@ int Mmsg(POOL_MEM &pool_buf, const char *fmt, ...)
 
       if (len < 0 || len >= (maxlen - 5)) {
          pool_buf.realloc_pm(maxlen + maxlen / 2);
+         continue;
+      }
+
+      break;
+   }
+
+   return len;
+}
+
+int Mmsg(POOL_MEM *&pool_buf, const char *fmt, ...)
+{
+   int len, maxlen;
+   va_list ap;
+
+   while (1) {
+      maxlen = pool_buf->max_size() - 1;
+      va_start(ap, fmt);
+      len = bvsnprintf(pool_buf->c_str(), maxlen, fmt, ap);
+      va_end(ap);
+
+      if (len < 0 || len >= (maxlen - 5)) {
+         pool_buf->realloc_pm(maxlen + maxlen / 2);
          continue;
       }
 

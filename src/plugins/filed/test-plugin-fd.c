@@ -177,17 +177,16 @@ static bRC newPlugin(bpContext *ctx)
    if (!p_ctx) {
       return bRC_Error;
    }
-   memset(p_ctx, 0, sizeof(struct plugin_ctx));
+   p_ctx = (plugin_ctx*)memset(p_ctx, 0, sizeof(struct plugin_ctx));
    ctx->pContext = (void *)p_ctx;        /* set our context pointer */
 
    bfuncs->registerBareosEvents(ctx,
-                                6,
+                                5,
                                 bEventJobStart,
                                 bEventEndFileSet,
                                 bEventRestoreObject,
                                 bEventEstimateCommand,
-                                bEventBackupCommand,
-                                bEventComponentInfo);
+                                bEventBackupCommand);
 
    return bRC_OK;
 }
@@ -333,9 +332,6 @@ static bRC handlePluginEvent(bpContext *ctx, bEvent *event, void *value)
            p_ctx->cmd, p_ctx->fname, p_ctx->reader, p_ctx->writer);
       break;
    }
-   case bEventComponentInfo:
-      Dmsg(ctx, dbglvl, "plugin: Component=%s\n", NPRT((char *)value));
-      break;
    default:
       Dmsg(ctx, dbglvl, "test-plugin-fd: unknown event=%d\n", event->eventType);
       break;
@@ -582,11 +578,13 @@ static bRC startBackupFile(bpContext *ctx, struct save_pkt *sp)
 
    } else if (p_ctx->nb_obj == 1) {
       ConfigFile ini;
+
       p_ctx->buf = get_pool_memory(PM_BSOCK);
+      Dmsg(ctx, dbglvl, "p_ctx->buf = 0x%x\n", p_ctx->buf);
       ini.register_items(test_items, sizeof(struct ini_items));
 
       sp->object_name = (char*)INI_RESTORE_OBJECT_NAME;
-      sp->object_len = ini.serialize(&p_ctx->buf);
+      sp->object_len = ini.serialize(p_ctx->buf);
       sp->object = p_ctx->buf;
       sp->type = FT_PLUGIN_CONFIG;
 

@@ -1,8 +1,6 @@
 #
 # Default Bareos Director configuration file for disk-only backup
 #
-#  For Bareos release @VERSION@ (@DATE@) -- @DISTNAME@ @DISTVER@
-#
 # Each configuration item has a reference number that shows
 # where this property can be changed in the configuration file.
 # Search for the number to find the correct line.
@@ -43,10 +41,7 @@
 #   What you also have to do is to change the default fileset     (#13)
 #   to either one of the demo filesets given or create our own fileset.
 #
-#
-#
 #  For Bareos release @VERSION@ (@DATE@) -- @DISTNAME@ @DISTVER@
-#
 #
 Director {                            # define myself
   Name = @basename@-dir
@@ -60,7 +55,7 @@ Director {                            # define myself
   # (eg. because of your router or firewall configuration).
   # Additionally the Heartbeat can be enabled in bareos-sd and bareos-fd.
   #
-  # Heartbeat Interval = 1m
+  # Heartbeat Interval = 1 min
 
   # remove comment in next line to load dynamic backends from specified directory
   # Backend Directory = @backenddir@
@@ -330,7 +325,7 @@ Pool {
 #
 Pool {
   Name = Scratch
-  Pool Type = Backup
+  Pool Type = Scratch
 }
 
 #

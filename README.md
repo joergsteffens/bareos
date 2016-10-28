@@ -6,10 +6,53 @@ policy at https://www.bareos.org/en/howto-contribute.html
 This source code has the following changes (highlevel) compared with
 Bacula 5.2.13 (original version forked.):
 
+Release 16.2.x
+==============
+
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-16.2)](https://travis-ci.org/bareos/bareos)
+
+* Always Incremental Backup
+* Client initiated connection (active client behind firewall)
+* Enhanced ACLs: multi-tenancy capability
+* NDMP Enhancements
+* New subdirectory configuration scheme to ease automation
+* Director Configuration API
+  * Initially only adding configuration is implemented
+* API enhancements for Bareos WebUI
+* BAT is marked as deprecated in favor of Bareos WebUI
+
+
+Release 16.1.x
+==============
+
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-16.2)](https://travis-ci.org/bareos/bareos)
+
+* Remove fixed size reload table
+* Get rid of one VSS client at a time
+   * Allow multiple jobs to run on Windows
+
+Release 15.4.x
+==============
+
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-15.2)](https://travis-ci.org/bareos/bareos)
+
+* Storage Daemon Refactor record write code path.
+* Enable concurrent jobs on Windows platforms
+* Report the secure erase settings in the jobreport
+* Deprecated POOLMEM \*\* in favor of POOLMEM \*\&
+* One command loop for normal and dot commands
+* BVFS remove set\_username()
+* BSOCK allow sending long messages
+* Cleanup reload\_config command
+   * reload config command is callable as signal handler for SIGHUP
+     and by the bconsole reload command.
+   * Make sure, that the SIGHUP handler is only called once.
+   * Do not terminate the director in case of config errors.
+
 Release 15.2.x
 ==============
 
-[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=master)](https://travis-ci.org/bareos/bareos)
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-15.2)](https://travis-ci.org/bareos/bareos)
 
 * Lots of refactoring of old code.
 * Systemd support for Debian >= 8 and Ubuntu >= 15.04
@@ -18,7 +61,7 @@ Release 15.2.x
 * Replace own JSON representation code with JANSSON
 * Allow scanning and storing restore objects with bscan.
 * Unit tests created using CMOCKA
-* Add support for RESTORE_OBJECTS in verify jobs
+* Add support for RESTORE\_OBJECTS in verify jobs
 * Windows API fixes (deduped file backup, compressed file attributes)
 * Windows build got more executable (grow, bscan, bwild, bregex)
 * Windows binaries are code signed.
@@ -42,11 +85,16 @@ Release 15.2.x
    * Increase debug message timestamp resolution to include usecs.
    * When printing protocol messages drop printing \n
    * Set JCR in TSD for stored and filed.
+* NDMP enhancements
+   * Reference Implementation enhancements
+   * Single file restore fixes
+   * Incremental backups and restores fixed
+   * Relocation on restore fixed
 
 Release 15.1.x
 ==============
 
-[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=master)](https://travis-ci.org/bareos/bareos)
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-15.2)](https://travis-ci.org/bareos/bareos)
 
 * Refactoring of Migrate/Copy selection code. (Mantis #342)
 * Major TLS overhaul. (Mantis #371)
@@ -59,7 +107,7 @@ Release 15.1.x
 Release 14.4.x
 ==============
 
-[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=master)](https://travis-ci.org/bareos/bareos)
+[![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-15.2)](https://travis-ci.org/bareos/bareos)
 
 * Support to rados SD backend for libradosstriper
 * Refactor socket handling.
@@ -85,7 +133,7 @@ Release 14.2.x
 * Make scripting more robust for getting the database engine used.
 * Debian packaging got major overhaul.
    * dbconfig used for database configuration on debian based distributions.
-   * dh_installinit used for init scripts on debian based distributions.
+   * dh\_installinit used for init scripts on debian based distributions.
    * The LICENSE text is more inline with what debian requires for the debian packaging.
 * Bug fixes to bugs found by Coverity scans.
 * Added prototype of CRL (Certificate Revocation List) reload logic for openssl.
@@ -146,7 +194,7 @@ Release 13.4.x
 
 [![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-14.2)](https://travis-ci.org/bareos/bareos)
 
-* First attempt at supporting IBM lin_tape driver.
+* First attempt at supporting IBM lin\_tape driver.
 * Fix storage daemon plugin interface.
 * AIX compile fixes.
 * Catalog backend scripting reworked.
@@ -175,13 +223,13 @@ Release 13.3.x
 * Conditionally enable VSS.
 * Refactor windows version detection code.
 * Implement plugin options passing.
-* Upgrade all filed plugins to use fd_common.h
+* Upgrade all filed plugins to use fd\_common.h
 * Windows config files admin-only access.
 * Use modern autoconf idioms.
 * Enhanced help for run and restore command.
 * Add command for doing a name resolution on client.
-* Implement a store_alist_dir function.
-* Fill the process environment with an BAREOS_CFGDIR.
+* Implement a store\_alist\_dir function.
+* Fill the process environment with an BAREOS\_CFGDIR.
 * Cleanup win api compat layer.
 * Sortable tables in bRestore.
 * Copy job definition requires unnecessary settings (relax config).
@@ -210,8 +258,8 @@ Release 13.1.x
 * Cleanup of compression framework (#34)
 * Encryption cipher is hardcoded (#46)
 * Job migration/copy between different SDs (#7)
-* Use open_bpipe wrapper in bpipe plugin (#104)
-   * Side effect of using open_bpipe is that you can only call
+* Use open\_bpipe wrapper in bpipe plugin (#104)
+   * Side effect of using open\_bpipe is that you can only call
      a binary or a script like all other things in Bareos e.g.
      runscripts etc. If you want to use a direct cmdline you need
      to embed the cmdline in a sh -c 'cmdline ...'
@@ -229,10 +277,10 @@ Release 12.4.x
 [![Build Status](https://travis-ci.org/bareos/bareos.png?branch=bareos-12.4)](https://travis-ci.org/bareos/bareos)
 
 * First attempt at adding a rerun command.
-* Pass the restore context as parameter to display_job_parameters
+* Pass the restore context as parameter to display\_job\_parameters
 * When showing the pool source show if it was set on the cmdline.
 * Link bacula using libumem on Solaris the better multithreaded allocator
-* Rewrite find_one_file using inline functions so its better readable.
+* Rewrite find\_one\_file using inline functions so its better readable.
 * Add support for backtrace dumps on Solaris
 * Add a bstrinlinecpy function which allows for overlapping copies.
 * Major overhaul of configure subsystem.
@@ -243,7 +291,7 @@ Release 12.4.x
 * Backport of dynamic loadable backends and sql pooling.
 * First attempt at adding a fileset size option.
 * Replace the mntent cache htable with a dlist.
-* Add safeguard to append_file function for empty filepatterns.
+* Add safeguard to append\_file function for empty filepatterns.
 * Modify block device restore
 * First attempt at adding fileset shadowing detection.
 * Reindent cmdline table.
@@ -256,7 +304,7 @@ Release 12.4.x
   * Cleanup of dird
   * Add an autochanger transfer option.
   * Add extra function to update database with new data.
-  * Allow get_user_slot_list to search for specific argument.
+  * Allow get\_user\_slot\_list to search for specific argument.
   * Tweak layout of status slots
   * Tweak status slots no need to get a drive
   * Tweak update slots only ask for drive with scan option.
@@ -274,25 +322,25 @@ Release 12.4.x
 * Fix help text and comments on list and llist cmd.
 * Output .help item=<help_item> as machine parseable data.
 * Need a way to express we want a private database connection.
-* Implement an unformated list type NF_LIST
-  * Use NF_LIST e.g. non formated list for the files and basefiles of a job.
-* Implement a special version of NF_LIST e.g. RAW_LIST
-  * Use RAW_LIST e.g. no formated raw output list for the job log of a job
+* Implement an unformated list type NF\_LIST
+  * Use NF\_LIST e.g. non formated list for the files and basefiles of a job.
+* Implement a special version of NF\_LIST e.g. RAW\_LIST
+  * Use RAW\_LIST e.g. no formated raw output list for the job log of a job
 * Add basic backup/restore only mode.
-* Replace all bnet_sig and bnet_close.
+* Replace all bnet\_sig and bnet\_close.
 * Sort the prototypes in the protos.h header.
 * Added sample postgresql stored procedures for lstat field.
 * Use bools instead of integers for db functions.
 * Change catalog code to use a single exit from function.
-* Do not use useless NULL arguments to db_sql_query
+* Do not use useless NULL arguments to db\_sql\_query
 * Uncripple storage daemon plugins.
 * Add support for newer AIX flags for acl retrieval.
 * Add mount/unmount storage daemon plugin event.
 * Implement baculaRegisterEvents proper.
 * Allow the stored plugin to override the volume status.
-* Use MAX_BLOCK_LENGTH instead of hardcoded 4096000
+* Use MAX\_BLOCK\_LENGTH instead of hardcoded 4096000
 * Add clone job jobcode
-* Allow open_mail_pipe to use extended jobcodes.
+* Allow open\_mail\_pipe to use extended jobcodes.
 * Capture error in bpipe plugin.
 * Do not define types in prototype header.
 * Add additional storage plugin events.
@@ -340,7 +388,7 @@ Release 12.4.x
 
 Long standing bugs fixed (bug numbers are from the bacula bug database):
 * Implement feature request #1698
-* Proper fix #1764 ld: warning: symbol plugin_list has differing sizes
+* Proper fix #1764 ld: warning: symbol plugin\_list has differing sizes
 * Add the essentials from bugreport #1846
 * Fix bug #1739 level overides ignore user input.
 * Fix bug #1679 Job Overrides are Not listed In Manual Run Confirmation
@@ -359,26 +407,28 @@ Build System
   * Packages are build for:
       * CentOS 5
       * CentOS 6
+      * CentOS 7
       * Debian 6.0
       * Debian 7.0
-      * Fedora 18
-      * Fedora 19
+      * Debian 8.0
+      * Fedora 20
+      * Fedora 21
+      * Fedora 22
+      * Fedora 23
       * RedHat Enterprise Linux 5 (RHEL5)
       * RedHat Enterprise Linux 6 (RHEL6)
-      * Suse Linux Enterprise 11 SP1 (SLE_11_SP1)
-      * Suse Linux Enterprise 11 SP2 (SLE_11_SP2)
+      * RedHat Enterprise Linux 7 (RHEL7)
       * Suse Linux Enterprise 11 SP3 (SLE_11_SP3)
-      * Univention 3.1
-      * Univention 3.2
-      * OpenSuse 11.4
-      * OpenSuse 12.1
-      * OpenSuse 12.2
-      * OpenSuse 12.3
+      * Suse Linux Enterprise 11 SP4 (SLE_11_SP3)
+      * Suse Linux Enterprise 12 (SLE_12)
+      * Univention 4.0
       * OpenSuse 13.1
-      * OpenSuse factory
+      * OpenSuse 13.2
+      * OpenSuse LEAP 42.1
       * Ubuntu 10.04
       * Ubuntu 12.04
-      * Windows (32 and 64 Bit)
+      * Ubuntu 14.04
+      * Windows VISTA and later (32 and 64 Bit)
   * Fully automatic generation of new packages within one hour after new
     release of software or bugfix.
   * Fully automatic continuos integration tests of new packages with all supported Linux distributions

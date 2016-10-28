@@ -64,6 +64,7 @@
 #define JT_COPY                       'c' /* Copy Job */
 #define JT_MIGRATE                    'g' /* Migration Job */
 #define JT_SCAN                       'S' /* Scan Job */
+#define JT_CONSOLIDATE                'O' /* Always Incremental Consolidate Job */
 
 /*
  * Job Status. Some of these are stored in the DB
@@ -233,6 +234,9 @@ struct RESOURCES {
    POOLMEM *rstore_source;                /* Where read storage came from */
    POOLMEM *wstore_source;                /* Where write storage came from */
    POOLMEM *catalog_source;               /* Where catalog came from */
+   alist *rstorage;                       /* Read storage possibilities */
+   alist *wstorage;                       /* Write storage possibilities */
+   alist *pstorage;                       /* Paired storage possibilities (saved wstorage or rstorage) */
    bool run_pool_override;                /* Pool override was given on run cmdline */
    bool run_full_pool_override;           /* Full pool override was given on run cmdline */
    bool run_vfull_pool_override;          /* Virtual Full pool override was given on run cmdline */
@@ -258,6 +262,11 @@ struct CMPRS_CTX {
       void *pZFAST;                       /* FASTLZ compression session data */
 #endif
    } workset;
+};
+
+struct job_push_item {
+   void (*job_end_cb)(JCR *jcr, void *);
+   void *ctx;
 };
 
 typedef void (JCR_free_HANDLER)(JCR *jcr);
@@ -418,14 +427,12 @@ public:
     */
    pthread_t SD_msg_chan;                 /* Message channel thread id */
    bool SD_msg_chan_started;              /* Message channel thread started */
+   pthread_cond_t start_wait;             /* Wait for FD to start Job */
    pthread_cond_t term_wait;              /* Wait for job termination */
    pthread_cond_t nextrun_ready;          /* Wait for job next run to become ready */
    workq_ele_t *work_item;                /* Work queue item if scheduled */
    BSOCK *ua;                             /* User agent */
    RESOURCES res;                         /* Resources assigned */
-   alist *rstorage;                       /* Read storage possibilities */
-   alist *wstorage;                       /* Write storage possibilities */
-   alist *pstorage;                       /* Paired storage possibilities (saved wstorage or rstorage) */
    TREE_ROOT *restore_tree_root;          /* Selected files to restore (some protocols need this info) */
    BSR *bsr;                              /* Bootstrap record -- has everything */
    char *backup_format;                   /* Backup format used when doing a NDMP backup */
@@ -440,7 +447,6 @@ public:
    uint32_t MediaId;                      /* DB record IDs associated with this job */
    uint32_t FileIndex;                    /* Last FileIndex processed */
    utime_t MaxRunSchedTime;               /* Max run time in seconds from Initial Scheduled time */
-   POOLMEM *fname;                        /* Name to put into catalog */
    JOB_DBR jr;                            /* Job DB record for current job */
    JOB_DBR previous_jr;                   /* Previous job database record */
    JCR *mig_jcr;                          /* JCR for migration/copy job */
@@ -448,10 +454,15 @@ public:
    char since[MAX_TIME_LENGTH];           /* Since time */
    char PrevJob[MAX_NAME_LENGTH];         /* Previous job name assiciated with since time */
    union {
-      JobId_t RestoreJobId;               /* Restore id specified by UA */
-      JobId_t MigrateJobId;               /* Migration id specified by UA */
+      JobId_t RestoreJobId;               /* Restore JobId specified by UA */
+      JobId_t MigrateJobId;               /* Migration JobId specified by UA */
+      JobId_t VerifyJobId;                /* Verify JobId specified by UA */
    };
+   POOLMEM *fname;                        /* Name to put into catalog */
    POOLMEM *client_uname;                 /* Client uname */
+   POOLMEM *FDSecureEraseCmd;             /* Report: Secure Erase Command  */
+   POOLMEM *SDSecureEraseCmd;             /* Report: Secure Erase Command  */
+   POOLMEM *vf_jobids;                    /* JobIds to use for Virtual Full */
    uint32_t replace;                      /* Replace option */
    int32_t NumVols;                       /* Number of Volume used in pool */
    int32_t reschedule_count;              /* Number of times rescheduled */
@@ -464,6 +475,7 @@ public:
    bool IgnoreStorageConcurrency;         /* Set in migration jobs */
    bool spool_data;                       /* Spool data in SD */
    bool acquired_resource_locks;          /* Set if resource locks acquired */
+   bool start_wait_inited;                /* Set when cond var inited */
    bool term_wait_inited;                 /* Set when cond var inited */
    bool nextrun_ready_inited;             /* Set when cond var inited */
    bool fn_printed;                       /* Printed filename */

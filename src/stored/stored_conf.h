@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -20,6 +20,8 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 */
+
+#define CONFIG_FILE "bareos-sd.conf"  /* Default config file */
 
 /*
  * Resource codes -- they must be sequential for indexing
@@ -49,22 +51,9 @@ public:
    s_password password;               /* Director password */
    char *address;                     /* Director IP address or zero */
    bool monitor;                      /* Have only access to status and .status functions */
-   bool tls_authenticate;             /* Authenticate with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Server Certificate File */
-   char *tls_keyfile;                 /* TLS Server Key File */
-   char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   alist *tls_allowed_cns;            /* TLS Allowed Clients */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (per director) */
    s_password keyencrkey;             /* Key Encryption Key */
-
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
+   tls_t tls;                         /* TLS structure */
 };
 
 class NDMPRES {
@@ -106,29 +95,16 @@ public:
    bool allow_bw_bursting;            /* Allow bursting with bandwidth limiting */
    bool ndmp_enable;                  /* Enable NDMP protocol listener */
    bool ndmp_snooping;                /* Enable NDMP protocol snooping */
-   bool tls_authenticate;             /* Authenticate with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
    bool nokeepalive;                  /* Don't use SO_KEEPALIVE on sockets */
    bool collect_dev_stats;            /* Collect Device Statistics */
    bool collect_job_stats;            /* Collect Job Statistics */
    bool device_reserve_by_mediatype;  /* Allow device reservation based on a matching mediatype */
    bool filedevice_concurrent_read;   /* Allow filedevices to be read concurrently */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Server Certificate File */
-   char *tls_keyfile;                 /* TLS Server Key File */
-   char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   alist *tls_allowed_cns;            /* TLS Allowed Clients */
    char *verid;                       /* Custom Id to print in version command */
    char *secure_erase_cmdline;        /* Cmdline to execute to perform secure erase of file */
    char *log_timestamp_format;        /* Timestamp format to use in generic logging messages */
    uint64_t max_bandwidth_per_job;    /* Bandwidth limitation (global) */
-
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
+   tls_t tls;                         /* TLS structure */
 };
 
 class AUTOCHANGERRES : public BRSRES {
@@ -158,7 +134,8 @@ public:
    bool drive_crypto_enabled;         /* Enable hardware crypto */
    bool query_crypto_status;          /* Query device for crypto status */
    bool collectstats;                 /* Set if statistics should be collected */
-   uint32_t drive_index;              /* Autochanger drive index */
+   drive_number_t drive;              /* Autochanger logical drive number */
+   drive_number_t drive_index;        /* Autochanger physical drive index */
    char cap_bits[CAP_BYTES];          /* Capabilities of this device */
    utime_t max_changer_wait;          /* Changer timeout */
    utime_t max_rewind_wait;           /* Maximum secs to wait for rewind */
@@ -171,9 +148,9 @@ public:
    uint32_t max_network_buffer_size;  /* Max network buf size */
    uint32_t max_concurrent_jobs;      /* Maximum concurrent jobs this drive */
    uint32_t autodeflate_algorithm;    /* Compression algorithm to use for compression */
-   uint32_t autodeflate_level;        /* Compression level to use for compression algorithm which uses levels */
-   uint32_t autodeflate;              /* Perform auto deflation in this IO direction */
-   uint32_t autoinflate;              /* Perform auto inflation in this IO direction */
+   uint16_t autodeflate_level;        /* Compression level to use for compression algorithm which uses levels */
+   uint16_t autodeflate;              /* Perform auto deflation in this IO direction */
+   uint16_t autoinflate;              /* Perform auto inflation in this IO direction */
    utime_t vol_poll_interval;         /* Interval between polling volume during mount */
    int64_t max_volume_files;          /* Max files to put on one volume */
    int64_t max_volume_size;           /* Max bytes to put on one volume */

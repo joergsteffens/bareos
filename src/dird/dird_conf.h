@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -27,6 +27,8 @@
  */
 
 /* NOTE:  #includes at the end of this file */
+
+#define CONFIG_FILE "bareos-dir.conf" /* default configuration file */
 
 /*
  * Resource codes -- they must be sequential for indexing
@@ -115,23 +117,11 @@ public:
    uint32_t MaxConcurrentJobs;        /* Max concurrent jobs for whole director */
    uint32_t MaxConnections;           /* Max concurrent connections */
    uint32_t MaxConsoleConnections;    /* Max concurrent console connections */
-   utime_t FDConnectTimeout;          /* timeout for connect in seconds */
-   utime_t SDConnectTimeout;          /* timeout in seconds */
+   utime_t FDConnectTimeout;          /* Timeout for connect in seconds */
+   utime_t SDConnectTimeout;          /* Timeout for connect in seconds */
    utime_t heartbeat_interval;        /* Interval to send heartbeats */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Server Certificate File */
-   char *tls_keyfile;                 /* TLS Server Key File */
-   char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   alist *tls_allowed_cns;            /* TLS Allowed Clients */
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    utime_t stats_retention;           /* Statistics retention period in seconds */
-   bool tls_authenticate;             /* Authenticated with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
+   tls_t tls;                         /* TLS structure */
    bool optimize_for_size;            /* Optimize daemon for minimum memory size */
    bool optimize_for_speed;           /* Optimize daemon for speed which may need more memory */
    bool nokeepalive;                  /* Don't use SO_KEEPALIVE on sockets */
@@ -213,19 +203,7 @@ public:
    s_password password;               /* UA server password */
    alist *ACL_lists[Num_ACL];         /* Pointers to ACLs */
    alist *profiles;                   /* Pointers to profile resources */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Server Certificate File */
-   char *tls_keyfile;                 /* TLS Server Key File */
-   char *tls_dhfile;                  /* TLS Diffie-Hellman Parameters */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   alist *tls_allowed_cns;            /* TLS Allowed Clients */
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
-   bool tls_authenticate;             /* Authenticated with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
+   tls_t tls;                         /* TLS structure */
 };
 
 /*
@@ -255,11 +233,17 @@ public:
 };
 
 /*
+ * Forward referenced structures
+ */
+struct runtime_client_status_t;
+struct runtime_storage_status_t;
+struct runtime_job_status_t;
+
+/*
  * Client Resource
  */
 class CLIENTRES: public BRSRES {
 public:
-
    uint32_t Protocol;                 /* Protocol to use to connect */
    uint32_t AuthType;                 /* Authentication Type to use for protocol */
    uint32_t ndmp_loglevel;            /* NDMP Protocol specific loglevel to use */
@@ -270,36 +254,25 @@ public:
    uint64_t GraceTime;                /* Time remaining on gracetime */
    uint64_t QuotaLimit;               /* The total softquota supplied if over grace */
    utime_t SoftQuotaGracePeriod;      /* Grace time for softquota */
-   utime_t FileRetention;             /* file retention period in seconds */
-   utime_t JobRetention;              /* job retention period in seconds */
+   utime_t FileRetention;             /* File retention period in seconds */
+   utime_t JobRetention;              /* Job retention period in seconds */
    utime_t heartbeat_interval;        /* Interval to send heartbeats */
    char *address;                     /* Hostname for remote access to Client */
    char *username;                    /* Username to use for authentication if protocol supports it */
    s_password password;
    CATRES *catalog;                   /* Catalog resource */
    int32_t MaxConcurrentJobs;         /* Maximum concurrent jobs */
-   int32_t NumConcurrentJobs;         /* number of concurrent jobs running */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Client Certificate File */
-   char *tls_keyfile;                 /* TLS Client Key File */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   alist *tls_allowed_cns;            /* TLS Allowed Clients */
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
    bool passive;                      /* Passive Client */
-   bool allow_client_connect;         /* Allow a client to connect to the director */
+   bool conn_from_dir_to_fd;          /* Connect to Client */
+   bool conn_from_fd_to_dir;          /* Allow incoming connections */
    bool enabled;                      /* Set if client is enabled */
-
-   bool tls_authenticate;             /* Authenticated with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
    bool AutoPrune;                    /* Do automatic pruning? */
    bool StrictQuotas;                 /* Enable strict quotas? */
    bool QuotaIncludeFailedJobs;       /* Ignore failed jobs when calculating quota */
    bool ndmp_use_lmdb;                /* NDMP Protocol specific use LMDB for the FHDB or not */
    int64_t max_bandwidth;             /* Limit speed on this client */
+   runtime_client_status_t *rcs;      /* Runtime Client Status */
+   tls_t tls;                         /* TLS structure */
 };
 
 /*
@@ -315,22 +288,11 @@ public:
    char *username;                    /* Username to use for authentication if protocol supports it */
    s_password password;
    char *media_type;                  /* Media Type provided by this Storage */
+   char *changer_device;              /* If DIR controls storage directly changer device used */
+   alist *tape_devices;               /* If DIR controls storage directly tape devices in storage */
    alist *device;                     /* Alternate devices for this Storage */
    int32_t MaxConcurrentJobs;         /* Maximum concurrent jobs */
    int32_t MaxConcurrentReadJobs;     /* Maximum concurrent jobs reading */
-   int32_t NumConcurrentJobs;         /* Number of concurrent jobs running */
-   int32_t NumConcurrentReadJobs;     /* Number of jobs reading */
-   char *tls_ca_certfile;             /* TLS CA Certificate File */
-   char *tls_ca_certdir;              /* TLS CA Certificate Directory */
-   char *tls_crlfile;                 /* TLS CA Certificate Revocation List File */
-   char *tls_certfile;                /* TLS Client Certificate File */
-   char *tls_keyfile;                 /* TLS Client Key File */
-   char *tls_cipherlist;              /* TLS Cipher List */
-   TLS_CONTEXT *tls_ctx;              /* Shared TLS Context */
-   bool tls_authenticate;             /* Authenticated with TLS */
-   bool tls_enable;                   /* Enable TLS */
-   bool tls_require;                  /* Require TLS */
-   bool tls_verify_peer;              /* TLS Verify Peer Certificate */
    bool enabled;                      /* Set if device is enabled */
    bool autochanger;                  /* Set if autochanger */
    bool collectstats;                 /* Set if statistics should be collected of this SD */
@@ -338,8 +300,10 @@ public:
    int64_t StorageId;                 /* Set from Storage DB record */
    int64_t max_bandwidth;             /* Limit speed on this storage daemon for replication */
    utime_t heartbeat_interval;        /* Interval to send heartbeats */
-   uint32_t drives;                   /* Number of drives in autochanger */
+   utime_t cache_status_interval;     /* Interval to cache the vol_list in the rss */
+   runtime_storage_status_t *rss;     /* Runtime Storage Status */
    STORERES *paired_storage;          /* Paired storage configuration item for protocols like NDMP */
+   tls_t tls;                         /* TLS structure */
 
    /* Methods */
    char *dev_name() const;
@@ -391,7 +355,7 @@ inline void USTORERES::set_source(const char *where)
 class JOBRES : public BRSRES {
 public:
    uint32_t Protocol;                 /* Protocol to use to connect */
-   uint32_t JobType;                  /* job type (backup, verify, restore */
+   uint32_t JobType;                  /* Job type (backup, verify, restore) */
    uint32_t JobLevel;                 /* default backup/verify level */
    int32_t Priority;                  /* Job priority */
    uint32_t RestoreJobId;             /* What -- JobId to restore */
@@ -401,31 +365,34 @@ public:
 
    char *RestoreWhere;                /* Where on disk to restore -- directory */
    char *RegexWhere;                  /* RegexWhere option */
-   char *strip_prefix;                /* remove prefix from filename  */
+   char *strip_prefix;                /* Remove prefix from filename  */
    char *add_prefix;                  /* add prefix to filename  */
    char *add_suffix;                  /* add suffix to filename -- .old */
    char *backup_format;               /* Format of backup to use for protocols supporting multiple backup formats */
    char *RestoreBootstrap;            /* Bootstrap file */
    char *WriteBootstrap;              /* Where to write bootstrap Job updates */
    char *WriteVerifyList;             /* List of changed files */
-   utime_t MaxRunTime;                /* max run time in seconds */
-   utime_t MaxWaitTime;               /* max blocking time in seconds */
+   utime_t MaxRunTime;                /* Max run time in seconds */
+   utime_t MaxWaitTime;               /* Max blocking time in seconds */
    utime_t FullMaxRunTime;            /* Max Full job run time */
    utime_t DiffMaxRunTime;            /* Max Differential job run time */
    utime_t IncMaxRunTime;             /* Max Incremental job run time */
-   utime_t MaxStartDelay;             /* max start delay in seconds */
-   utime_t MaxRunSchedTime;           /* max run time in seconds from Scheduled time*/
+   utime_t MaxStartDelay;             /* Max start delay in seconds */
+   utime_t MaxRunSchedTime;           /* Max run time in seconds from Scheduled time*/
    utime_t RescheduleInterval;        /* Reschedule interval */
    utime_t MaxFullInterval;           /* Maximum time interval between Fulls */
    utime_t MaxVFullInterval;          /* Maximum time interval between Virtual Fulls */
    utime_t MaxDiffInterval;           /* Maximum time interval between Diffs */
    utime_t DuplicateJobProximity;     /* Permitted time between duplicicates */
+   utime_t AlwaysIncrementalJobRetention; /* Timeinterval where incrementals are not consolidated */
+   utime_t AlwaysIncrementalMaxFullAge; /* If Full Backup is older than this age the consolidation job will include also the full */
    int64_t spool_size;                /* Size of spool file for this job */
    int64_t max_bandwidth;             /* Speed limit on this job */
    int64_t FileHistSize;              /* Hint about the size of the expected File history */
    int32_t MaxConcurrentJobs;         /* Maximum concurrent jobs */
-   int32_t NumConcurrentJobs;         /* Number of concurrent jobs running */
    int32_t MaxConcurrentCopies;       /* Limit number of concurrent jobs one Copy Job spawns */
+   int32_t AlwaysIncrementalKeepNumber;/* Number of incrementals that are always left and not consolidated */
+   int32_t MaxFullConsolidations;     /* Number of consolidate jobs to be started that will include a full */
 
    MSGSRES *messages;                 /* How and where to send messages */
    SCHEDRES *schedule;                /* When -- Automatic schedule */
@@ -444,12 +411,16 @@ public:
    JOBRES *jobdefs;                   /* Job defaults */
    alist *run_cmds;                   /* Run commands */
    alist *RunScripts;                 /* Run {client} program {after|before} Job */
+   alist *FdPluginOptions;            /* Generic FD plugin options used by this Job */
+   alist *SdPluginOptions;            /* Generic SD plugin options used by this Job */
+   alist *DirPluginOptions;           /* Generic DIR plugin options used by this Job */
+   alist *base;                       /* Base jobs */
 
    bool allow_mixed_priority;         /* Allow jobs with higher priority concurrently with this */
    bool where_use_regexp;             /* true if RestoreWhere is a BREGEXP */
    bool RescheduleOnError;            /* Set to reschedule on error */
    bool RescheduleIncompleteJobs;     /* Set to reschedule incomplete Jobs */
-   bool PrefixLinks;                  /* prefix soft links with Where path */
+   bool PrefixLinks;                  /* Prefix soft links with Where path */
    bool PruneJobs;                    /* Force pruning of Jobs */
    bool PruneFiles;                   /* Force pruning of Files */
    bool PruneVolumes;                 /* Force pruning of Volumes */
@@ -468,13 +439,12 @@ public:
    bool PurgeMigrateJob;              /* Purges source job on completion */
    bool IgnoreDuplicateJobChecking;   /* Ignore Duplicate Job Checking */
    bool SaveFileHist;                 /* Ability to disable File history saving for certain protocols */
+   bool AlwaysIncremental;            /* Always incremental with regular consolidation */
 
-   alist *FdPluginOptions;            /* Generic FD plugin options used by this Job */
-   alist *SdPluginOptions;            /* Generic SD plugin options used by this Job */
-   alist *DirPluginOptions;           /* Generic DIR plugin options used by this Job */
-   alist *base;                       /* Base jobs */
+   runtime_job_status_t *rjs;         /* Runtime Job Status */
 
    /* Methods */
+   bool validate();
 };
 
 #undef  MAX_FOPTS
@@ -530,7 +500,7 @@ public:
    bool enable_vss;                   /* Enable Volume Shadow Copy */
 
    /* Methods */
-   bool print_config(POOL_MEM& buff, bool hide_sensitive_data);
+   bool print_config(POOL_MEM& buf, bool hide_sensitive_data = false, bool verbose = false);
 };
 
 /*
@@ -564,9 +534,9 @@ public:
    char *label_format;                /* Label format string */
    char *cleaning_prefix;             /* Cleaning label prefix */
    int32_t LabelType;                 /* Bareos/ANSI/IBM label type */
-   uint32_t max_volumes;              /* max number of volumes */
-   utime_t VolRetention;              /* volume retention period in seconds */
-   utime_t VolUseDuration;            /* duration volume can be used */
+   uint32_t max_volumes;              /* Max number of volumes */
+   utime_t VolRetention;              /* Volume retention period in seconds */
+   utime_t VolUseDuration;            /* Duration volume can be used */
    uint32_t MaxVolJobs;               /* Maximum jobs on the Volume */
    uint32_t MaxVolFiles;              /* Maximum files on the Volume */
    uint64_t MaxVolBytes;              /* Maximum bytes on the Volume */
@@ -575,20 +545,20 @@ public:
    uint64_t MigrationLowBytes;        /* When migration stops */
    POOLRES *NextPool;                 /* Next pool for migration */
    alist *storage;                    /* Where is device -- list of Storage to be used */
-   bool use_catalog;                  /* maintain catalog for media */
-   bool catalog_files;                /* maintain file entries in catalog */
-   bool use_volume_once;              /* write on volume only once */
-   bool purge_oldest_volume;          /* purge oldest volume */
-   bool recycle_oldest_volume;        /* attempt to recycle oldest volume */
-   bool recycle_current_volume;       /* attempt recycle of current volume */
-   bool AutoPrune;                    /* default for pool auto prune */
-   bool Recycle;                      /* default for media recycle yes/no */
-   uint32_t action_on_purge;          /* action on purge, e.g. truncate the disk volume */
+   bool use_catalog;                  /* Maintain catalog for media */
+   bool catalog_files;                /* Maintain file entries in catalog */
+   bool use_volume_once;              /* Write on volume only once */
+   bool purge_oldest_volume;          /* Purge oldest volume */
+   bool recycle_oldest_volume;        /* Attempt to recycle oldest volume */
+   bool recycle_current_volume;       /* Attempt recycle of current volume */
+   bool AutoPrune;                    /* Default for pool auto prune */
+   bool Recycle;                      /* Default for media recycle yes/no */
+   uint32_t action_on_purge;          /* Action on purge, e.g. truncate the disk volume */
    POOLRES *RecyclePool;              /* RecyclePool destination when media is purged */
    POOLRES *ScratchPool;              /* ScratchPool source when requesting media */
    CATRES *catalog;                   /* Catalog to be used */
-   utime_t FileRetention;             /* file retention period in seconds */
-   utime_t JobRetention;              /* job retention period in seconds */
+   utime_t FileRetention;             /* File retention period in seconds */
+   utime_t JobRetention;              /* Job retention period in seconds */
    uint32_t MinBlocksize;             /* Minimum Blocksize */
    uint32_t MaxBlocksize;             /* Maximum Blocksize */
 };
@@ -653,11 +623,5 @@ union URES {
 };
 
 void init_dir_config(CONFIG *config, const char *configfile, int exit_code);
-
-#define GetPoolResWithName(x) ((POOLRES *)GetResWithName(R_POOL, (x)))
-#define GetStoreResWithName(x) ((STORERES *)GetResWithName(R_STORAGE, (x)))
-#define GetClientResWithName(x) ((CLIENTRES *)GetResWithName(R_CLIENT, (x)))
-#define GetJobResWithName(x) ((JOBRES *)GetResWithName(R_JOB, (x)))
-#define GetFileSetResWithName(x) ((FILESETRES *)GetResWithName(R_FILESET, (x)))
-#define GetCatalogResWithName(x) ((CATRES *)GetResWithName(R_CATALOG, (x)))
-#define GetScheduleResWithName(x) ((SCHEDRES *)GetResWithName(R_SCHEDULE, (x)))
+bool propagate_jobdefs(int res_type, JOBRES *res);
+bool validate_resource(int type, RES_ITEM *items, BRSRES *res);

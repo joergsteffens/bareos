@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -27,6 +27,8 @@ extern const char CATS_IMP_EXP *list_jobs;
 extern const char CATS_IMP_EXP *list_jobs_count;
 extern const char CATS_IMP_EXP *list_jobs_long;
 extern const char CATS_IMP_EXP *list_jobs_last;
+extern const char CATS_IMP_EXP *list_jobs_long_last;
+extern const char CATS_IMP_EXP *get_jobstatus_details;
 extern const char CATS_IMP_EXP *list_pool;
 extern const char CATS_IMP_EXP *drop_deltabs[];
 extern const char CATS_IMP_EXP *create_delindex;
@@ -46,7 +48,7 @@ extern const char CATS_IMP_EXP *uar_last_full;
 extern const char CATS_IMP_EXP *uar_last_full_no_pool;
 extern const char CATS_IMP_EXP *uar_full;
 extern const char CATS_IMP_EXP *uar_inc;
-extern const char CATS_IMP_EXP *uar_list_temp;
+extern const char CATS_IMP_EXP *uar_list_jobs_by_idlist;
 extern const char CATS_IMP_EXP *uar_sel_all_temp1;
 extern const char CATS_IMP_EXP *uar_sel_fileset;
 extern const char CATS_IMP_EXP *uar_sel_filesetid;
@@ -58,6 +60,7 @@ extern const char CATS_IMP_EXP *uar_count_files;
 extern const char CATS_IMP_EXP *uar_jobids_fileindex;
 extern const char CATS_IMP_EXP *uar_jobid_fileindex_from_table;
 extern const char CATS_IMP_EXP *uar_sel_jobid_temp;
+extern const char CATS_IMP_EXP *uar_sel_jobid_copies;
 
 extern const char CATS_IMP_EXP *select_recent_version[];
 extern const char CATS_IMP_EXP *select_recent_version_with_basejob[];

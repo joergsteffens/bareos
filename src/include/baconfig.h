@@ -54,6 +54,7 @@
 #endif
 
 #define MANUAL_AUTH_URL "http://doc.bareos.org/master/html/bareos-manual-main-reference.html#AuthorizationErrors"
+#define MANUAL_CONFIG_DIR_URL "http://doc.bareos.org/master/html/bareos-manual-main-reference.html#ConfigurationIncludeDirectory"
 
 #ifdef PROTOTYPES
 # define __PROTO(p)     p
@@ -307,6 +308,13 @@ typedef int64_t   boffset_t;
 typedef off_t     boffset_t;
 #endif
 
+/*
+ * Create some simple types for now int16_t e.g. 65 K should be enough.
+ */
+typedef int16_t slot_number_t;
+typedef int16_t drive_number_t;
+typedef int16_t slot_flags_t;
+
 /* These probably should be subroutines */
 #define Pw(x) \
    do { int errstat; if ((errstat=rwl_writelock(&(x)))) \
@@ -550,9 +558,9 @@ m_msg(__FILE__, __LINE__, buf, msg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11
 
 class POOL_MEM;
 /* Edit message into Pool Memory buffer -- no __FILE__ and __LINE__ */
-int Mmsg(POOLMEM **msgbuf, const char *fmt, ...);
 int Mmsg(POOLMEM *&msgbuf, const char *fmt, ...);
 int Mmsg(POOL_MEM &msgbuf, const char *fmt, ...);
+int Mmsg(POOL_MEM *&msgbuf, const char *fmt, ...);
 
 class JCR;
 void d_msg(const char *file, int line, int level, const char *fmt, ...);
@@ -561,7 +569,6 @@ void p_msg_fb(const char *file, int line, int level, const char *fmt,...);
 void e_msg(const char *file, int line, int type, int level, const char *fmt, ...);
 void j_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const char *fmt, ...);
 void q_msg(const char *file, int line, JCR *jcr, int type, utime_t mtime, const char *fmt, ...);
-int m_msg(const char *file, int line, POOLMEM **msgbuf, const char *fmt, ...);
 int m_msg(const char *file, int line, POOLMEM *&pool_buf, const char *fmt, ...);
 
 /** Use our strdup with smartalloc */
@@ -673,7 +680,7 @@ extern void pause_msg(const char *file, const char *func, int line, const char *
 
 #else
 /*
- *   Unix/Linix
+ *   Unix/Linux
  */
 #define PathSeparator '/'
 

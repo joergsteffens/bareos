@@ -3,7 +3,7 @@
 
    Copyright (C) 2007-2012 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -51,6 +51,7 @@
 #include "fileopts.h"
 #include "lib/plugins.h"
 #include <sys/stat.h>
+
 #ifdef HAVE_WIN32
 #include "vss.h"
 #endif
@@ -174,67 +175,65 @@ struct xattr_pkt {
  * Bareos Variable Ids
  */
 typedef enum {
-  bVarJobId = 1,
-  bVarFDName = 2,
-  bVarLevel = 3,
-  bVarType = 4,
-  bVarClient = 5,
-  bVarJobName = 6,
-  bVarJobStatus = 7,
-  bVarSinceTime = 8,
-  bVarAccurate = 9,
-  bVarFileSeen = 10,
-  bVarVssObject = 11,
-  bVarVssDllHandle = 12,
-  bVarWorkingDir = 13,
-  bVarWhere = 14,
-  bVarRegexWhere = 15,
-  bVarExePath = 16,
-  bVarVersion = 17,
-  bVarDistName = 18,
-  bVarPrevJobName = 19,
-  bVarPrefixLinks = 20
+   bVarJobId = 1,
+   bVarFDName = 2,
+   bVarLevel = 3,
+   bVarType = 4,
+   bVarClient = 5,
+   bVarJobName = 6,
+   bVarJobStatus = 7,
+   bVarSinceTime = 8,
+   bVarAccurate = 9,
+   bVarFileSeen = 10,
+   bVarVssClient = 11,
+   bVarWorkingDir = 12,
+   bVarWhere = 13,
+   bVarRegexWhere = 14,
+   bVarExePath = 15,
+   bVarVersion = 16,
+   bVarDistName = 17,
+   bVarPrevJobName = 18,
+   bVarPrefixLinks = 19
 } bVariable;
 
 /*
  * Events that are passed to plugin
  */
 typedef enum {
-  bEventJobStart = 1,
-  bEventJobEnd = 2,
-  bEventStartBackupJob = 3,
-  bEventEndBackupJob = 4,
-  bEventStartRestoreJob = 5,
-  bEventEndRestoreJob = 6,
-  bEventStartVerifyJob = 7,
-  bEventEndVerifyJob = 8,
-  bEventBackupCommand = 9,
-  bEventRestoreCommand = 10,
-  bEventEstimateCommand = 11,
-  bEventLevel = 12,
-  bEventSince = 13,
-  bEventCancelCommand = 14,                    /* Executed by another thread */
-  bEventVssBackupAddComponents = 15,           /* Just before bEventVssPrepareSnapshot */
-  bEventVssRestoreLoadComponentMetadata = 16,
-  bEventVssRestoreSetComponentsSelected = 17,
-  bEventRestoreObject = 18,
-  bEventEndFileSet = 19,
-  bEventPluginCommand = 20,                    /* Sent during FileSet creation */
-  bEventVssBeforeCloseRestore = 21,
-
-  /* Add drives to VSS snapshot
-   *  argument: char[27] drivelist
-   * You need to add them without duplicates,
-   * see fd_common.h add_drive() copy_drives() to get help
-   */
-  bEventVssPrepareSnapshot = 22,
-  bEventOptionPlugin = 23,
-  bEventHandleBackupFile = 24,                 /* Used with Options Plugin */
-  bEventComponentInfo = 25,                    /* Plugin component */
-  bEventNewPluginOptions = 26
+   bEventJobStart = 1,
+   bEventJobEnd = 2,
+   bEventStartBackupJob = 3,
+   bEventEndBackupJob = 4,
+   bEventStartRestoreJob = 5,
+   bEventEndRestoreJob = 6,
+   bEventStartVerifyJob = 7,
+   bEventEndVerifyJob = 8,
+   bEventBackupCommand = 9,
+   bEventRestoreCommand = 10,
+   bEventEstimateCommand = 11,
+   bEventLevel = 12,
+   bEventSince = 13,
+   bEventCancelCommand = 14,
+   bEventRestoreObject = 15,
+   bEventEndFileSet = 16,
+   bEventPluginCommand = 17,
+   bEventOptionPlugin = 18,
+   bEventHandleBackupFile = 19,
+   bEventNewPluginOptions = 20,
+   bEventVssInitializeForBackup = 21,
+   bEventVssInitializeForRestore = 22,
+   bEventVssSetBackupState = 23,
+   bEventVssPrepareForBackup = 24,
+   bEventVssBackupAddComponents = 25,
+   bEventVssPrepareSnapshot = 26,
+   bEventVssCreateSnapshots = 27,
+   bEventVssRestoreLoadComponentMetadata = 28,
+   bEventVssRestoreSetComponentsSelected = 29,
+   bEventVssCloseRestore = 30,
+   bEventVssBackupComplete = 31
 } bEventType;
 
-#define FD_NR_EVENTS bEventHandleBackupFile /* keep this updated ! */
+#define FD_NR_EVENTS bEventVssBackupComplete /* keep this updated ! */
 
 typedef struct s_bEvent {
    uint32_t eventType;
@@ -256,8 +255,8 @@ void unload_fd_plugins(void);
 int list_fd_plugins(POOL_MEM &msg);
 void new_plugins(JCR *jcr);
 void free_plugins(JCR *jcr);
-void generate_plugin_event(JCR *jcr, bEventType event,
-                           void *value = NULL, bool reverse = false);
+bRC generate_plugin_event(JCR *jcr, bEventType event,
+                          void *value = NULL, bool reverse = false);
 bool send_plugin_name(JCR *jcr, BSOCK *sd, bool start);
 bool plugin_name_stream(JCR *jcr, char *name);
 int plugin_create_file(JCR *jcr, ATTR *attr, BFILE *bfd, int replace);
@@ -288,14 +287,15 @@ typedef struct s_bareosFuncs {
    uint32_t size;
    uint32_t version;
    bRC (*registerBareosEvents)(bpContext *ctx, int nr_events, ...);
+   bRC (*unregisterBareosEvents)(bpContext *ctx, int nr_events, ...);
+   bRC (*getInstanceCount)(bpContext *ctx, int *ret);
    bRC (*getBareosValue)(bpContext *ctx, bVariable var, void *value);
    bRC (*setBareosValue)(bpContext *ctx, bVariable var, void *value);
-   bRC (*JobMessage)(bpContext *ctx, const char *file, int line,
-       int type, utime_t mtime, const char *fmt, ...);
-   bRC (*DebugMessage)(bpContext *ctx, const char *file, int line,
-       int level, const char *fmt, ...);
-   void *(*bareosMalloc)(bpContext *ctx, const char *file, int line,
-       size_t size);
+   bRC (*JobMessage)(bpContext *ctx, const char *file, int line, int type,
+                     utime_t mtime, const char *fmt, ...);
+   bRC (*DebugMessage)(bpContext *ctx, const char *file, int line, int level,
+                       const char *fmt, ...);
+   void *(*bareosMalloc)(bpContext *ctx, const char *file, int line, size_t size);
    void (*bareosFree)(bpContext *ctx, const char *file, int line, void *mem);
    bRC (*AddExclude)(bpContext *ctx, const char *file);
    bRC (*AddInclude)(bpContext *ctx, const char *file);
@@ -307,6 +307,8 @@ typedef struct s_bareosFuncs {
    bRC (*NewPreInclude)(bpContext *ctx);
    bRC (*checkChanges)(bpContext *ctx, struct save_pkt *sp);
    bRC (*AcceptFile)(bpContext *ctx, struct save_pkt *sp); /* Need fname and statp */
+   bRC (*SetSeenBitmap)(bpContext *ctx, bool all, char *fname);
+   bRC (*ClearSeenBitmap)(bpContext *ctx, bool all, char *fname);
 } bFuncs;
 
 /****************************************************************************
@@ -321,11 +323,10 @@ typedef enum {
 } pVariable;
 
 #define FD_PLUGIN_MAGIC  "*FDPluginData*"
-#define FD_PLUGIN_INTERFACE_VERSION 9
+#define FD_PLUGIN_INTERFACE_VERSION 10
 
 /*
- * This is a set of function pointers that Bareos can call
- *  within the plugin.
+ * This is a set of function pointers that Bareos can call within the plugin.
  */
 typedef struct s_pluginFuncs {
    uint32_t size;

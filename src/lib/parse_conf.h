@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -77,6 +77,65 @@ struct s_password {
 };
 
 /*
+ * store all TLS specific settings
+ * and backend specific context.
+ */
+struct tls_t {
+   bool authenticate;             /* Authenticate with TLS */
+   bool enable;                   /* Enable TLS */
+   bool require;                  /* Require TLS */
+   bool verify_peer;              /* TLS Verify Peer Certificate */
+   char *ca_certfile;             /* TLS CA Certificate File */
+   char *ca_certdir;              /* TLS CA Certificate Directory */
+   char *crlfile;                 /* TLS CA Certificate Revocation List File */
+   char *certfile;                /* TLS Client Certificate File */
+   char *keyfile;                 /* TLS Client Key File */
+   char *cipherlist;              /* TLS Cipher List */
+   char *dhfile;                  /* TLS Diffie-Hellman File */
+   alist *allowed_cns;            /* TLS Allowed Certificate Common Names (Clients) */
+   TLS_CONTEXT *ctx;              /* Shared TLS Context */
+};
+
+/*
+ * free the tls_t structure.
+ */
+void free_tls_t(tls_t &tls);
+
+/*
+ * All configuration resources using TLS have the same directives,
+ * therefore define it once and use it in every resource.
+ */
+#define TLS_CONFIG(res) \
+   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res.tls.authenticate), 0, CFG_ITEM_DEFAULT, "false", NULL, \
+         "Use TLS only to authenticate, not for encryption." }, \
+   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res.tls.enable), 0, CFG_ITEM_DEFAULT, "false", NULL, \
+         "Enable TLS support." }, \
+   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res.tls.require), 0, CFG_ITEM_DEFAULT, "false", NULL, \
+         "Without setting this to yes, Bareos can fall back to use unencryption connections. " \
+         "Enabling this implicietly sets \"TLS Enable = yes\"." }, \
+   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res.tls.verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, \
+         "If disabled, all certificates signed by a known CA will be accepted. " \
+         "If enabled, the CN of a certificate must the Address or in the \"TLS Allowed CN\" list." }, \
+   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res.tls.ca_certfile), 0, 0, NULL, NULL, \
+         "Path of a PEM encoded TLS CA certificate(s) file." }, \
+   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res.tls.ca_certdir), 0, 0, NULL, NULL, \
+         "Path of a TLS CA certificate directory." }, \
+   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res.tls.crlfile), 0, 0, NULL, NULL, \
+         "Path of a Certificate Revocation List file." }, \
+   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res.tls.certfile), 0, 0, NULL, NULL, \
+         "Path of a PEM encoded TLS certificate." }, \
+   { "TlsKey", CFG_TYPE_DIR, ITEM(res.tls.keyfile), 0, 0, NULL, NULL, \
+         "Path of a PEM encoded private key. It must correspond to the specified \"TLS Certificate\"." }, \
+   { "TlsCipherList", CFG_TYPE_STR, ITEM(res.tls.cipherlist), 0, CFG_ITEM_PLATFORM_SPECIFIC, NULL, NULL, \
+         "List of valid TLS Ciphers." }, \
+   { "TlsAllowedCn", CFG_TYPE_ALIST_STR, ITEM(res.tls.allowed_cns), 0, 0, NULL, NULL, \
+         "\"Common Name\"s (CNs) of the allowed peer certificates."  }, \
+   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res.tls.dhfile), 0, 0, NULL, NULL, \
+         "Path to PEM encoded Diffie-Hellman parameter file. " \
+         "If this directive is specified, DH key exchange will be used for the ephemeral keying, " \
+         "allowing for forward secrecy of communications." },
+
+/*
  * This is the structure that defines the record types (items) permitted within each
  * resource. It is used to define the configuration tables.
  */
@@ -85,7 +144,9 @@ struct RES_ITEM {
    const int type;
    union {
       char **value;                     /* Where to store the item */
+      uint16_t *ui16value;
       uint32_t *ui32value;
+      int16_t *i16value;
       int32_t *i32value;
       uint64_t *ui64value;
       int64_t *i64value;
@@ -117,7 +178,7 @@ struct RES_ITEM {
 /* For storing name_addr items in res_items table */
 #define ITEM(x) {(char **)&res_all.x}
 
-#define MAX_RES_ITEMS 88                /* maximum resource items per RES */
+#define MAX_RES_ITEMS 90                /* maximum resource items per RES */
 
 /*
  * This is the universal header that is at the beginning of every resource record.
@@ -179,22 +240,24 @@ enum {
    CFG_TYPE_ALIST_RES = 9,              /* List of resources */
    CFG_TYPE_ALIST_STR = 10,             /* List of strings */
    CFG_TYPE_ALIST_DIR = 11,             /* List of dirs */
-   CFG_TYPE_INT32 = 12,                 /* 32 bits Integer */
-   CFG_TYPE_PINT32 = 13,                /* Positive 32 bits Integer (unsigned) */
-   CFG_TYPE_MSGS = 14,                  /* Message resource */
-   CFG_TYPE_INT64 = 15,                 /* 64 bits Integer */
-   CFG_TYPE_BIT = 16,                   /* Bitfield */
-   CFG_TYPE_BOOL = 17,                  /* Boolean */
-   CFG_TYPE_TIME = 18,                  /* Time value */
-   CFG_TYPE_SIZE64 = 19,                /* 64 bits file size */
-   CFG_TYPE_SIZE32 = 20,                /* 32 bits file size */
-   CFG_TYPE_SPEED = 21,                 /* Speed limit */
-   CFG_TYPE_DEFS = 22,                  /* Definition */
-   CFG_TYPE_LABEL = 23,                 /* Label */
-   CFG_TYPE_ADDRESSES = 24,             /* List of ip addresses */
-   CFG_TYPE_ADDRESSES_ADDRESS = 25,     /* Ip address */
-   CFG_TYPE_ADDRESSES_PORT = 26,        /* Ip port */
-   CFG_TYPE_PLUGIN_NAMES = 27,          /* Plugin Name(s) */
+   CFG_TYPE_INT16 = 12,                 /* 16 bits Integer */
+   CFG_TYPE_PINT16 = 13,                /* Positive 16 bits Integer (unsigned) */
+   CFG_TYPE_INT32 = 14,                 /* 32 bits Integer */
+   CFG_TYPE_PINT32 = 15,                /* Positive 32 bits Integer (unsigned) */
+   CFG_TYPE_MSGS = 16,                  /* Message resource */
+   CFG_TYPE_INT64 = 17,                 /* 64 bits Integer */
+   CFG_TYPE_BIT = 18,                   /* Bitfield */
+   CFG_TYPE_BOOL = 19,                  /* Boolean */
+   CFG_TYPE_TIME = 20,                  /* Time value */
+   CFG_TYPE_SIZE64 = 21,                /* 64 bits file size */
+   CFG_TYPE_SIZE32 = 22,                /* 32 bits file size */
+   CFG_TYPE_SPEED = 23,                 /* Speed limit */
+   CFG_TYPE_DEFS = 24,                  /* Definition */
+   CFG_TYPE_LABEL = 25,                 /* Label */
+   CFG_TYPE_ADDRESSES = 26,             /* List of ip addresses */
+   CFG_TYPE_ADDRESSES_ADDRESS = 27,     /* Ip address */
+   CFG_TYPE_ADDRESSES_PORT = 28,        /* Ip port */
+   CFG_TYPE_PLUGIN_NAMES = 29,          /* Plugin Name(s) */
 
    /*
     * Director resource types. handlers in dird_conf.
@@ -266,10 +329,16 @@ public:
 
    /* Methods */
    char *name() const;
-   bool print_config(POOL_MEM &buf, bool hide_sensitive_data = false);
+   bool print_config(POOL_MEM &buf, bool hide_sensitive_data = false, bool verbose = false);
+   /*
+    * validate can be defined by inherited classes,
+    * when special rules for this resource type must be checked.
+    */
+   bool validate();
 };
 
 inline char *BRSRES::name() const { return this->hdr.name; }
+inline bool BRSRES::validate() { return true; }
 
 /*
  * Message Resource
@@ -303,12 +372,12 @@ public:
    void wait_not_in_use();            /* in message.c */
    void lock();                       /* in message.c */
    void unlock();                     /* in message.c */
-   bool print_config(POOL_MEM &buff, bool hide_sensitive_data = false);
+   bool print_config(POOL_MEM &buff, bool hide_sensitive_data = false, bool verbose = false);
 };
 
 typedef void (INIT_RES_HANDLER)(RES_ITEM *item, int pass);
 typedef void (STORE_RES_HANDLER)(LEX *lc, RES_ITEM *item, int index, int pass);
-typedef void (PRINT_RES_HANDLER)(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide_sensitive_data);
+typedef void (PRINT_RES_HANDLER)(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide_sensitive_data, bool inherited);
 
 /*
  * New C++ configuration routines
@@ -318,7 +387,7 @@ public:
    /*
     * Members
     */
-   const char *m_cf;                    /* Config file */
+   const char *m_cf;                    /* Config file parameter */
    LEX_ERROR_HANDLER *m_scan_error;     /* Error handler if non-null */
    LEX_WARNING_HANDLER *m_scan_warning; /* Warning handler if non-null */
    INIT_RES_HANDLER *m_init_res;        /* Init resource handler for non default types if non-null */
@@ -353,14 +422,46 @@ public:
       int32_t r_last,
       RES_TABLE *resources,
       RES **res_head);
-
+   void set_default_config_filename(const char *filename);
+   void set_config_include_dir(const char *rel_path);
+   bool is_using_config_include_dir() { return m_use_config_include_dir; };
    bool parse_config();
+   bool parse_config_file(const char *cf, void *caller_ctx, LEX_ERROR_HANDLER *scan_error = NULL,
+                          LEX_WARNING_HANDLER *scan_warning = NULL, int32_t err_type = M_ERROR_TERM);
+   const char *get_base_config_path() { return m_used_config_path; };
    void free_resources();
    RES **save_resources();
    RES **new_res_head();
    void init_resource(int type, RES_ITEM *items, int pass);
+   bool remove_resource(int type, const char *name);
    void dump_resources(void sendit(void *sock, const char *fmt, ...),
                        void *sock, bool hide_sensitive_data = false);
+   const char *get_resource_type_name(int code);
+   int get_resource_code(const char *resource_type);
+   RES_TABLE *get_resource_table(int resource_type);
+   RES_TABLE *get_resource_table(const char *resource_type_name);
+   int get_resource_item_index(RES_ITEM *res_table, const char *item);
+   RES_ITEM *get_resource_item(RES_ITEM *res_table, const char *item);
+   bool get_path_of_resource(POOL_MEM &path, const char *component, const char *resourcetype,
+                             const char *name, bool set_wildcards = false);
+   bool get_path_of_new_resource(POOL_MEM &path, POOL_MEM &extramsg, const char *component,
+                                 const char *resourcetype, const char *name,
+                                 bool error_if_exits = false, bool create_directories = false);
+
+protected:
+   const char *m_config_default_filename;         /* default config filename, that is used, if no filename is given */
+   const char *m_config_dir;                      /* base directory of configuration files */
+   const char *m_config_include_dir;              /* rel. path to the config include directory
+                                                     (bareos-dir.d, bareos-sd.d, bareos-fd.d, ...) */
+   bool m_use_config_include_dir;                 /* Use the config include directory */
+   const char *m_config_include_naming_format;    /* Format string for file paths of resources */
+   const char *m_used_config_path;                /* Config file that is used. */
+
+   const char *get_default_configdir();
+   bool get_config_file(POOL_MEM &full_path, const char *config_dir, const char *config_filename);
+   bool get_config_include_path(POOL_MEM &full_path, const char *config_dir);
+   bool find_config_path(POOL_MEM &full_path);
+   int get_resource_table_index(int resource_type);
 };
 
 CONFIG *new_config_parser();
@@ -377,17 +478,19 @@ const char *datatype_to_description(int type);
 /*
  * Resource routines
  */
-RES *GetResWithName(int rcode, const char *name);
+RES *GetResWithName(int rcode, const char *name, bool lock = true);
 RES *GetNextRes(int rcode, RES *res);
 void b_LockRes(const char *file, int line);
 void b_UnlockRes(const char *file, int line);
 void dump_resource(int type, RES *res, void sendmsg(void *sock, const char *fmt, ...),
-                   void *sock, bool hide_sensitive_data = false);
+                   void *sock, bool hide_sensitive_data = false, bool verbose = false);
+void indent_config_item(POOL_MEM &cfg_str, int level, const char *config_item, bool inherited = false);
 void free_resource(RES *res, int type);
 void init_resource(int type, RES_ITEM *item);
-void save_resource(int type, RES_ITEM *item, int pass);
+bool save_resource(int type, RES_ITEM *item, int pass);
 bool store_resource(int type, LEX *lc, RES_ITEM *item, int index, int pass);
 const char *res_to_str(int rcode);
+
 
 #ifdef HAVE_JANSSON
 /*

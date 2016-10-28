@@ -1168,7 +1168,7 @@ static inline void perform_ado_backup(bpContext *ctx)
    set_ado_connect_string(ctx);
 
    vdsname = get_pool_memory(PM_NAME);
-   wchar_2_UTF8(&vdsname, p_ctx->vdsname);
+   wchar_2_UTF8(vdsname, p_ctx->vdsname);
 
    switch (p_ctx->backup_level) {
    case L_INCREMENTAL:
@@ -1227,7 +1227,7 @@ static inline void perform_ado_restore(bpContext *ctx)
    set_ado_connect_string(ctx);
 
    vdsname = get_pool_memory(PM_NAME);
-   wchar_2_UTF8(&vdsname, p_ctx->vdsname);
+   wchar_2_UTF8(vdsname, p_ctx->vdsname);
 
    switch (p_ctx->backup_level) {
    case L_INCREMENTAL:
@@ -1435,7 +1435,7 @@ static inline bool setup_vdi_device(bpContext *ctx, struct io_pkt *io)
       POOLMEM *instance_name;
 
       instance_name = get_pool_memory(PM_NAME);
-      UTF8_2_wchar(&instance_name, p_ctx->instance);
+      UTF8_2_wchar(instance_name, p_ctx->instance);
       hr = p_ctx->VDIDeviceSet->CreateEx((LPCWSTR)instance_name, p_ctx->vdsname, &p_ctx->VDIConfig);
       free_pool_memory(instance_name);
    }

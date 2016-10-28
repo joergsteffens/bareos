@@ -2,7 +2,7 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2007-2011 Free Software Foundation Europe e.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2015 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -279,21 +279,7 @@ bool BSOCK_TCP::open(JCR *jcr, const char *name, char *host, char *service,
       /*
        * Keep socket from timing out from inactivity
        */
-      if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (sockopt_val_t)&value, sizeof(value)) < 0) {
-         berrno be;
-         Qmsg1(jcr, M_WARNING, 0, _("Cannot set SO_KEEPALIVE on socket: %s\n"), be.bstrerror());
-      }
-
-#if defined(TCP_KEEPIDLE)
-      if (heart_beat) {
-         int opt = heart_beat;
-         if (setsockopt(sockfd, SOL_TCP, TCP_KEEPIDLE, (sockopt_val_t)&opt, sizeof(opt)) < 0) {
-            berrno be;
-            Qmsg1(jcr, M_WARNING, 0, _("Cannot set TCP_KEEPIDLE on socket: %s\n"),
-                  be.bstrerror());
-         }
-      }
-#endif
+      set_keepalive(jcr, sockfd, m_use_keepalive, heart_beat, heart_beat);
 
       /*
        * Connect to server
@@ -336,63 +322,60 @@ bool BSOCK_TCP::open(JCR *jcr, const char *name, char *host, char *service,
    return true;
 }
 
-/*
- * Send a message over the network. The send consists of
- * two network packets. The first is sends a 32 bit integer containing
- * the length of the data packet which follows.
- *
- * Returns: false on failure
- *          true  on success
- */
-bool BSOCK_TCP::send()
+
+bool BSOCK_TCP::set_keepalive(JCR *jcr, int sockfd, bool enable, int keepalive_start, int keepalive_interval)
+{
+   int value = int(enable);
+
+   /*
+    * Keep socket from timing out from inactivity
+    */
+   if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (sockopt_val_t)&value, sizeof(value)) < 0) {
+      berrno be;
+      Qmsg1(jcr, M_WARNING, 0, _("Failed to set SO_KEEPALIVE on socket: %s\n"), be.bstrerror());
+      return false;
+   }
+
+   if (enable && keepalive_interval) {
+#ifdef HAVE_WIN32
+      struct s_tcp_keepalive {
+         u_long  onoff;
+         u_long  keepalivetime;
+         u_long  keepaliveinterval;
+      } val;
+      val.onoff = enable;
+      val.keepalivetime = keepalive_start*1000L;
+      val.keepaliveinterval = keepalive_interval*1000L;
+      DWORD got = 0;
+      if (WSAIoctl(sockfd, SIO_KEEPALIVE_VALS, &val, sizeof(val), NULL, 0, &got, NULL, NULL) != 0) {
+         Qmsg1(jcr, M_WARNING, 0, "Failed to set SIO_KEEPALIVE_VALS on socket: %d\n", WSAGetLastError());
+         return false;
+      }
+#else
+#if defined(TCP_KEEPIDLE)
+      if (setsockopt(sockfd, SOL_TCP, TCP_KEEPIDLE, (sockopt_val_t)&keepalive_start, sizeof(keepalive_start)) < 0) {
+         berrno be;
+         Qmsg2(jcr, M_WARNING, 0, _("Failed to set TCP_KEEPIDLE = %d on socket: %s\n"),
+               keepalive_start, be.bstrerror());
+         return false;
+      }
+      if (setsockopt(sockfd, SOL_TCP, TCP_KEEPINTVL, (sockopt_val_t)&keepalive_interval, sizeof(keepalive_interval)) < 0) {
+         berrno be;
+         Qmsg2(jcr, M_WARNING, 0, _("Failed to set TCP_KEEPINTVL = %d on socket: %s\n"),
+               keepalive_interval, be.bstrerror());
+         return false;
+      }
+#endif
+#endif
+   }
+   return true;
+}
+
+
+bool BSOCK_TCP::send_packet(int32_t *hdr, int32_t pktsiz)
 {
    int32_t rc;
-   int32_t pktsiz;
-   int32_t *hdr;
    bool ok = true;
-
-   if (errors) {
-      if (!m_suppress_error_msgs) {
-         Qmsg4(m_jcr, M_ERROR, 0,  _("Socket has errors=%d on call to %s:%s:%d\n"),
-             errors, m_who, m_host, m_port);
-      }
-      return false;
-   }
-   if (is_terminated()) {
-      if (!m_suppress_error_msgs) {
-         Qmsg4(m_jcr, M_ERROR, 0,  _("Socket is terminated=%d on call to %s:%s:%d\n"),
-             is_terminated(), m_who, m_host, m_port);
-      }
-      return false;
-   }
-   if (msglen > 4000000) {
-      if (!m_suppress_error_msgs) {
-         Qmsg4(m_jcr, M_ERROR, 0,
-            _("Socket has insane msglen=%d on call to %s:%s:%d\n"),
-             msglen, m_who, m_host, m_port);
-      }
-      return false;
-   }
-
-   if (m_use_locking) {
-      P(m_mutex);
-   }
-
-   /*
-    * Compute total packet length
-    */
-   if (msglen <= 0) {
-      pktsiz = sizeof(pktsiz);               /* signal, no data */
-   } else {
-      pktsiz = msglen + sizeof(pktsiz);      /* data */
-   }
-
-   /*
-    * Store packet length at head of message -- note, we have reserved an int32_t just before msg,
-    * So we can store there
-    */
-   hdr = (int32_t *)(msg - (int)sizeof(pktsiz));
-   *hdr = htonl(msglen);                     /* store signal/length */
 
    out_msg_no++;            /* increment message number */
 
@@ -428,6 +411,74 @@ bool BSOCK_TCP::send()
       }
       ok = false;
    }
+   return ok;
+}
+
+/*
+ * Send a message over the network. The send consists of
+ * two network packets. The first is sends a 32 bit integer containing
+ * the length of the data packet which follows.
+ *
+ * Returns: false on failure
+ *          true  on success
+ */
+bool BSOCK_TCP::send()
+{
+   int32_t pktsiz;
+   int32_t *hdr;
+   bool ok = true;
+
+   if (errors) {
+      if (!m_suppress_error_msgs) {
+         Qmsg4(m_jcr, M_ERROR, 0,  _("Socket has errors=%d on call to %s:%s:%d\n"),
+             errors, m_who, m_host, m_port);
+      }
+      return false;
+   }
+
+   if (is_terminated()) {
+      if (!m_suppress_error_msgs) {
+         Qmsg4(m_jcr, M_ERROR, 0,  _("Socket is terminated=%d on call to %s:%s:%d\n"),
+             is_terminated(), m_who, m_host, m_port);
+      }
+      return false;
+   }
+
+   if (msglen > max_message_len) {
+      if (!m_suppress_error_msgs) {
+         Qmsg4(m_jcr, M_ERROR, 0,
+             _("Socket has insane msglen=%d on call to %s:%s:%d\n"),
+             msglen, m_who, m_host, m_port);
+      }
+      return false;
+   }
+
+   if (m_use_locking) {
+      P(m_mutex);
+   }
+
+   /*
+    * Store packet length at head of message.
+    * Note: we have reserved an int32_t just before msg,
+    *       so it can be stored there.
+    */
+   hdr = (int32_t *)(msg - (int)header_length);
+
+   /*
+    * Compute total packet length
+    */
+   if (msglen <= 0) {
+      pktsiz = header_length;                /* signal, no data */
+   } else {
+      /*
+       * msglen > 0 and msglen <= max_message_len
+       * message fits into one Bareos packet
+       */
+      pktsiz = header_length + msglen;      /* header + data */
+   }
+
+   *hdr = htonl(msglen);                  /* store signal or message length */
+   ok = send_packet(hdr, pktsiz);
 
    if (m_use_locking) {
       V(m_mutex);
@@ -475,7 +526,7 @@ int32_t BSOCK_TCP::recv()
    /*
     * Get data size -- in int32_t
     */
-   if ((nbytes = read_nbytes((char *)&pktsiz, sizeof(int32_t))) <= 0) {
+   if ((nbytes = read_nbytes((char *)&pktsiz, header_length)) <= 0) {
       timer_start = 0;      /* clear timer */
       /*
        * Probably pipe broken because client died
@@ -490,11 +541,11 @@ int32_t BSOCK_TCP::recv()
       goto get_out;
    }
    timer_start = 0;         /* clear timer */
-   if (nbytes != sizeof(int32_t)) {
+   if (nbytes != header_length) {
       errors++;
       b_errno = EIO;
       Qmsg5(m_jcr, M_ERROR, 0, _("Read expected %d got %d from %s:%s:%d\n"),
-            sizeof(int32_t), nbytes, m_who, m_host, m_port);
+            header_length, nbytes, m_who, m_host, m_port);
       nbytes = BNET_ERROR;
       goto get_out;
    }
@@ -512,7 +563,7 @@ int32_t BSOCK_TCP::recv()
    /*
     * If signal or packet size too big
     */
-   if (pktsiz < 0 || pktsiz > 1000000) {
+   if (pktsiz < 0 || pktsiz > max_packet_size) {
       if (pktsiz > 0) {            /* if packet too big */
          Qmsg3(m_jcr, M_FATAL, 0,
                _("Packet size too big from \"%s:%s:%d. Terminating connection.\n"),
@@ -763,7 +814,7 @@ int BSOCK_TCP::set_blocking()
 /*
  * Restores socket flags
  */
-void BSOCK_TCP::restore_blocking (int flags)
+void BSOCK_TCP::restore_blocking(int flags)
 {
 #ifndef HAVE_WIN32
    if ((fcntl(m_fd, F_SETFL, flags)) < 0) {
@@ -841,10 +892,10 @@ void BSOCK_TCP::close()
       /*
        * Shutdown tls cleanly.
        */
-      if (tls) {
+      if (tls_conn) {
          tls_bsock_shutdown(this);
-         free_tls_connection(tls);
-         tls = NULL;
+         free_tls_connection(tls_conn);
+         tls_conn = NULL;
       }
       if (is_timed_out()) {
          shutdown(m_fd, SHUT_RDWR);   /* discard any pending I/O */
@@ -892,7 +943,7 @@ int32_t BSOCK_TCP::read_nbytes(char *ptr, int32_t nbytes)
    int32_t nleft, nread;
 
 #ifdef HAVE_TLS
-   if (tls) {
+   if (tls_conn) {
       /*
        * TLS enabled
        */
@@ -971,7 +1022,7 @@ int32_t BSOCK_TCP::write_nbytes(char *ptr, int32_t nbytes)
    }
 
 #ifdef HAVE_TLS
-   if (tls) {
+   if (tls_conn) {
       /* TLS enabled */
       return (tls_bsock_writen(this, ptr, nbytes));
    }

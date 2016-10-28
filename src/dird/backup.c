@@ -71,7 +71,7 @@ static inline bool validate_storage(JCR *jcr)
 {
    STORERES *store;
 
-   foreach_alist(store, jcr->wstorage) {
+   foreach_alist(store, jcr->res.wstorage) {
       switch (store->Protocol) {
       case APT_NATIVE:
          continue;
@@ -105,8 +105,7 @@ bool do_native_backup_init(JCR *jcr)
     * If pool storage specified, use it instead of job storage
     */
    copy_wstorage(jcr, jcr->res.pool->storage, _("Pool resource"));
-
-   if (!jcr->wstorage) {
+   if (!jcr->res.wstorage) {
       Jmsg(jcr, M_FATAL, 0, _("No Storage specification found in Job or Pool.\n"));
       return false;
    }
@@ -392,7 +391,7 @@ bool do_native_backup(JCR *jcr)
    /*
     * Now start a job with the Storage daemon
     */
-   if (!start_storage_daemon_job(jcr, NULL, jcr->wstorage)) {
+   if (!start_storage_daemon_job(jcr, NULL, jcr->res.wstorage)) {
       return false;
    }
 
@@ -425,9 +424,11 @@ bool do_native_backup(JCR *jcr)
    }
 
    jcr->setJobStatus(JS_WaitFD);
-   if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true, true)) {
+   if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true)) {
       goto bail_out;
    }
+   Dmsg1(120, "jobid: %d: connected\n", jcr->JobId);
+   send_job_info(jcr);
    fd = jcr->file_bsock;
 
    /*
@@ -459,6 +460,10 @@ bool do_native_backup(JCR *jcr)
       goto bail_out;
    }
 
+   if (!send_secure_erase_req_to_fd(jcr)) {
+      Dmsg1(500,"Unexpected %s secure erase\n","client");
+   }
+
    if (jcr->res.job->max_bandwidth > 0) {
       jcr->max_bandwidth = jcr->res.job->max_bandwidth;
    } else if (jcr->res.client->max_bandwidth > 0) {
@@ -484,8 +489,8 @@ bool do_native_backup(JCR *jcr)
       /*
        * TLS Requirement
        */
-      if (store->tls_enable) {
-         if (store->tls_require) {
+      if (store->tls.enable) {
+         if (store->tls.require) {
             tls_need = BNET_TLS_REQUIRED;
          } else {
             tls_need = BNET_TLS_OK;
@@ -502,8 +507,8 @@ bool do_native_backup(JCR *jcr)
       /*
        * TLS Requirement
        */
-      if (client->tls_enable) {
-         if (client->tls_require) {
+      if (client->tls.enable) {
+         if (client->tls.require) {
             tls_need = BNET_TLS_REQUIRED;
          } else {
             tls_need = BNET_TLS_OK;
@@ -891,11 +896,13 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
    double kbps, compression;
    utime_t RunTime;
    MEDIA_DBR mr;
-   POOL_MEM level_info,
+   POOL_MEM temp,
+            level_info,
             statistics,
             quota_info,
             client_options,
             daemon_status,
+            secure_erase_status,
             compress_algo_list;
 
    memset(&mr, 0, sizeof(mr));
@@ -913,7 +920,7 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
       kbps = ((double)jcr->jr.JobBytes) / (1000.0 * (double)RunTime);
    }
 
-   if (!db_get_job_volume_names(jcr, jcr->db, jcr->jr.JobId, &jcr->VolumeName)) {
+   if (!db_get_job_volume_names(jcr, jcr->db, jcr->jr.JobId, jcr->VolumeName)) {
       /*
        * Note, if the job has erred, most likely it did not write any
        * tape, so suppress this "error" message since in that case
@@ -1035,9 +1042,11 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
       if (jcr->is_JobLevel(L_VIRTUAL_FULL)) {
          Mmsg(daemon_status, _(
               "  SD Errors:              %d\n"
-              "  SD termination status:  %s\n"),
+              "  SD termination status:  %s\n"
+              "  Accurate:               %s\n"),
            jcr->SDErrors,
-           sd_term_msg);
+           sd_term_msg,
+           jcr->accurate ? _("yes") : _("no"));
       } else {
          if (jcr->HasBase) {
             Mmsg(client_options, _(
@@ -1076,6 +1085,19 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
            jcr->SDErrors,
            fd_term_msg,
            sd_term_msg);
+
+         if (me->secure_erase_cmdline) {
+            Mmsg(temp,"  Dir Secure Erase Cmd:   %s\n", me->secure_erase_cmdline);
+            pm_strcat(secure_erase_status, temp.c_str());
+         }
+         if (!bstrcmp(jcr->FDSecureEraseCmd, "*None*")) {
+            Mmsg(temp, "  FD  Secure Erase Cmd:   %s\n", jcr->FDSecureEraseCmd);
+            pm_strcat(secure_erase_status, temp.c_str());
+         }
+         if (!bstrcmp(jcr->SDSecureEraseCmd, "*None*")) {
+            Mmsg(temp, "  SD  Secure Erase Cmd:   %s\n", jcr->SDSecureEraseCmd);
+            pm_strcat(secure_erase_status, temp.c_str());
+         }
       }
       break;
    }
@@ -1106,6 +1128,7 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
         "  Volume Session Time:    %d\n"
         "  Last Volume Bytes:      %s (%sB)\n"
         "%s"                                        /* Daemon status info */
+        "%s"                                        /* SecureErase status */
         "  Termination:            %s\n\n"),
         BAREOS, my_name, VERSION, LSMDATE,
         HOST_OS, DISTNAME, DISTVER,
@@ -1132,5 +1155,6 @@ void generate_backup_summary(JCR *jcr, CLIENT_DBR *cr, int msg_type, const char 
         edit_uint64_with_commas(mr.VolBytes, ec7),
         edit_uint64_with_suffix(mr.VolBytes, ec8),
         daemon_status.c_str(),
+        secure_erase_status.c_str(),
         term_msg);
 }

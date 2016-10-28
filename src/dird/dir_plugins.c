@@ -3,7 +3,7 @@
 
    Copyright (C) 2007-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -30,14 +30,21 @@
 #include "dir_plugins.h"
 
 const int dbglvl = 150;
+#ifdef HAVE_WIN32
+const char *plugin_type = "-dir.dll";
+#else
 const char *plugin_type = "-dir.so";
+#endif
 
 static alist *dird_plugin_list;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Forward referenced functions */
 static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value);
 static bRC bareosSetValue(bpContext *ctx, bwDirVariable var, void *value);
 static bRC bareosRegisterEvents(bpContext *ctx, int nr_events, ...);
+static bRC bareosUnRegisterEvents(bpContext *ctx, int nr_events, ...);
+static bRC bareosGetInstanceCount(bpContext *ctx, int *ret);
 static bRC bareosJobMsg(bpContext *ctx, const char *file, int line,
                         int type, utime_t mtime, const char *fmt, ...);
 static bRC bareosDebugMsg(bpContext *ctx, const char *file, int line,
@@ -55,6 +62,8 @@ static bDirFuncs bfuncs = {
    sizeof(bDirFuncs),
    DIR_PLUGIN_INTERFACE_VERSION,
    bareosRegisterEvents,
+   bareosUnRegisterEvents,
+   bareosGetInstanceCount,
    bareosGetValue,
    bareosSetValue,
    bareosJobMsg,
@@ -69,17 +78,18 @@ struct b_plugin_ctx {
    bRC  rc;                                         /* last return code */
    bool disabled;                                   /* set if plugin disabled */
    char events[nbytes_for_bits(DIR_NR_EVENTS + 1)]; /* enabled events bitmask */
+   Plugin *plugin;                                  /* pointer to plugin of which this is an instance off */
 };
 
 static inline bool is_event_enabled(bpContext *ctx, bDirEventType eventType)
 {
    b_plugin_ctx *b_ctx;
    if (!ctx) {
-      return true;
+      return false;
    }
    b_ctx = (b_plugin_ctx *)ctx->bContext;
    if (!b_ctx) {
-      return true;
+      return false;
    }
    return bit_is_set(eventType, b_ctx->events);
 }
@@ -91,6 +101,9 @@ static inline bool is_plugin_disabled(bpContext *ctx)
       return true;
    }
    b_ctx = (b_plugin_ctx *)ctx->bContext;
+   if (!b_ctx) {
+      return true;
+   }
    return b_ctx->disabled;
 }
 
@@ -101,33 +114,114 @@ static inline bool is_plugin_disabled(JCR *jcr)
 }
 #endif
 
-static inline bRC trigger_plugin_event(JCR *jcr, bDirEventType eventType, bDirEvent *event, bpContext *ctx, void *value)
+static bool is_ctx_good(bpContext *ctx, JCR *&jcr, b_plugin_ctx *&bctx)
 {
+   if (!ctx) {
+      return false;
+   }
+
+   bctx = (b_plugin_ctx *)ctx->bContext;
+   if (!bctx) {
+      return false;
+   }
+
+   jcr = bctx->jcr;
+   if (!jcr) {
+      return false;
+   }
+
+   return true;
+}
+
+static inline bool trigger_plugin_event(JCR *jcr, bDirEventType eventType,
+                                        bDirEvent *event, bpContext *ctx,
+                                        void *value, alist *plugin_ctx_list,
+                                        int *index, bRC *rc)
+{
+   bool stop = false;
+
    if (!is_event_enabled(ctx, eventType)) {
       Dmsg1(dbglvl, "Event %d disabled for this plugin.\n", eventType);
-      return bRC_OK;
+      goto bail_out;
    }
 
    if (is_plugin_disabled(ctx)) {
       Dmsg0(dbglvl, "Plugin disabled.\n");
-      return bRC_OK;
+      goto bail_out;
    }
 
-   return dirplug_func(ctx->plugin)->handlePluginEvent(ctx, event, value);
+   /*
+    * See if we should care about the return code.
+    */
+   if (rc) {
+      *rc = dirplug_func(ctx->plugin)->handlePluginEvent(ctx, event, value);
+      switch (*rc) {
+      case bRC_OK:
+         break;
+      case bRC_Stop:
+      case bRC_Error:
+         stop = true;
+         break;
+      case bRC_More:
+         break;
+      case bRC_Term:
+         /*
+          * Request to unload this plugin.
+          * As we remove the plugin from the list of plugins we decrement
+          * the running index value so the next plugin gets triggered as
+          * that moved back a position in the alist.
+          */
+         if (index) {
+            unload_plugin(plugin_ctx_list, ctx->plugin, *index);
+            *index = ((*index) - 1);
+         }
+         break;
+      case bRC_Seen:
+         break;
+      case bRC_Core:
+         break;
+      case bRC_Skip:
+         stop = true;
+         break;
+      case bRC_Cancel:
+         break;
+      default:
+         break;
+      }
+   } else {
+      dirplug_func(ctx->plugin)->handlePluginEvent(ctx, event, value);
+   }
+
+bail_out:
+   return stop;
 }
 
 /*
  * Create a plugin event
  */
-int generate_plugin_event(JCR *jcr, bDirEventType eventType, void *value, bool reverse)
+bRC generate_plugin_event(JCR *jcr, bDirEventType eventType, void *value, bool reverse)
 {
    int i;
    bDirEvent event;
    alist *plugin_ctx_list;
    bRC rc = bRC_OK;
 
-   if (!dird_plugin_list || !jcr || !jcr->plugin_ctx_list) {
-      return bRC_OK;                  /* Return if no plugins loaded */
+   if (!dird_plugin_list) {
+      Dmsg0(dbglvl, "No bplugin_list: generate_plugin_event ignored.\n");
+      goto bail_out;
+   }
+
+   if (!jcr) {
+      Dmsg0(dbglvl, "No jcr: generate_plugin_event ignored.\n");
+      goto bail_out;
+   }
+
+   /*
+    * Return if no plugins loaded
+    */
+   if (!jcr->plugin_ctx_list) {
+      Dmsg0(dbglvl, "No plugin_ctx_list: generate_plugin_event ignored.\n");
+      goto bail_out;
    }
 
    plugin_ctx_list = jcr->plugin_ctx_list;
@@ -142,9 +236,7 @@ int generate_plugin_event(JCR *jcr, bDirEventType eventType, void *value, bool r
       bpContext *ctx;
 
       foreach_alist_rindex(i, ctx, plugin_ctx_list) {
-         rc = trigger_plugin_event(jcr, eventType, &event, ctx, value);
-
-         if (rc != bRC_OK) {
+         if (trigger_plugin_event(jcr, eventType, &event, ctx, value, plugin_ctx_list, &i, &rc)) {
             break;
          }
       }
@@ -152,18 +244,18 @@ int generate_plugin_event(JCR *jcr, bDirEventType eventType, void *value, bool r
       bpContext *ctx;
 
       foreach_alist_index(i, ctx, plugin_ctx_list) {
-         rc = trigger_plugin_event(jcr, eventType, &event, ctx, value);
-
-         if (rc != bRC_OK) {
+         if (trigger_plugin_event(jcr, eventType, &event, ctx, value, plugin_ctx_list, &i, &rc)) {
             break;
          }
       }
    }
 
    if (jcr->is_job_canceled()) {
-      return bRC_Cancel;
+      Dmsg0(dbglvl, "Cancel return from generate_plugin_event\n");
+      rc = bRC_Cancel;
    }
 
+bail_out:
    return rc;
 }
 
@@ -300,6 +392,7 @@ static inline bpContext *instantiate_plugin(JCR *jcr, Plugin *plugin, uint32_t i
    b_ctx = (b_plugin_ctx *)malloc(sizeof(b_plugin_ctx));
    memset(b_ctx, 0, sizeof(b_plugin_ctx));
    b_ctx->jcr = jcr;
+   b_ctx->plugin = plugin;
 
    Dmsg2(dbglvl, "Instantiate dir-plugin_ctx_list=%p JobId=%d\n", jcr->plugin_ctx_list, jcr->JobId);
 
@@ -410,7 +503,7 @@ void dispatch_new_plugin_options(JCR *jcr)
          }
 
          if (ctx) {
-            trigger_plugin_event(jcr, eventType, &event, ctx, (void *)plugin_options);
+            trigger_plugin_event(jcr, eventType, &event, ctx, (void *)plugin_options, NULL, NULL, NULL);
          }
       }
    }
@@ -481,7 +574,7 @@ void free_plugins(JCR *jcr)
 static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
 {
    JCR *jcr = NULL;
-   bRC ret = bRC_OK;
+   bRC retval = bRC_OK;
 
    if (!value) {
       return bRC_Error;
@@ -535,7 +628,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
          memset(&pr, 0, sizeof(pr));
          bstrncpy(pr.Name, jcr->res.pool->hdr.name, sizeof(pr.Name));
          if (!db_get_pool_record(jcr, jcr->db, &pr)) {
-            ret = bRC_Error;
+            retval = bRC_Error;
          }
          *((int *)value) = pr.NumVols;
          Dmsg1(dbglvl, "dir-plugin: return bDirVarNumVols=%d\n", pr.NumVols);
@@ -551,7 +644,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
             *((char **)value) = jcr->res.rstore->hdr.name;
          } else {
             *((char **)value) = NULL;
-            ret = bRC_Error;
+            retval = bRC_Error;
          }
          Dmsg1(dbglvl, "dir-plugin: return bDirVarStorage=%s\n", NPRT(*((char **)value)));
          break;
@@ -560,7 +653,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
             *((char **)value) = jcr->res.wstore->hdr.name;
          } else {
             *((char **)value) = NULL;
-            ret = bRC_Error;
+            retval = bRC_Error;
          }
          Dmsg1(dbglvl, "dir-plugin: return bDirVarWriteStorage=%s\n", NPRT(*((char **)value)));
          break;
@@ -569,7 +662,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
             *((char **)value) = jcr->res.rstore->hdr.name;
          } else {
             *((char **)value) = NULL;
-            ret = bRC_Error;
+            retval = bRC_Error;
          }
          Dmsg1(dbglvl, "dir-plugin: return bDirVarReadStorage=%s\n", NPRT(*((char **)value)));
          break;
@@ -584,7 +677,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
             *((char **)value) = jcr->res.rstore->media_type;
          } else {
             *((char **)value) = NULL;
-            ret = bRC_Error;
+            retval = bRC_Error;
          }
          Dmsg1(dbglvl, "dir-plugin: return bDirVarMediaType=%s\n", NPRT(*((char **)value)));
          break;
@@ -601,7 +694,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
          Dmsg1(dbglvl, "dir-plugin: return bDirVarVolumeName=%s\n", NPRT(*((char **)value)));
          break;
       case bDirVarCatalogRes:
-         ret = bRC_Error;
+         retval = bRC_Error;
          break;
       case bDirVarJobErrors:
          *((int *)value) = jcr->JobErrors;
@@ -644,7 +737,7 @@ static bRC bareosGetValue(bpContext *ctx, brDirVariable var, void *value)
       }
    }
 
-   return ret;
+   return retval;
 }
 
 static bRC bareosSetValue(bpContext *ctx, bwDirVariable var, void *value)
@@ -692,11 +785,69 @@ static bRC bareosRegisterEvents(bpContext *ctx, int nr_events, ...)
    va_start(args, nr_events);
    for (i = 0; i < nr_events; i++) {
       event = va_arg(args, uint32_t);
-      Dmsg1(dbglvl, "dir-Plugin wants event=%u\n", event);
+      Dmsg1(dbglvl, "dir-plugin: Plugin registered event=%u\n", event);
       set_bit(event, b_ctx->events);
    }
    va_end(args);
+
    return bRC_OK;
+}
+
+static bRC bareosUnRegisterEvents(bpContext *ctx, int nr_events, ...)
+{
+   int i;
+   va_list args;
+   uint32_t event;
+   b_plugin_ctx *b_ctx;
+
+   if (!ctx) {
+      return bRC_Error;
+   }
+   b_ctx = (b_plugin_ctx *)ctx->bContext;
+   va_start(args, nr_events);
+   for (i = 0; i < nr_events; i++) {
+      event = va_arg(args, uint32_t);
+      Dmsg1(dbglvl, "dir-plugin: Plugin unregistered event=%u\n", event);
+      clear_bit(event, b_ctx->events);
+   }
+   va_end(args);
+
+   return bRC_OK;
+}
+
+static bRC bareosGetInstanceCount(bpContext *ctx, int *ret)
+{
+   int cnt;
+   JCR *jcr, *njcr;
+   bpContext *nctx;
+   b_plugin_ctx *bctx;
+   bRC retval = bRC_Error;
+
+   if (!is_ctx_good(ctx, jcr, bctx)) {
+      goto bail_out;
+   }
+
+   P(mutex);
+
+   cnt = 0;
+   foreach_jcr(njcr) {
+      if (jcr->plugin_ctx_list) {
+         foreach_alist(nctx, jcr->plugin_ctx_list) {
+            if (nctx->plugin == bctx->plugin) {
+               cnt++;
+            }
+         }
+      }
+   }
+   endeach_jcr(njcr);
+
+   V(mutex);
+
+   *ret = cnt;
+   retval = bRC_OK;
+
+bail_out:
+   return retval;
 }
 
 static bRC bareosJobMsg(bpContext *ctx, const char *file, int line,
@@ -743,7 +894,7 @@ bool db_get_pool_record(JCR *jcr, B_DB *db, POOL_DBR *pdbr)
 
 int main(int argc, char *argv[])
 {
-   char plugin_dir[1000];
+   char plugin_dir[PATH_MAX];
    JCR mjcr1, mjcr2;
    JCR *jcr1 = &mjcr1;
    JCR *jcr2 = &mjcr2;

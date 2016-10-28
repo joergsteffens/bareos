@@ -15,7 +15,7 @@
 Description=Bareos Director Daemon service
 Documentation=man:bareos-dir(8)
 Requires=nss-lookup.target network.target remote-fs.target time-sync.target
-After=nss-lookup.target network.target remote-fs.target time-sync.target postgresql.service mysql.service
+After=nss-lookup.target network.target remote-fs.target time-sync.target postgresql.service mysql.service mariadb.service
 # Dependency about the database
 # We let administrators decide if they need it (if local db instance)
 # Wants=@DEFAULT_DB_TYPE@.service
@@ -32,8 +32,8 @@ WorkingDirectory=/var/lib/bareos
 PIDFile=/var/lib/bareos/bareos-dir.9101.pid
 # EnvironmentFile=-/etc/sysconfig/bareos-dir
 # StandardOutput=syslog
-ExecStartPre=/usr/sbin/bareos-dir -c /etc/bareos/bareos-dir.conf -t -f
-ExecStart=/usr/sbin/bareos-dir -c /etc/bareos/bareos-dir.conf
+ExecStartPre=/usr/sbin/bareos-dir -t -f
+ExecStart=/usr/sbin/bareos-dir
 SuccessExitStatus=0 1 15
 # This daemon should be able to reload the conf file
 #ExecReload=/sbin/killproc -p /var/lib/bareos/bareos-dir.pid -HUP /usr/sbin/bareos-dir

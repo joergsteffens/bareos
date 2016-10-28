@@ -2,6 +2,8 @@
    BAREOS® - Backup Archiving REcovery Open Sourced
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
+   Copyright (C) 2016-2016 Planets Communications B.V.
+   Copyright (C) 2016-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -227,7 +229,7 @@ char *next_arg(char **s)
  *  argk[2] = arg3
  *  argv[2] =
  */
-int parse_args(POOLMEM *cmd, POOLMEM **args, int *argc,
+int parse_args(POOLMEM *cmd, POOLMEM *&args, int *argc,
                char **argk, char **argv, int max_args)
 {
    char *p;
@@ -274,14 +276,14 @@ int parse_args(POOLMEM *cmd, POOLMEM **args, int *argc,
  *  argk[2] = arg3
  *  argv[2] =
  */
-int parse_args_only(POOLMEM *cmd, POOLMEM **args, int *argc,
+int parse_args_only(POOLMEM *cmd, POOLMEM *&args, int *argc,
                     char **argk, char **argv, int max_args)
 {
    char *p, *n;
 
    pm_strcpy(args, cmd);
-   strip_trailing_junk(*args);
-   p = *args;
+   strip_trailing_junk(args);
+   p = args;
    *argc = 0;
    /*
     * Pick up all arguments
@@ -299,12 +301,12 @@ int parse_args_only(POOLMEM *cmd, POOLMEM **args, int *argc,
 }
 
 /*
- * Given a full filename, split it into its path
- *  and filename parts. They are returned in pool memory
- *  in the arguments provided.
+ * Given a full filename, split it into its path and filename parts.
+ * They are returned in pool memory in the arguments provided.
  */
-void split_path_and_filename(const char *fname, POOLMEM **path, int *pnl,
-                             POOLMEM **file, int *fnl)
+void split_path_and_filename(const char *fname,
+                             POOLMEM *&path, int *pnl,
+                             POOLMEM *&file, int *fnl)
 {
    const char *f;
    int slen;
@@ -336,24 +338,24 @@ void split_path_and_filename(const char *fname, POOLMEM **path, int *pnl,
    Dmsg2(200, "after strip len=%d f=%s\n", len, f);
    *fnl = fname - f + len;
    if (*fnl > 0) {
-      *file = check_pool_memory_size(*file, *fnl+1);
-      memcpy(*file, f, *fnl);    /* copy filename */
+      file = check_pool_memory_size(file, *fnl + 1);
+      memcpy(file, f, *fnl);          /* copy filename */
    }
-   (*file)[*fnl] = 0;
+   file[*fnl] = '\0';
 
    *pnl = f - fname;
    if (*pnl > 0) {
-      *path = check_pool_memory_size(*path, *pnl+1);
-      memcpy(*path, fname, *pnl);
+      path = check_pool_memory_size(path, *pnl + 1);
+      memcpy(path, fname, *pnl);
    }
-   (*path)[*pnl] = 0;
+   path[*pnl] = '\0';
 
    Dmsg2(200, "pnl=%d fnl=%d\n", *pnl, *fnl);
-   Dmsg3(200, "split fname=%s path=%s file=%s\n", fname, *path, *file);
+   Dmsg3(200, "split fname=%s path=%s file=%s\n", fname, path, file);
 }
 
 /*
- * Extremely simple sscanf. Handles only %(u,d,ld,qd,qu,lu,lld,llu,c,nns)
+ * Extremely simple sscanf. Handles only %(u,d,hu,hd,ld,qd,qu,lu,lld,llu,c,nns)
  */
 const int BIG = 1000;
 int bsscanf(const char *buf, const char *fmt, ...)
@@ -363,6 +365,7 @@ int bsscanf(const char *buf, const char *fmt, ...)
    void *vp;
    char *cp;
    int l = 0;
+   int h = 0;
    int max_len = BIG;
    uint64_t value;
    bool error = false;
@@ -370,10 +373,8 @@ int bsscanf(const char *buf, const char *fmt, ...)
 
    va_start(ap, fmt);
    while (*fmt && !error) {
-//    Dmsg1(000, "fmt=%c\n", *fmt);
       if (*fmt == '%') {
          fmt++;
-//       Dmsg1(000, "Got %% nxt=%c\n", *fmt);
 switch_top:
          switch (*fmt++) {
          case 'u':
@@ -382,17 +383,17 @@ switch_top:
                value = B_TIMES10(value) + *buf++ - '0';
             }
             vp = (void *)va_arg(ap, void *);
-//          Dmsg2(000, "val=%lld at 0x%lx\n", value, (long unsigned)vp);
-            if (l == 0) {
-               *((int *)vp) = (int)value;
+            if (h == 1) {
+               *((uint16_t *)vp) = (int16_t)value;
+            } else if (l == 0) {
+               *((unsigned int *)vp) = (unsigned int)value;
             } else if (l == 1) {
                *((uint32_t *)vp) = (uint32_t)value;
-//             Dmsg0(000, "Store 32 bit int\n");
             } else {
                *((uint64_t *)vp) = (uint64_t)value;
-//             Dmsg0(000, "Store 64 bit int\n");
             }
             count++;
+            h = 0;
             l = 0;
             break;
          case 'd':
@@ -410,21 +411,27 @@ switch_top:
                value = -value;
             }
             vp = (void *)va_arg(ap, void *);
-//          Dmsg2(000, "val=%lld at 0x%lx\n", value, (long unsigned)vp);
-            if (l == 0) {
+            if (h == 1) {
+               *((int16_t *)vp) = (int16_t)value;
+            } else if (l == 0) {
                *((int *)vp) = (int)value;
             } else if (l == 1) {
                *((int32_t *)vp) = (int32_t)value;
-//             Dmsg0(000, "Store 32 bit int\n");
             } else {
                *((int64_t *)vp) = (int64_t)value;
-//             Dmsg0(000, "Store 64 bit int\n");
             }
             count++;
+            h = 0;
             l = 0;
             break;
+         case 'h':
+            h = 1;
+            if (*fmt == 'd' || *fmt == 'u') {
+               goto switch_top;
+            }
+            error = true;
+            break;
          case 'l':
-//          Dmsg0(000, "got l\n");
             l = 1;
             if (*fmt == 'l') {
                l++;
@@ -433,7 +440,6 @@ switch_top:
             if (*fmt == 'd' || *fmt == 'u') {
                goto switch_top;
             }
-//          Dmsg1(000, "fmt=%c !=d,u\n", *fmt);
             error = true;
             break;
          case 'q':
@@ -441,11 +447,9 @@ switch_top:
             if (*fmt == 'd' || *fmt == 'u') {
                goto switch_top;
             }
-//          Dmsg1(000, "fmt=%c !=d,u\n", *fmt);
             error = true;
             break;
          case 's':
-//          Dmsg1(000, "Store string max_len=%d\n", max_len);
             cp = (char *)va_arg(ap, char *);
             while (*buf && !B_ISSPACE(*buf) && max_len-- > 0) {
                *cp++ = *buf++;
@@ -470,11 +474,9 @@ switch_top:
             while (B_ISDIGIT(*fmt)) {
                max_len = B_TIMES10(max_len) + *fmt++ - '0';
             }
-//          Dmsg1(000, "Default max_len=%d\n", max_len);
             if (*fmt == 's') {
                goto switch_top;
             }
-//          Dmsg1(000, "Default c=%c\n", *fmt);
             error = true;
             break;                    /* error: unknown format */
          }

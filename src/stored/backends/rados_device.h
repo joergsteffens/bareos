@@ -1,8 +1,8 @@
 /*
    BAREOS® - Backup Archiving REcovery Open Sourced
 
-   Copyright (C) 2014-2014 Planets Communications B.V.
-   Copyright (C) 2014-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2014-2016 Planets Communications B.V.
+   Copyright (C) 2014-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -34,15 +34,34 @@
 #include <radosstriper/libradosstriper.h>
 #endif
 
+/*
+ * Use for versions lower then 0.68.0 of the API the old format and otherwise the new one.
+ */
+#if LIBRADOS_VERSION_CODE < 17408
+#define DEFAULT_CLIENTID "admin"
+#else
+#define DEFAULT_CLUSTERNAME "ceph"
+#define DEFAULT_USERNAME "client.admin"
+#endif
+
 class rados_device: public DEVICE {
 private:
+   /*
+    * Private Members
+    */
    char *m_rados_configstring;
    char *m_rados_conffile;
    char *m_rados_poolname;
+#if LIBRADOS_VERSION_CODE < 17408
+   char *m_rados_clientid;
+#else
+   char *m_rados_clustername;
+   char *m_rados_username;
+#endif
    bool m_cluster_initialized;
 #ifdef HAVE_RADOS_STRIPER
    bool m_stripe_volume;
-   uint32_t m_stripe_unit;
+   uint64_t m_stripe_unit;
    uint32_t m_stripe_count;
 #endif
    rados_t m_cluster;
@@ -51,8 +70,26 @@ private:
    rados_striper_t m_striper;
 #endif
    boffset_t m_offset;
+   POOLMEM *m_virtual_filename;
+
+   /*
+    * Private Methods
+    */
+   ssize_t read_object_data(boffset_t offset, char *buffer, size_t count);
+   ssize_t write_object_data(boffset_t offset, char *buffer, size_t count);
+#ifdef HAVE_RADOS_STRIPER
+   ssize_t striper_volume_size();
+#endif
+   ssize_t volume_size();
+#ifdef HAVE_RADOS_STRIPER
+   bool truncate_striper_volume(DCR *dcr);
+#endif
+   bool truncate_volume(DCR *dcr);
 
 public:
+   /*
+    * Public Methods
+    */
    rados_device();
    ~rados_device();
 

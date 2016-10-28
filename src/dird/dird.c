@@ -49,9 +49,10 @@ void terminate_dird(int sig);
 static bool check_resources();
 static bool initialize_sql_pooling(void);
 static void cleanup_old_files();
+static bool init_sighandler_sighup();
 
 /* Exported subroutines */
-extern "C" void reload_config(int sig);
+extern bool do_reload_config();
 extern void invalidate_schedules();
 extern bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code);
 extern void prtmsg(void *sock, const char *fmt, ...);
@@ -69,7 +70,7 @@ void init_device_resources();
 static char *runjob = NULL;
 static bool background = true;
 static bool test_config = false;
-static void init_reload(void);
+static alist *reload_table = NULL;
 
 /* Globals Exported */
 DIRRES *me = NULL;                    /* Our Global resource */
@@ -85,9 +86,55 @@ typedef enum {
    UPDATE_CATALOG,    /* Ensure that catalog is ok with conf */
    UPDATE_AND_FIX     /* Ensure that catalog is ok, and fix old jobs */
 } cat_op;
+
+struct resource_table_reference {
+   int job_count;
+   RES **res_table;
+};
+
 static bool check_catalog(cat_op mode);
 
-#define CONFIG_FILE "bareos-dir.conf" /* default configuration file */
+static void free_saved_resources(resource_table_reference *table)
+{
+   int num = my_config->m_r_last - my_config->m_r_first + 1;
+
+   if (!table->res_table) {
+      return;
+   }
+
+   for (int j = 0; j < num; j++) {
+      free_resource(table->res_table[j], my_config->m_r_first + j);
+   }
+   free(table->res_table);
+}
+
+/*
+ * Called here at the end of every job that was hooked decrementing the active job_count.
+ * When it goes to zero, no one is using the associated resource table, so free it.
+ */
+static void reload_job_end_cb(JCR *jcr, void *ctx)
+{
+   int i;
+   resource_table_reference *table;
+
+   lock_jobs();
+   LockRes();
+
+   foreach_alist_index(i, table, reload_table) {
+      if (table == (resource_table_reference *)ctx) {
+         if (--table->job_count <= 0) {
+            Dmsg0(100, "Last reference to old configuration, removing saved configuration\n");
+            free_saved_resources(table);
+            reload_table->remove(i);
+            free(table);
+            break;
+         }
+      }
+   }
+
+   UnlockRes();
+   unlock_jobs();
+}
 
 /*
  * This allows the message handler to operate on the database by using a pointer
@@ -122,8 +169,8 @@ static void usage()
    fprintf(stderr, _(
 PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
-"Usage: bareos-dir [options] [-c config_file] [-d debug_level] [config_file]\n"
-"        -c <file>   use <file> as configuration file\n"
+"Usage: bareos-dir [options]\n"
+"        -c <path>   use <path> as configuration file or directory\n"
 "        -d <nn>     set debug level to <nn>\n"
 "        -dt         print timestamp in debug output\n"
 "        -f          run in foreground (for debugging)\n"
@@ -171,7 +218,6 @@ int main (int argc, char *argv[])
    init_stack_dump();
    my_name_is(argc, argv, "bareos-dir");
    init_msg(NULL, NULL);              /* initialize message handler */
-   init_reload();
    daemon_start_time = time(NULL);
 
    console_command = run_console_command;
@@ -269,10 +315,6 @@ int main (int argc, char *argv[])
       usage();
    }
 
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
-   }
-
    /*
     * See if we want to drop privs.
     */
@@ -311,7 +353,7 @@ int main (int argc, char *argv[])
    }
 
    if (!check_resources()) {
-      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct configuration file: %s\n"), configfile);
+      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct the configuration in %s\n"), my_config->get_base_config_path());
       goto bail_out;
    }
 
@@ -346,7 +388,7 @@ int main (int argc, char *argv[])
    mode = (test_config) ? CHECK_CONNECTION : UPDATE_AND_FIX;
 
    if (!check_catalog(mode)) {
-      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct configuration file: %s\n"), configfile);
+      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct the configuration in %s\n"), my_config->get_base_config_path());
       goto bail_out;
    }
 
@@ -355,7 +397,7 @@ int main (int argc, char *argv[])
    }
 
    if (!initialize_sql_pooling()) {
-      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct configuration file: %s\n"), configfile);
+      Jmsg((JCR *)NULL, M_ERROR_TERM, 0, _("Please correct the configuration in %s\n"), my_config->get_base_config_path());
       goto bail_out;
    }
 
@@ -365,9 +407,7 @@ int main (int argc, char *argv[])
 
    p_db_log_insert = (db_log_insert_func)dir_db_log_insert;
 
-#if !defined(HAVE_WIN32)
-   signal(SIGHUP, reload_config);
-#endif
+   init_sighandler_sighup();
 
    init_console_msg(working_directory);
 
@@ -421,6 +461,7 @@ void terminate_dird(int sig)
    already_here = true;
    debug_level = 0;                   /* turn off debug */
 
+   destroy_configure_usage_string();
    stop_statistics_thread();
    stop_watchdog();
    db_sql_pool_destroy();
@@ -458,190 +499,180 @@ void terminate_dird(int sig)
    exit(sig);
 }
 
-struct RELOAD_TABLE {
-   int job_count;
-   RES **res_table;
-};
-
-static const int max_reloads = 32;
-static RELOAD_TABLE reload_table[max_reloads];
-
-static void init_reload(void)
-{
-   for (int i=0; i < max_reloads; i++) {
-      reload_table[i].job_count = 0;
-      reload_table[i].res_table = NULL;
-   }
-}
-
-static void free_saved_resources(int table)
-{
-   int num = my_config->m_r_last - my_config->m_r_first + 1;
-   RES **res_tab = reload_table[table].res_table;
-
-   if (!res_tab) {
-      Dmsg1(100, "res_tab for table %d already released.\n", table);
-      return;
-   }
-   Dmsg1(100, "Freeing resources for table %d\n", table);
-   for (int j=0; j<num; j++) {
-      free_resource(res_tab[j], my_config->m_r_first + j);
-   }
-   free(res_tab);
-   reload_table[table].job_count = 0;
-   reload_table[table].res_table = NULL;
-}
-
 /*
- * Called here at the end of every job that was
- * hooked decrementing the active job_count. When
- * it goes to zero, no one is using the associated
- * resource table, so free it.
+ * If we get here, we have received a SIGHUP, which means to reread our configuration file.
  */
-static void reload_job_end_cb(JCR *jcr, void *ctx)
-{
-   int reload_id = (int)((intptr_t)ctx);
-   Dmsg3(100, "reload job_end JobId=%d table=%d cnt=%d\n", jcr->JobId,
-      reload_id, reload_table[reload_id].job_count);
-   lock_jobs();
-   LockRes();
-   if (--reload_table[reload_id].job_count <= 0) {
-      free_saved_resources(reload_id);
-   }
-   UnlockRes();
-   unlock_jobs();
-}
-
-static int find_free_reload_table_entry()
-{
-   int table = -1;
-   for (int i=0; i < max_reloads; i++) {
-      if (reload_table[i].res_table == NULL) {
-         table = i;
-         break;
-      }
-   }
-   return table;
-}
-
-/*
- * If we get here, we have received a SIGHUP, which means to
- *    reread our configuration file.
- *
- * The algorithm used is as follows: we count how many jobs are
- *   running and mark the running jobs to make a callback on
- *   exiting. The old config is saved with the reload table
- *   id in a reload table. The new config file is read. Now, as
- *   each job exits, it calls back to the reload_job_end_cb(), which
- *   decrements the count of open jobs for the given reload table.
- *   When the count goes to zero, we release those resources.
- *   This allows us to have pointers into the resource table (from
- *   jobs), and once they exit and all the pointers are released, we
- *   release the old table. Note, if no new jobs are running since the
- *   last reload, then the old resources will be immediately release.
- *   A console is considered a job because it may have pointers to
- *   resources, but a SYSTEM job is not since it *should* not have any
- *   permanent pointers to jobs.
- */
+#if !defined(HAVE_WIN32)
 extern "C"
-void reload_config(int sig)
+void sighandler_reload_config(int sig, siginfo_t *siginfo, void *ptr)
 {
    static bool already_here = false;
-#if !defined(HAVE_WIN32)
-   sigset_t set;
-#endif
-   JCR *jcr;
-   int njobs = 0;                     /* number of running jobs */
-   int table, rtable;
-   bool ok;
 
    if (already_here) {
-      abort();                        /* Oops, recursion -> die */
+      /* this should not happen, as this signal should be blocked */
+      Jmsg(NULL, M_ERROR, 0, _("Already reloading. Request ignored.\n"));
+      return;
+   }
+   already_here = true;
+   do_reload_config();
+   already_here = false;
+}
+#endif
+
+static bool init_sighandler_sighup()
+{
+   bool retval = false;
+#if !defined(HAVE_WIN32)
+   sigset_t block_mask;
+   struct sigaction action;
+
+   /*
+    *  while handling SIGHUP signal,
+    *  ignore further SIGHUP signals.
+    */
+   sigemptyset(&block_mask);
+   sigaddset(&block_mask, SIGHUP);
+
+   memset(&action, 0, sizeof(action));
+   action.sa_sigaction = sighandler_reload_config;
+   action.sa_mask = block_mask;
+   action.sa_flags = SA_SIGINFO;
+   sigaction(SIGHUP, &action, NULL);
+
+   retval = true;
+#endif
+   return retval;
+}
+
+/*
+ * The algorithm used is as follows: we count how many jobs are
+ * running and mark the running jobs to make a callback on
+ * exiting. The old config is saved with the reload table
+ * id in a reload table. The new config file is read. Now, as
+ * each job exits, it calls back to the reload_job_end_cb(), which
+ * decrements the count of open jobs for the given reload table.
+ * When the count goes to zero, we release those resources.
+ * This allows us to have pointers into the resource table (from
+ * jobs), and once they exit and all the pointers are released, we
+ * release the old table. Note, if no new jobs are running since the
+ * last reload, then the old resources will be immediately release.
+ * A console is considered a job because it may have pointers to
+ * resources, but a SYSTEM job is not since it *should* not have any
+ * permanent pointers to jobs.
+ */
+bool do_reload_config()
+{
+   bool ok;
+   JCR *jcr;
+   int njobs = 0;                     /* Number of running jobs */
+   bool reloaded = false;
+   static bool already_here = false;
+   resource_table_reference prev_config;
+
+   if (already_here) {
+      Jmsg(NULL, M_ERROR, 0, _("Already reloading. Request ignored.\n"));
+      return false;
    }
    already_here = true;
 
-#if !defined(HAVE_WIN32)
-   sigemptyset(&set);
-   sigaddset(&set, SIGHUP);
-   sigprocmask(SIG_BLOCK, &set, NULL);
-#endif
-
    lock_jobs();
    LockRes();
-
-   table = find_free_reload_table_entry();
-   if (table < 0) {
-      Jmsg(NULL, M_ERROR, 0, _("Too many open reload requests. Request ignored.\n"));
-      goto bail_out;
-   }
 
    /**
     * Flush the sql connection pools.
     */
    db_sql_pool_flush();
 
-   Dmsg1(100, "Reload_config njobs=%d\n", njobs);
-   reload_table[table].res_table = my_config->save_resources();
-   Dmsg1(100, "Saved old config in table %d\n", table);
+   /*
+    * Save the previous config so we can restore it.
+    */
+   prev_config.res_table = my_config->save_resources();
+   prev_config.job_count = 0;
 
+   /*
+    * Start parsing the new config.
+    */
+   Dmsg0(100, "Reloading config file\n");
    ok = parse_dir_config(my_config, configfile, M_ERROR);
-
-   Dmsg0(100, "Reloaded config file\n");
    if (!ok || !check_resources() || !check_catalog(UPDATE_CATALOG) || !initialize_sql_pooling()) {
-      rtable = find_free_reload_table_entry();    /* save new, bad table */
-      if (rtable < 0) {
-         Jmsg(NULL, M_ERROR, 0, _("Please correct configuration file: %s\n"), configfile);
-         Jmsg(NULL, M_ERROR_TERM, 0, _("Out of reload table entries. Giving up.\n"));
-         goto bail_out;
-      } else {
-         Jmsg(NULL, M_ERROR, 0, _("Please correct configuration file: %s\n"), configfile);
-         Jmsg(NULL, M_ERROR, 0, _("Resetting previous configuration.\n"));
+      int num;
+      resource_table_reference failed_config;
+
+      Jmsg(NULL, M_ERROR, 0, _("Please correct the configuration in %s\n"), my_config->get_base_config_path());
+      Jmsg(NULL, M_ERROR, 0, _("Resetting to previous configuration.\n"));
+
+      /*
+       * Save the config we were not able to load.
+       */
+      failed_config.res_table = my_config->save_resources();
+
+      /*
+       * Now restore old resource values,
+       */
+      num = my_config->m_r_last - my_config->m_r_first + 1;
+      for (int i = 0; i < num; i++) {
+         my_config->m_res_head[i] = prev_config.res_table[i];
       }
-      reload_table[rtable].res_table = my_config->save_resources();
-      /* Now restore old resource values */
-      int num = my_config->m_r_last - my_config->m_r_first + 1;
-      RES **res_tab = reload_table[table].res_table;
-      for (int i=0; i<num; i++) {
-         my_config->m_res_head[i] = res_tab[i];
-      }
-      table = rtable;                 /* release new, bad, saved table below */
 
       /*
        * Reset director resource to old config as check_resources() changed it
        */
       me = (DIRRES *)GetNextRes(R_DIRECTOR, NULL);
-   } else {
-      invalidate_schedules();
+
       /*
-       * Hook all active jobs so that they release this table
+       * Destroy the content of the failed config load.
        */
+      free_saved_resources(&failed_config);
+      goto bail_out;
+   } else {
+      resource_table_reference *new_table = NULL;
+
+      invalidate_schedules();
       foreach_jcr(jcr) {
          if (jcr->getJobType() != JT_SYSTEM) {
-            reload_table[table].job_count++;
-            job_end_push(jcr, reload_job_end_cb, (void *)((long int)table));
+            if (!new_table) {
+               new_table = (resource_table_reference *)malloc(sizeof(resource_table_reference));
+               memcpy(new_table, &prev_config, sizeof(resource_table_reference));
+            }
+            new_table->job_count++;
+            job_end_push(jcr, reload_job_end_cb, (void *)new_table);
             njobs++;
          }
       }
       endeach_jcr(jcr);
-   }
+      reloaded = true;
 
-   /* Reset globals */
-   set_working_directory(me->working_directory);
-   Dmsg0(10, "Director's configuration file reread.\n");
+      /*
+       * Reset globals
+       */
+      set_working_directory(me->working_directory);
+      Dmsg0(10, "Director's configuration file reread.\n");
 
-   /* Now release saved resources, if no jobs using the resources */
-   if (njobs == 0) {
-      free_saved_resources(table);
+      if (njobs > 0) {
+         /*
+          * See if we already initialized the alist.
+          */
+         if (!reload_table) {
+            reload_table = New(alist(10, not_owned_by_alist));
+         }
+
+         /*
+          * Push the saved resource info onto the alist.
+          */
+         reload_table->push(new_table);
+      } else {
+         /*
+          * There are no running Jobs so we don't need to keep the old config around.
+          */
+         free_saved_resources(&prev_config);
+      }
    }
 
 bail_out:
    UnlockRes();
    unlock_jobs();
-#if !defined(HAVE_WIN32)
-   sigprocmask(SIG_UNBLOCK, &set, NULL);
-   signal(SIGHUP, reload_config);
-#endif
    already_here = false;
+   return reloaded;
 }
 
 /*
@@ -671,6 +702,7 @@ static bool check_resources()
    bool OK = true;
    JOBRES *job;
    bool need_tls;
+   const char *configfile = my_config->get_base_config_path();
 
    LockRes();
 
@@ -725,9 +757,9 @@ static bool check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (me->tls_require) {
+      if (me->tls.require) {
          if (have_tls) {
-            me->tls_enable = true;
+            me->tls.enable = true;
          } else {
             Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in BAREOS.\n"));
             OK = false;
@@ -735,22 +767,22 @@ static bool check_resources()
          }
       }
 
-      need_tls = me->tls_enable || me->tls_authenticate;
+      need_tls = me->tls.enable || me->tls.authenticate;
 
-      if (!me->tls_certfile && need_tls) {
+      if (!me->tls.certfile && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Certificate\" file not defined for Director \"%s\" in %s.\n"), me->name(), configfile);
          OK = false;
          goto bail_out;
       }
 
-      if (!me->tls_keyfile && need_tls) {
+      if (!me->tls.keyfile && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Key\" file not defined for Director \"%s\" in %s.\n"), me->name(), configfile);
          OK = false;
          goto bail_out;
       }
 
-      if ((!me->tls_ca_certfile && !me->tls_ca_certdir) &&
-           need_tls && me->tls_verify_peer) {
+      if ((!me->tls.ca_certfile && !me->tls.ca_certdir) &&
+           need_tls && me->tls.verify_peer) {
          Jmsg(NULL, M_FATAL, 0, _("Neither \"TLS CA Certificate\" or \"TLS CA"
               " Certificate Dir\" are defined for Director \"%s\" in %s."
               " At least one CA certificate store is required"
@@ -763,27 +795,29 @@ static bool check_resources()
       /*
        * If everything is well, attempt to initialize our per-resource TLS context
        */
-      if (OK && (need_tls || me->tls_require)) {
+      if (OK && (need_tls || me->tls.require)) {
          /*
           * Initialize TLS context.
           */
-         me->tls_ctx = new_tls_context(me->tls_ca_certfile,
-                                       me->tls_ca_certdir,
-                                       me->tls_crlfile,
-                                       me->tls_certfile,
-                                       me->tls_keyfile,
+         me->tls.ctx = new_tls_context(me->tls.ca_certfile,
+                                       me->tls.ca_certdir,
+                                       me->tls.crlfile,
+                                       me->tls.certfile,
+                                       me->tls.keyfile,
                                        NULL,
                                        NULL,
-                                       me->tls_dhfile,
-                                       me->tls_cipherlist,
-                                       me->tls_verify_peer);
+                                       me->tls.dhfile,
+                                       me->tls.cipherlist,
+                                       me->tls.verify_peer);
 
-         if (!me->tls_ctx) {
+         if (!me->tls.ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Director \"%s\" in %s.\n"),
                  me->name(), configfile);
             OK = false;
             goto bail_out;
          }
+         set_tls_enable(me->tls.ctx, need_tls);
+         set_tls_require(me->tls.ctx, me->tls.require);
       }
    }
 
@@ -799,6 +833,27 @@ static bool check_resources()
    }
 
    /*
+    * Loop over Jobs
+    */
+   foreach_res(job, R_JOB) {
+      if (job->MaxFullConsolidations && job->JobType != JT_CONSOLIDATE) {
+         Jmsg(NULL, M_FATAL, 0, _("MaxFullConsolidations configured in job %s which is not of job type \"consolidate\" in file %s\n"), job->name(), configfile);
+         OK = false;
+         goto bail_out;
+      }
+
+      if (job->JobType != JT_BACKUP &&
+          (job->AlwaysIncremental ||
+           job->AlwaysIncrementalJobRetention ||
+           job->AlwaysIncrementalKeepNumber ||
+           job->AlwaysIncrementalMaxFullAge)) {
+         Jmsg(NULL, M_FATAL, 0, _("AlwaysIncremental configured in job %s which is not of job type \"backup\" in file %s\n"), job->name(), configfile);
+         OK = false;
+         goto bail_out;
+      }
+   }
+
+   /*
     * Loop over Consoles
     */
    CONRES *cons;
@@ -806,9 +861,9 @@ static bool check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (cons->tls_require) {
+      if (cons->tls.require) {
          if (have_tls) {
-            cons->tls_enable = true;
+            cons->tls.enable = true;
          } else {
             Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in BAREOS.\n"));
             OK = false;
@@ -816,24 +871,24 @@ static bool check_resources()
          }
       }
 
-      need_tls = cons->tls_enable || cons->tls_authenticate;
+      need_tls = cons->tls.enable || cons->tls.authenticate;
 
-      if (!cons->tls_certfile && need_tls) {
+      if (!cons->tls.certfile && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Certificate\" file not defined for Console \"%s\" in %s.\n"),
             cons->name(), configfile);
          OK = false;
          goto bail_out;
       }
 
-      if (!cons->tls_keyfile && need_tls) {
+      if (!cons->tls.keyfile && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("\"TLS Key\" file not defined for Console \"%s\" in %s.\n"),
             cons->name(), configfile);
          OK = false;
          goto bail_out;
       }
 
-      if ((!cons->tls_ca_certfile && !cons->tls_ca_certdir)
-            && need_tls && cons->tls_verify_peer) {
+      if ((!cons->tls.ca_certfile && !cons->tls.ca_certdir)
+            && need_tls && cons->tls.verify_peer) {
          Jmsg(NULL, M_FATAL, 0, _("Neither \"TLS CA Certificate\" or \"TLS CA"
             " Certificate Dir\" are defined for Console \"%s\" in %s."
             " At least one CA certificate store is required"
@@ -846,26 +901,28 @@ static bool check_resources()
       /*
        * If everything is well, attempt to initialize our per-resource TLS context
        */
-      if (OK && (need_tls || cons->tls_require)) {
+      if (OK && (need_tls || cons->tls.require)) {
          /*
           * Initialize TLS context.
           */
-         cons->tls_ctx = new_tls_context(cons->tls_ca_certfile,
-                                         cons->tls_ca_certdir,
-                                         cons->tls_crlfile,
-                                         cons->tls_certfile,
-                                         cons->tls_keyfile,
+         cons->tls.ctx = new_tls_context(cons->tls.ca_certfile,
+                                         cons->tls.ca_certdir,
+                                         cons->tls.crlfile,
+                                         cons->tls.certfile,
+                                         cons->tls.keyfile,
                                          NULL,
                                          NULL,
-                                         cons->tls_dhfile,
-                                         cons->tls_cipherlist,
-                                         cons->tls_verify_peer);
-         if (!cons->tls_ctx) {
+                                         cons->tls.dhfile,
+                                         cons->tls.cipherlist,
+                                         cons->tls.verify_peer);
+         if (!cons->tls.ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
                cons->name(), configfile);
             OK = false;
             goto bail_out;
          }
+         set_tls_enable(cons->tls.ctx, need_tls);
+         set_tls_require(cons->tls.ctx, cons->tls.require);
       }
 
    }
@@ -886,17 +943,17 @@ static bool check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (client->tls_require) {
+      if (client->tls.require) {
          if (have_tls) {
-            client->tls_enable = true;
+            client->tls.enable = true;
          } else {
-            Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in BAREOS.\n"));
+            Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured.\n"));
             OK = false;
             goto bail_out;
          }
       }
-      need_tls = client->tls_enable || client->tls_authenticate;
-      if ((!client->tls_ca_certfile && !client->tls_ca_certdir) && need_tls) {
+      need_tls = client->tls.enable || client->tls.authenticate;
+      if ((!client->tls.ca_certfile && !client->tls.ca_certdir) && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("Neither \"TLS CA Certificate\""
             " or \"TLS CA Certificate Dir\" are defined for File daemon \"%s\" in %s.\n"),
             client->name(), configfile);
@@ -907,27 +964,29 @@ static bool check_resources()
       /*
        * If everything is well, attempt to initialize our per-resource TLS context
        */
-      if (OK && (need_tls || client->tls_require)) {
+      if (OK && (need_tls || client->tls.require)) {
          /*
           * Initialize TLS context.
           */
-         client->tls_ctx = new_tls_context(client->tls_ca_certfile,
-                                           client->tls_ca_certdir,
-                                           client->tls_crlfile,
-                                           client->tls_certfile,
-                                           client->tls_keyfile,
+         client->tls.ctx = new_tls_context(client->tls.ca_certfile,
+                                           client->tls.ca_certdir,
+                                           client->tls.crlfile,
+                                           client->tls.certfile,
+                                           client->tls.keyfile,
                                            NULL,
                                            NULL,
                                            NULL,
-                                           client->tls_cipherlist,
-                                           client->tls_verify_peer);
+                                           client->tls.cipherlist,
+                                           client->tls.verify_peer);
 
-         if (!client->tls_ctx) {
+         if (!client->tls.ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
                client->name(), configfile);
             OK = false;
             goto bail_out;
          }
+         set_tls_enable(client->tls.ctx, need_tls);
+         set_tls_require(client->tls.ctx, client->tls.require);
       }
    }
 
@@ -939,19 +998,19 @@ static bool check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (store->tls_require) {
+      if (store->tls.require) {
          if (have_tls) {
-            store->tls_enable = true;
+            store->tls.enable = true;
          } else {
-            Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in BAREOS.\n"));
+            Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured.\n"));
             OK = false;
             goto bail_out;
          }
       }
 
-      need_tls = store->tls_enable || store->tls_authenticate;
+      need_tls = store->tls.enable || store->tls.authenticate;
 
-      if ((!store->tls_ca_certfile && !store->tls_ca_certdir) && need_tls) {
+      if ((!store->tls.ca_certfile && !store->tls.ca_certdir) && need_tls) {
          Jmsg(NULL, M_FATAL, 0, _("Neither \"TLS CA Certificate\""
               " or \"TLS CA Certificate Dir\" are defined for Storage \"%s\" in %s.\n"),
               store->name(), configfile);
@@ -962,27 +1021,29 @@ static bool check_resources()
       /*
        * If everything is well, attempt to initialize our per-resource TLS context
        */
-      if (OK && (need_tls || store->tls_require)) {
+      if (OK && (need_tls || store->tls.require)) {
         /*
          * Initialize TLS context.
          */
-         store->tls_ctx = new_tls_context(store->tls_ca_certfile,
-                                          store->tls_ca_certdir,
-                                          store->tls_crlfile,
-                                          store->tls_certfile,
-                                          store->tls_keyfile,
+         store->tls.ctx = new_tls_context(store->tls.ca_certfile,
+                                          store->tls.ca_certdir,
+                                          store->tls.crlfile,
+                                          store->tls.certfile,
+                                          store->tls.keyfile,
                                           NULL,
                                           NULL,
                                           NULL,
-                                          store->tls_cipherlist,
-                                          store->tls_verify_peer);
+                                          store->tls.cipherlist,
+                                          store->tls.verify_peer);
 
-         if (!store->tls_ctx) {
+         if (!store->tls.ctx) {
             Jmsg(NULL, M_FATAL, 0, _("Failed to initialize TLS context for Storage \"%s\" in %s.\n"),
                  store->name(), configfile);
             OK = false;
             goto bail_out;
          }
+         set_tls_enable(store->tls.ctx, need_tls);
+         set_tls_require(store->tls.ctx, store->tls.require);
       }
 
       /*

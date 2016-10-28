@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2015 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -59,6 +59,7 @@ extern struct s_kw RunFields[];
  */
 static RES *sres_head[R_LAST - R_FIRST + 1];
 static RES **res_head = sres_head;
+static POOL_MEM *configure_usage_string = NULL;
 
 /*
  * Set default indention e.g. 2 spaces.
@@ -95,7 +96,7 @@ static int32_t res_all_size = sizeof(res_all);
  */
 static RES_ITEM dir_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_dir.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Messages", CFG_TYPE_RES, ITEM(res_dir.messages), R_MSGS, 0, NULL, NULL, NULL },
    { "DirPort", CFG_TYPE_ADDRESSES_PORT, ITEM(res_dir.DIRaddrs), 0, CFG_ITEM_DEFAULT, DIR_DEFAULT_PORT, NULL, NULL },
@@ -122,18 +123,6 @@ static RES_ITEM dir_items[] = {
    { "FdConnectTimeout", CFG_TYPE_TIME, ITEM(res_dir.FDConnectTimeout), 0, CFG_ITEM_DEFAULT, "180" /* 3 minutes */, NULL, NULL },
    { "SdConnectTimeout", CFG_TYPE_TIME, ITEM(res_dir.SDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
    { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_dir.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_dir.tls_cipherlist), 0, 0, NULL, NULL, NULL },
-   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
    { "StatisticsRetention", CFG_TYPE_TIME, ITEM(res_dir.stats_retention), 0, CFG_ITEM_DEFAULT, "160704000" /* 5 years */, NULL, NULL },
    { "StatisticsCollectInterval", CFG_TYPE_PINT32, ITEM(res_dir.stats_collect_interval), 0, CFG_ITEM_DEFAULT, "150", "14.2.0-", NULL },
    { "VerId", CFG_TYPE_STR, ITEM(res_dir.verid), 0, 0, NULL, NULL, NULL },
@@ -146,8 +135,10 @@ static RES_ITEM dir_items[] = {
    { "AbsoluteJobTimeout", CFG_TYPE_PINT32, ITEM(res_dir.jcr_watchdog_time), 0, 0, NULL, "14.2.0-", NULL },
    { "Auditing", CFG_TYPE_BOOL, ITEM(res_dir.auditing), 0, CFG_ITEM_DEFAULT, "false", "14.2.0-", NULL },
    { "AuditEvents", CFG_TYPE_AUDIT, ITEM(res_dir.audit_events), 0, 0, NULL, "14.2.0-", NULL },
-   { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_dir.secure_erase_cmdline), 0, 0, NULL, "15.2.1-", NULL },
+   { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_dir.secure_erase_cmdline), 0, 0, NULL, "15.2.1-",
+     "Specify command that will be called when bareos unlinks files." },
    { "LogTimestampFormat", CFG_TYPE_STR, ITEM(res_dir.log_timestamp_format), 0, 0, NULL, "15.2.3-", NULL },
+   TLS_CONFIG(res_dir)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -158,29 +149,29 @@ static RES_ITEM dir_items[] = {
  */
 static RES_ITEM profile_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_profile.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_profile.hdr.desc), 0, 0, NULL, NULL,
-      "Additional information about the resource. Only used for UIs." },
+     "Additional information about the resource. Only used for UIs." },
    { "JobACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Job_ACL, 0, NULL, NULL,
-      "Lists the Job resources, this resource has access to. The special keyword *all* allows access to all Job resources." },
+     "Lists the Job resources, this resource has access to. The special keyword *all* allows access to all Job resources." },
    { "ClientACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Client_ACL, 0, NULL, NULL,
-      "Lists the Client resources, this resource has access to. The special keyword *all* allows access to all Client resources." },
+     "Lists the Client resources, this resource has access to. The special keyword *all* allows access to all Client resources." },
    { "StorageACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Storage_ACL, 0, NULL, NULL,
-      "Lists the Storage resources, this resource has access to. The special keyword *all* allows access to all Storage resources." },
+     "Lists the Storage resources, this resource has access to. The special keyword *all* allows access to all Storage resources." },
    { "ScheduleACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Schedule_ACL, 0, NULL, NULL,
-      "Lists the Schedule resources, this resource has access to. The special keyword *all* allows access to all Schedule resources." },
+     "Lists the Schedule resources, this resource has access to. The special keyword *all* allows access to all Schedule resources." },
    { "PoolACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Pool_ACL, 0, NULL, NULL,
-      "Lists the Pool resources, this resource has access to. The special keyword *all* allows access to all Pool resources." },
+     "Lists the Pool resources, this resource has access to. The special keyword *all* allows access to all Pool resources." },
    { "CommandACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Command_ACL, 0, NULL, NULL,
-      "Lists the commands, this resource has access to. The special keyword *all* allows using commands." },
+     "Lists the commands, this resource has access to. The special keyword *all* allows using commands." },
    { "FileSetACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), FileSet_ACL, 0, NULL, NULL,
-      "Lists the File Set resources, this resource has access to. The special keyword *all* allows access to all File Set resources." },
+     "Lists the File Set resources, this resource has access to. The special keyword *all* allows access to all File Set resources." },
    { "CatalogACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Catalog_ACL, 0, NULL, NULL,
-      "Lists the Catalog resources, this resource has access to. The special keyword *all* allows access to all Catalog resources." },
+     "Lists the Catalog resources, this resource has access to. The special keyword *all* allows access to all Catalog resources." },
    { "WhereACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), Where_ACL, 0, NULL, NULL,
-      "Specifies the base directories, where files could be restored. An empty string allows restores to all directories." },
+     "Specifies the base directories, where files could be restored. An empty string allows restores to all directories." },
    { "PluginOptionsACL", CFG_TYPE_ACL, ITEM(res_profile.ACL_lists), PluginOptions_ACL, 0, NULL, NULL,
-      "Specifies the allowed plugin options. An empty strings allows all Plugin Options." },
+     "Specifies the allowed plugin options. An empty strings allows all Plugin Options." },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -204,21 +195,10 @@ static RES_ITEM con_items[] = {
    { "CatalogACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Catalog_ACL, 0, NULL, NULL, NULL },
    { "WhereACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), Where_ACL, 0, NULL, NULL, NULL },
    { "PluginOptionsACL", CFG_TYPE_ACL, ITEM(res_con.ACL_lists), PluginOptions_ACL, 0, NULL, NULL, NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_con.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_con.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_con.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_con.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_con.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_con.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_con.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_con.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_con.tls_dhfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_con.tls_cipherlist), 0, 0, NULL, NULL, NULL },
-   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_con.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
    { "Profile", CFG_TYPE_ALIST_RES, ITEM(res_con.profiles), R_PROFILE, 0, NULL, "14.2.3-",
-      "Profiles can be assigned to a Console. ACL are checked until either a deny ACL is found or an allow ACL. "
-      "First the console ACL is checked then any profile the console is linked to." },
+     "Profiles can be assigned to a Console. ACL are checked until either a deny ACL is found or an allow ACL. "
+     "First the console ACL is checked then any profile the console is linked to." },
+   TLS_CONFIG(res_con)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -229,7 +209,7 @@ static RES_ITEM con_items[] = {
  */
 static RES_ITEM cli_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_client.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_client.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_client.Protocol), 0, CFG_ITEM_DEFAULT, "Native", "13.2.0-", NULL },
    { "AuthType", CFG_TYPE_AUTHTYPE, ITEM(res_client.AuthType), 0, CFG_ITEM_DEFAULT, "None", NULL, NULL },
@@ -241,10 +221,16 @@ static RES_ITEM cli_items[] = {
    { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
    { "FdPassword", CFG_TYPE_AUTOPASSWORD, ITEM(res_client.password), 0, CFG_ITEM_ALIAS, NULL, NULL, NULL },
    { "Catalog", CFG_TYPE_RES, ITEM(res_client.catalog), R_CATALOG, 0, NULL, NULL, NULL },
-   { "Passive", CFG_TYPE_BOOL, ITEM(res_client.passive), 0, CFG_ITEM_DEFAULT, "false", "13.2.0-", NULL },
-   { "AllowClientConnect", CFG_TYPE_BOOL, ITEM(res_client.allow_client_connect), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "Passive", CFG_TYPE_BOOL, ITEM(res_client.passive), 0, CFG_ITEM_DEFAULT, "false", "13.2.0-",
+     "If enabled, the Storage Daemon will initiate the network connection to the Client. If disabled, the Client will initiate the netowrk connection to the Storage Daemon." },
+   { "ConnectionFromDirectorToClient", CFG_TYPE_BOOL, ITEM(res_client.conn_from_dir_to_fd), 0, CFG_ITEM_DEFAULT, "true", "16.2.2",
+     "Let the Director initiate the network connection to the Client." },
+   { "AllowClientConnect", CFG_TYPE_BOOL, ITEM(res_client.conn_from_fd_to_dir), 0, CFG_ITEM_DEPRECATED | CFG_ITEM_ALIAS, NULL, NULL,
+     "Alias of \"Connection From Client To Director\"." },
+   { "ConnectionFromClientToDirector", CFG_TYPE_BOOL, ITEM(res_client.conn_from_fd_to_dir), 0, CFG_ITEM_DEFAULT, "false", "16.2.2",
+     "The Director will accept incoming network connection from this Client." },
    { "Enabled", CFG_TYPE_BOOL, ITEM(res_client.enabled), 0, CFG_ITEM_DEFAULT, "true", NULL,
-      "En- or disable this resource." },
+     "En- or disable this resource." },
    { "HardQuota", CFG_TYPE_SIZE64, ITEM(res_client.HardQuota), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "SoftQuota", CFG_TYPE_SIZE64, ITEM(res_client.SoftQuota), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "SoftQuotaGracePeriod", CFG_TYPE_TIME, ITEM(res_client.SoftQuotaGracePeriod), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
@@ -255,21 +241,11 @@ static RES_ITEM cli_items[] = {
    { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_client.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "AutoPrune", CFG_TYPE_BOOL, ITEM(res_client.AutoPrune), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_client.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1", NULL, NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_client.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_client.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_client.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_client.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_client.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_client.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_client.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_client.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_client.tls_cipherlist), 0, 0, NULL, NULL, NULL },
-   { "TlsAllowedCN", CFG_TYPE_ALIST_STR, ITEM(res_client.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
    { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_client.max_bandwidth), 0, 0, NULL, NULL, NULL },
    { "NdmpLogLevel", CFG_TYPE_PINT32, ITEM(res_client.ndmp_loglevel), 0, CFG_ITEM_DEFAULT, "4", NULL, NULL },
    { "NdmpBlockSize", CFG_TYPE_PINT32, ITEM(res_client.ndmp_blocksize), 0, CFG_ITEM_DEFAULT, "64512", NULL, NULL },
    { "NdmpUseLmdb", CFG_TYPE_BOOL, ITEM(res_client.ndmp_use_lmdb), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
+   TLS_CONFIG(res_client)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -294,25 +270,19 @@ static RES_ITEM store_items[] = {
    { "MediaType", CFG_TYPE_STRNAME, ITEM(res_store.media_type), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
    { "AutoChanger", CFG_TYPE_BOOL, ITEM(res_store.autochanger), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "Enabled", CFG_TYPE_BOOL, ITEM(res_store.enabled), 0, CFG_ITEM_DEFAULT, "true", NULL,
-      "En- or disable this resource." },
+     "En- or disable this resource." },
    { "AllowCompression", CFG_TYPE_BOOL, ITEM(res_store.AllowCompress), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
    { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_store.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
+   { "CacheStatusInterval", CFG_TYPE_TIME, ITEM(res_store.cache_status_interval), 0, CFG_ITEM_DEFAULT, "30", NULL, NULL },
    { "MaximumConcurrentJobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentJobs), 0, CFG_ITEM_DEFAULT, "1", NULL, NULL },
    { "MaximumConcurrentReadJobs", CFG_TYPE_PINT32, ITEM(res_store.MaxConcurrentReadJobs), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "SddPort", CFG_TYPE_PINT32, ITEM(res_store.SDDport), 0, CFG_ITEM_DEPRECATED, NULL, "-12.4.0", NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_store.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_store.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_store.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_store.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCacertificateDir", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_store.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_store.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_store.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_store.tls_cipherlist), 0, 0, NULL, NULL, NULL },
    { "PairedStorage", CFG_TYPE_RES, ITEM(res_store.paired_storage), R_STORAGE, 0, NULL, NULL, NULL },
    { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_store.max_bandwidth), 0, 0, NULL, NULL, NULL },
    { "CollectStatistics", CFG_TYPE_BOOL, ITEM(res_store.collectstats), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "ChangerDevice", CFG_TYPE_STRNAME, ITEM(res_store.changer_device), 0, 0, NULL, NULL, NULL },
+   { "TapeDevice", CFG_TYPE_ALIST_STR, ITEM(res_store.tape_devices), 0, 0, NULL, NULL, NULL },
+   TLS_CONFIG(res_store)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -323,7 +293,7 @@ static RES_ITEM store_items[] = {
  */
 static RES_ITEM cat_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_cat.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_cat.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Address", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, CFG_ITEM_ALIAS, NULL, NULL, NULL },
    { "DbAddress", CFG_TYPE_STR, ITEM(res_cat.db_address), 0, 0, NULL, NULL, NULL },
@@ -361,7 +331,7 @@ static RES_ITEM cat_items[] = {
  */
 RES_ITEM job_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_job.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_job.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Type", CFG_TYPE_JOBTYPE, ITEM(res_job.JobType), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
    { "Protocol", CFG_TYPE_PROTOCOLTYPE, ITEM(res_job.Protocol), 0, CFG_ITEM_DEFAULT, "Native", NULL, NULL },
@@ -396,7 +366,7 @@ RES_ITEM job_items[] = {
    { "WriteVerifyList", CFG_TYPE_DIR, ITEM(res_job.WriteVerifyList), 0, 0, NULL, NULL, NULL },
    { "Replace", CFG_TYPE_REPLACE, ITEM(res_job.replace), 0, CFG_ITEM_DEFAULT, "Always", NULL, NULL },
    { "MaximumBandwidth", CFG_TYPE_SPEED, ITEM(res_job.max_bandwidth), 0, 0, NULL, NULL, NULL },
-   { "MaxrunSchedTime", CFG_TYPE_TIME, ITEM(res_job.MaxRunSchedTime), 0, 0, NULL, NULL, NULL },
+   { "MaxRunSchedTime", CFG_TYPE_TIME, ITEM(res_job.MaxRunSchedTime), 0, 0, NULL, NULL, NULL },
    { "MaxRunTime", CFG_TYPE_TIME, ITEM(res_job.MaxRunTime), 0, 0, NULL, NULL, NULL },
    { "FullMaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.FullMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL, "-12.4.0", NULL },
    { "IncrementalMaxWaitTime", CFG_TYPE_TIME, ITEM(res_job.IncMaxRunTime), 0, CFG_ITEM_DEPRECATED, NULL, "-12.4.0", NULL },
@@ -415,7 +385,7 @@ RES_ITEM job_items[] = {
    { "PruneVolumes", CFG_TYPE_BOOL, ITEM(res_job.PruneVolumes), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "PurgeMigrationJob", CFG_TYPE_BOOL, ITEM(res_job.PurgeMigrateJob), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "Enabled", CFG_TYPE_BOOL, ITEM(res_job.enabled), 0, CFG_ITEM_DEFAULT, "true", NULL,
-      "En- or disable this resource." },
+     "En- or disable this resource." },
    { "SpoolAttributes", CFG_TYPE_BOOL, ITEM(res_job.SpoolAttributes), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "SpoolData", CFG_TYPE_BOOL, ITEM(res_job.spool_data), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "SpoolSize", CFG_TYPE_SIZE64, ITEM(res_job.spool_size), 0, 0, NULL, NULL, NULL },
@@ -450,6 +420,17 @@ RES_ITEM job_items[] = {
    { "DirPluginOptions", CFG_TYPE_ALIST_STR, ITEM(res_job.DirPluginOptions), 0, 0, NULL, NULL, NULL },
    { "Base", CFG_TYPE_ALIST_RES, ITEM(res_job.base), R_JOB, 0, NULL, NULL, NULL },
    { "MaxConcurrentCopies", CFG_TYPE_PINT32, ITEM(res_job.MaxConcurrentCopies), 0, CFG_ITEM_DEFAULT, "100", NULL, NULL },
+   /* Settings for always incremental */
+   { "AlwaysIncremental", CFG_TYPE_BOOL, ITEM(res_job.AlwaysIncremental), 0, CFG_ITEM_DEFAULT, "false", "16.2.4-",
+     "Enable/disable always incremental backup scheme." },
+   { "AlwaysIncrementalJobRetention", CFG_TYPE_TIME, ITEM(res_job.AlwaysIncrementalJobRetention), 0, CFG_ITEM_DEFAULT, "0", "16.2.4-",
+     "Backup Jobs older than the specified time duration will be merged into a new Virtual backup." },
+   { "AlwaysIncrementalKeepNumber", CFG_TYPE_PINT32, ITEM(res_job.AlwaysIncrementalKeepNumber), 0, CFG_ITEM_DEFAULT, "0", "16.2.4-",
+     "Guarantee that at least the specified number of Backup Jobs will persist, even if they are older than \"Always Incremental Job Retention\"."},
+   { "AlwaysIncrementalMaxFullAge", CFG_TYPE_TIME, ITEM(res_job.AlwaysIncrementalMaxFullAge), 0, 0, NULL, "16.2.4-",
+     "If \"AlwaysIncrementalMaxFullAge\" is set, during consolidations only incremental backups will be considered while the Full Backup remains to reduce the amount of data being consolidated. Only if the Full Backup is older than \"AlwaysIncrementalMaxFullAge\", the Full Backup will be part of the consolidation to avoid the Full Backup becoming too old ." },
+   { "MaxFullConsolidations", CFG_TYPE_PINT32, ITEM(res_job.MaxFullConsolidations), 0, CFG_ITEM_DEFAULT, "0", "16.2.4-",
+     "If \"AlwaysIncrementalMaxFullAge\" is configured, do not run more than \"MaxFullConsolidations\" consolidation jobs that include the Full backup."},
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -460,7 +441,7 @@ RES_ITEM job_items[] = {
  */
 static RES_ITEM fs_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_fs.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_fs.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Include", CFG_TYPE_INCEXC, { 0 }, 0, CFG_ITEM_NO_EQUALS, NULL, NULL, NULL },
    { "Exclude", CFG_TYPE_INCEXC, { 0 }, 1, CFG_ITEM_NO_EQUALS, NULL, NULL, NULL },
@@ -476,11 +457,11 @@ static RES_ITEM fs_items[] = {
  */
 static RES_ITEM sch_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_sch.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_sch.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Run", CFG_TYPE_RUN, ITEM(res_sch.run), 0, 0, NULL, NULL, NULL },
    { "Enabled", CFG_TYPE_BOOL, ITEM(res_sch.enabled), 0, CFG_ITEM_DEFAULT, "true", NULL,
-      "En- or disable this resource." },
+     "En- or disable this resource." },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -491,7 +472,7 @@ static RES_ITEM sch_items[] = {
  */
 static RES_ITEM pool_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_pool.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_pool.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "PoolType", CFG_TYPE_POOLTYPE, ITEM(res_pool.pool_type), 0, CFG_ITEM_DEFAULT, "Backup", NULL, NULL },
    { "LabelFormat", CFG_TYPE_STRNAME, ITEM(res_pool.label_format), 0, 0, NULL, NULL, NULL },
@@ -499,10 +480,10 @@ static RES_ITEM pool_items[] = {
    { "CleaningPrefix", CFG_TYPE_STRNAME, ITEM(res_pool.cleaning_prefix), 0, CFG_ITEM_DEFAULT, "CLN", NULL, NULL },
    { "UseCatalog", CFG_TYPE_BOOL, ITEM(res_pool.use_catalog), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
    { "UseVolumeOnce", CFG_TYPE_BOOL, ITEM(res_pool.use_volume_once), 0, CFG_ITEM_DEPRECATED, NULL, "-12.4.0", NULL },
-   { "PurgeOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.purge_oldest_volume), 0, 0, NULL, NULL, NULL },
+   { "PurgeOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.purge_oldest_volume), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "ActionOnPurge", CFG_TYPE_ACTIONONPURGE, ITEM(res_pool.action_on_purge), 0, 0, NULL, NULL, NULL },
-   { "RecycleOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_oldest_volume), 0, 0, NULL, NULL, NULL },
-   { "RecycleCurrentVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_current_volume), 0, 0, NULL, NULL, NULL },
+   { "RecycleOldestVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_oldest_volume), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
+   { "RecycleCurrentVolume", CFG_TYPE_BOOL, ITEM(res_pool.recycle_current_volume), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "MaximumVolumes", CFG_TYPE_PINT32, ITEM(res_pool.max_volumes), 0, 0, NULL, NULL, NULL },
    { "MaximumVolumeJobs", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolJobs), 0, 0, NULL, NULL, NULL },
    { "MaximumVolumeFiles", CFG_TYPE_PINT32, ITEM(res_pool.MaxVolFiles), 0, 0, NULL, NULL, NULL },
@@ -522,8 +503,8 @@ static RES_ITEM pool_items[] = {
    { "Catalog", CFG_TYPE_RES, ITEM(res_pool.catalog), R_CATALOG, 0, NULL, NULL, NULL },
    { "FileRetention", CFG_TYPE_TIME, ITEM(res_pool.FileRetention), 0, 0, NULL, NULL, NULL },
    { "JobRetention", CFG_TYPE_TIME, ITEM(res_pool.JobRetention), 0, 0, NULL, NULL, NULL },
-   { "MinimumBlocksize", CFG_TYPE_PINT32, ITEM(res_pool.MinBlocksize), 0, 0, NULL, NULL, NULL },
-   { "MaximumBlocksize", CFG_TYPE_PINT32, ITEM(res_pool.MaxBlocksize), 0, 0, NULL, "14.2.0-", NULL },
+   { "MinimumBlockSize", CFG_TYPE_PINT32, ITEM(res_pool.MinBlocksize), 0, 0, NULL, NULL, NULL },
+   { "MaximumBlockSize", CFG_TYPE_PINT32, ITEM(res_pool.MaxBlocksize), 0, 0, NULL, "14.2.0-", NULL },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -534,7 +515,7 @@ static RES_ITEM pool_items[] = {
  */
 static RES_ITEM counter_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_counter.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "The name of the resource." },
+     "The name of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_counter.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Minimum", CFG_TYPE_INT32, ITEM(res_counter.MinValue), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "Maximum", CFG_TYPE_PINT32, ITEM(res_counter.MaxValue), 0, CFG_ITEM_DEFAULT, "2147483647" /* INT32_MAX */, NULL, NULL },
@@ -634,7 +615,9 @@ struct s_jl joblevels[] = {
    { "Incremental", L_INCREMENTAL, JT_MIGRATE },
    { "Differential", L_DIFFERENTIAL, JT_MIGRATE },
    { " ", L_NONE, JT_ADMIN },
+   { " ", L_NONE, JT_ARCHIVE },
    { " ", L_NONE, JT_RESTORE },
+   { " ", L_NONE, JT_CONSOLIDATE },
    { NULL, 0, 0 }
 };
 
@@ -645,10 +628,12 @@ struct s_jl joblevels[] = {
 struct s_jt jobtypes[] = {
    { "Backup", JT_BACKUP },
    { "Admin", JT_ADMIN },
+   { "Archive", JT_ARCHIVE },
    { "Verify", JT_VERIFY },
    { "Restore", JT_RESTORE },
    { "Migrate",JT_MIGRATE },
    { "Copy", JT_COPY },
+   { "Consolidate", JT_CONSOLIDATE },
    { NULL, 0 }
 };
 
@@ -962,10 +947,113 @@ bool print_config_schema_json(POOL_MEM &buffer)
 bool print_config_schema_json(POOL_MEM &buffer)
 {
    pm_strcat(buffer, "{ \"success\": false, \"message\": \"not available\" }");
+
    return false;
 }
 #endif
 
+static inline bool cmdline_item(POOL_MEM *buffer, RES_ITEM *item)
+{
+   POOL_MEM temp;
+   POOL_MEM key;
+   const char *nomod = "";
+   const char *mod_start = nomod;
+   const char *mod_end = nomod;
+
+   if (item->flags & CFG_ITEM_ALIAS) {
+      return false;
+   }
+
+   if (item->flags & CFG_ITEM_DEPRECATED) {
+      return false;
+   }
+
+   if (item->flags & CFG_ITEM_NO_EQUALS) {
+      /* TODO: currently not supported */
+      return false;
+   }
+
+   if (!(item->flags & CFG_ITEM_REQUIRED)) {
+      mod_start = "[";
+      mod_end = "]";
+   }
+
+   /*
+    * Tab completion only supports lower case keywords.
+    */
+   key.strcat(item->name);
+   key.toLower();
+
+   temp.bsprintf(" %s%s=<%s>%s", mod_start, key.c_str(), datatype_to_str(item->type), mod_end);
+   pm_strcat(buffer, temp.c_str());
+
+   return true;
+}
+
+static inline bool cmdline_items(POOL_MEM *buffer, RES_ITEM items[])
+{
+   if (!items) {
+      return false;
+   }
+
+   for (int i = 0; items[i].name; i++) {
+      cmdline_item(buffer, &items[i]);
+   }
+
+   return true;
+}
+
+/*
+ * Get the usage string for the console "configure" command.
+ *
+ * This will be all available resource directives.
+ * They are formated in a way to be usable for command line completion.
+ */
+const char *get_configure_usage_string()
+{
+   POOL_MEM resourcename;
+
+   if (!configure_usage_string) {
+      configure_usage_string = new POOL_MEM(PM_BSOCK);
+   }
+
+   /*
+    * Only fill the configure_usage_string once. The content is static.
+    */
+   if (configure_usage_string->strlen() == 0) {
+      /*
+       * subcommand: add
+       */
+      for (int r = 0; resources[r].name; r++) {
+         /*
+          * Only one Director is allowed.
+          * If the resource have not items, there is no need to add it.
+          */
+         if ((resources[r].rcode != R_DIRECTOR) && (resources[r].items)) {
+            configure_usage_string->strcat("add ");
+            resourcename.strcpy(resources[r].name);
+            resourcename.toLower();
+            configure_usage_string->strcat(resourcename);
+            cmdline_items(configure_usage_string, resources[r].items);
+            configure_usage_string->strcat(" |\n");
+         }
+      }
+      /*
+       * subcommand: export
+       */
+      configure_usage_string->strcat("export client=<client>");
+   }
+
+   return configure_usage_string->c_str();
+}
+
+void destroy_configure_usage_string()
+{
+   if (configure_usage_string) {
+      delete configure_usage_string;
+      configure_usage_string = NULL;
+   }
+}
 
 /*
  * Propagate the settings from source BRSRES to dest BRSRES using the RES_ITEMS array.
@@ -1170,21 +1258,30 @@ static void propagate_resource(RES_ITEM *items, BRSRES *source, BRSRES *dest)
    }
 }
 
+
 /*
  * Ensure that all required items are present
  */
-static bool validate_resource(RES_ITEM *items, BRSRES *res, const char *res_type)
+bool validate_resource(int res_type, RES_ITEM *items, BRSRES *res)
 {
-   bool retval = true;
+   if (res_type == R_JOBDEFS) {
+      /*
+       * a jobdef don't have to be fully defined.
+       */
+      return true;
+   } else if (res_type == R_JOB) {
+      if (!((JOBRES *)res)->validate()) {
+         return false;
+      }
+   }
 
    for (int i = 0; items[i].name; i++) {
       if (items[i].flags & CFG_ITEM_REQUIRED) {
          if (!bit_is_set(i, res->hdr.item_present)) {
-            Jmsg(NULL, M_ERROR_TERM, 0,
+            Jmsg(NULL, M_ERROR, 0,
                  _("\"%s\" directive in %s \"%s\" resource is required, but not found.\n"),
-                 items[i].name, res_type, res->name());
-            retval = false;
-            goto bail_out;
+                 items[i].name, res_to_str(res_type), res->name());
+            return false;
          }
       }
 
@@ -1192,13 +1289,50 @@ static bool validate_resource(RES_ITEM *items, BRSRES *res, const char *res_type
        * If this triggers, take a look at lib/parse_conf.h
        */
       if (i >= MAX_RES_ITEMS) {
-         Emsg1(M_ERROR_TERM, 0, _("Too many items in %s resource\n"), res_type);
-         goto bail_out;
+         Emsg1(M_ERROR, 0, _("Too many items in %s resource\n"), res_to_str(res_type));
+         return false;
       }
    }
 
-bail_out:
-   return retval;
+   return true;
+}
+
+bool JOBRES::validate()
+{
+   /*
+    * For Copy and Migrate we can have Jobs without a client or fileset.
+    * As for a copy we use the original Job as a reference for the Read storage
+    * we also don't need to check if there is an explicit storage definition in
+    * either the Job or the Read pool.
+    */
+   switch (JobType) {
+   case JT_COPY:
+   case JT_MIGRATE:
+      break;
+   default:
+      /*
+       * All others must have a client and fileset.
+       */
+      if (!client) {
+         Jmsg(NULL, M_ERROR, 0,
+              _("\"client\" directive in Job \"%s\" resource is required, but not found.\n"), name());
+         return false;
+      }
+
+      if (!fileset) {
+         Jmsg(NULL, M_ERROR, 0,
+              _("\"fileset\" directive in Job \"%s\" resource is required, but not found.\n"), name());
+         return false;
+      }
+
+      if (!storage && !pool->storage) {
+         Jmsg(NULL, M_ERROR, 0, _("No storage specified in Job \"%s\" nor in Pool.\n"), name());
+         return false;
+      }
+      break;
+   }
+
+   return true;
 }
 
 char *CATRES::display(POOLMEM *dst)
@@ -1213,14 +1347,6 @@ char *CATRES::display(POOLMEM *dst)
    return dst;
 }
 
-static void indent_config_item(POOL_MEM &cfg_str, int level, const char *config_item)
-{
-   for (int i = 0; i < level; i++) {
-      pm_strcat(cfg_str, DEFAULT_INDENT_STRING);
-   }
-   pm_strcat(cfg_str, config_item);
-}
-
 static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
 {
    POOL_MEM temp;
@@ -1231,13 +1357,9 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
    if (bstrcasecmp(item->name, "runscript")) {
       if (list != NULL) {
          foreach_alist(runscript, list) {
-            int len;
-            POOLMEM *cmdbuf;
+            POOL_MEM esc;
 
-            len = strlen(runscript->command);
-            cmdbuf = get_pool_memory(PM_NAME);
-            cmdbuf = check_pool_memory_size(cmdbuf, len * 2);
-            escape_string(cmdbuf, runscript->command, len);
+            escape_string(esc, runscript->command, strlen(runscript->command));
 
             /*
              * Don't print runscript when its inherited from a JobDef.
@@ -1252,28 +1374,28 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
             if (runscript->short_form) {
                if (runscript->when == SCRIPT_Before &&           /* runbeforejob */
                   (bstrcmp(runscript->target, ""))) {
-                     Mmsg(temp, "run before job = \"%s\"\n", cmdbuf);
+                     Mmsg(temp, "run before job = \"%s\"\n", esc.c_str());
                } else if (runscript->when == SCRIPT_After &&     /* runafterjob */
                           runscript->on_success &&
                          !runscript->on_failure &&
                          !runscript->fail_on_error &&
                           bstrcmp(runscript->target, "")) {
-                  Mmsg(temp, "run after job = \"%s\"\n", cmdbuf);
+                  Mmsg(temp, "run after job = \"%s\"\n", esc.c_str());
                } else if (runscript->when == SCRIPT_After &&     /* client run after job */
                           runscript->on_success &&
                          !runscript->on_failure &&
                          !runscript->fail_on_error &&
                           !bstrcmp(runscript->target, "")) {
-                  Mmsg(temp, "client run after job = \"%s\"\n", cmdbuf);
+                  Mmsg(temp, "client run after job = \"%s\"\n", esc.c_str());
                } else if (runscript->when == SCRIPT_Before &&      /* client run before job */
                           !bstrcmp(runscript->target, "")) {
-                  Mmsg(temp, "client run before job = \"%s\"\n", cmdbuf);
+                  Mmsg(temp, "client run before job = \"%s\"\n", esc.c_str());
                } else if (runscript->when == SCRIPT_After &&      /* run after failed job */
                           runscript->on_failure &&
                          !runscript->on_success &&
                          !runscript->fail_on_error &&
                           bstrcmp(runscript->target, "")) {
-                  Mmsg(temp, "run after failed job = \"%s\"\n", cmdbuf);
+                  Mmsg(temp, "run after failed job = \"%s\"\n", esc.c_str());
                }
                indent_config_item(cfg_str, 1, temp.c_str());
             } else {
@@ -1285,7 +1407,7 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                   cmdstring = (char *)"console";
                }
 
-               Mmsg(temp, "%s = \"%s\"\n", cmdstring, cmdbuf);
+               Mmsg(temp, "%s = \"%s\"\n", cmdstring, esc.c_str());
                indent_config_item(cfg_str, 2, temp.c_str());
 
                /*
@@ -1293,18 +1415,18 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
                 */
                char *when = (char *)"never";
                switch (runscript->when) {
-                  case SCRIPT_Before:
-                     when  = (char *)"before";
-                     break;
-                  case SCRIPT_After:
-                     when = (char *)"after";
-                     break;
-                  case SCRIPT_AfterVSS:
-                     when = (char *)"aftervss";
-                     break;
-                  case SCRIPT_Any:
-                     when = (char *)"always";
-                     break;
+               case SCRIPT_Before:
+                  when  = (char *)"before";
+                  break;
+               case SCRIPT_After:
+                  when = (char *)"after";
+                  break;
+               case SCRIPT_AfterVSS:
+                  when = (char *)"aftervss";
+                  break;
+               case SCRIPT_Any:
+                  when = (char *)"always";
+                  break;
                }
 
                if (!bstrcasecmp(when, "never")) { /* suppress default value */
@@ -1358,8 +1480,6 @@ static inline void print_config_runscript(RES_ITEM *item, POOL_MEM &cfg_str)
 
                indent_config_item(cfg_str, 1, "}\n");
             }
-
-            free_pool_memory(cmdbuf);
          }
       } /* foreach runscript */
    }
@@ -1780,7 +1900,7 @@ static inline void print_config_run(RES_ITEM *item, POOL_MEM &cfg_str)
    }
 }
 
-bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
+bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data, bool verbose)
 {
    POOL_MEM cfg_str;
    POOL_MEM temp;
@@ -1809,17 +1929,8 @@ bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
          if (incexe->num_opts > 0) {
             for (int j = 0; j < incexe->num_opts; j++) {
                FOPTS *fo = incexe->opts_list[j];
-               bool enhanced_wild = false;
 
                indent_config_item(cfg_str, 2, "Options {\n");
-
-               for (int k = 0; fo->opts[k] != '\0'; k++) {
-                  if (fo->opts[k]=='W') {
-                     enhanced_wild = true;
-                     break;
-                  }
-               }
-
                for (p = &fo->opts[0]; *p; p++) {
                   switch (*p) {
                   case '0':                 /* no option */
@@ -2051,8 +2162,13 @@ bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
+               /*
+                *  Wildbase is WildFile not containing a / or \\
+                *  see  void store_wild() in inc_conf.c
+                *  so we need to translate it back to a Wild File entry
+                */
                for (int k = 0; k < fo->wildbase.size(); k++) {
-                  Mmsg(temp, "Wild Base = \"%c %s\"\n", enhanced_wild ? 'B' : 'F', fo->wildbase.get(k));
+                  Mmsg(temp, "Wild File = \"%s\"\n", fo->wildbase.get(k));
                   indent_config_item(cfg_str, 3, temp.c_str());
                }
 
@@ -2099,8 +2215,13 @@ bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
           * File = entries.
           */
          if (incexe->name_list.size()) {
+            char *entry;
+            POOL_MEM esc;
+
             for (int l = 0; l < incexe->name_list.size(); l++) {
-               Mmsg(temp, "File = \"%s\"\n", incexe->name_list.get(l));
+               entry = (char *)incexe->name_list.get(l);
+               escape_string(esc, entry, strlen(entry));
+               Mmsg(temp, "File = \"%s\"\n", esc.c_str());
                indent_config_item(cfg_str, 2, temp.c_str());
             }
          }
@@ -2109,8 +2230,13 @@ bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
           * Plugin = entries.
           */
          if (incexe->plugin_list.size()) {
+            char *entry;
+            POOL_MEM esc;
+
             for (int l = 0; l < incexe->plugin_list.size(); l++) {
-               Mmsg(temp, "Plugin = %s\n", incexe->plugin_list.get(l));
+               entry = (char *)incexe->plugin_list.get(l);
+               escape_string(esc, entry, strlen(entry));
+               Mmsg(temp, "Plugin = \"%s\"\n", esc.c_str());
                indent_config_item(cfg_str, 2, temp.c_str());
             }
          }
@@ -2141,10 +2267,14 @@ bool FILESETRES::print_config(POOL_MEM &buff, bool hide_sensitive_data)
          INCEXE *incexe = exclude_items[j];
 
          if (incexe->name_list.size()) {
-            indent_config_item(cfg_str, 1, "Exclude {\n");
+            char *entry;
+            POOL_MEM esc;
 
+            indent_config_item(cfg_str, 1, "Exclude {\n");
             for (int k = 0; k < incexe->name_list.size(); k++) {
-               Mmsg(temp, "File = \"%s\"\n", incexe->name_list.get(k));
+               entry = (char *)incexe->name_list.get(k);
+               escape_string(esc, entry, strlen(entry));
+               Mmsg(temp, "File = \"%s\"\n", esc.c_str());
                indent_config_item(cfg_str, 2, temp.c_str());
             }
 
@@ -2191,11 +2321,11 @@ const char *level_to_str(int level)
  */
 void dump_resource(int type, RES *ures,
                    void sendit(void *sock, const char *fmt, ...),
-                   void *sock, bool hide_sensitive_data)
+                   void *sock, bool hide_sensitive_data, bool verbose)
 {
-   URES *res = (URES *)ures;
-   bool recurse = true;
    POOL_MEM buf;
+   bool recurse = true;
+   URES *res = (URES *)ures;
    UAContext *ua = (UAContext *)sock;
 
    if (!res) {
@@ -2208,73 +2338,62 @@ void dump_resource(int type, RES *ures,
       recurse = false;
    }
 
+   if (ua && !ua->is_res_allowed(ures)) {
+      goto bail_out;
+   }
+
    switch (type) {
    case R_DIRECTOR:
-      res->res_dir.print_config(buf, hide_sensitive_data);
+      res->res_dir.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    case R_PROFILE:
-      res->res_profile.print_config(buf, hide_sensitive_data);
+      res->res_profile.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    case R_CONSOLE:
-      res->res_con.print_config(buf, hide_sensitive_data);
+      res->res_con.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    case R_COUNTER:
-      res->res_counter.print_config(buf, hide_sensitive_data);
+      res->res_counter.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    case R_CLIENT:
-      if (!ua || acl_access_ok(ua, Client_ACL, res->res_client.name())) {
-         res->res_client.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+      res->res_client.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
    case R_DEVICE:
-      res->res_dev.print_config(buf, hide_sensitive_data);
+      res->res_dev.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    case R_STORAGE:
-      if (!ua || acl_access_ok(ua, Storage_ACL, res->res_store.name())) {
-         res->res_store.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+      res->res_store.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
    case R_CATALOG:
-      if (!ua || acl_access_ok(ua, Catalog_ACL, res->res_cat.name())) {
-         res->res_cat.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+      res->res_cat.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
    case R_JOBDEFS:
    case R_JOB:
-      if (!ua || acl_access_ok(ua, Job_ACL, res->res_job.name())) {
-         res->res_job.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+      res->res_job.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
-   case R_FILESET: {
-      if (!ua || acl_access_ok(ua, FileSet_ACL, res->res_fs.name())) {
-         res->res_fs.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+   case R_FILESET:
+      res->res_fs.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
-   }
    case R_SCHEDULE:
-      if (!ua || acl_access_ok(ua, Schedule_ACL, res->res_sch.name())) {
-         res->res_sch.print_config(buf, hide_sensitive_data);
-         sendit(sock, "%s", buf.c_str());
-      }
+      res->res_sch.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
    case R_POOL:
-      if (!ua || acl_access_ok(ua, Pool_ACL, res->res_pool.name())) {
-        res->res_pool.print_config(buf, hide_sensitive_data);
-        sendit(sock, "%s", buf.c_str());
-      }
+      res->res_pool.print_config(buf, hide_sensitive_data, verbose);
+      sendit(sock, "%s", buf.c_str());
       break;
    case R_MSGS:
-      res->res_msgs.print_config(buf, hide_sensitive_data);
+      res->res_msgs.print_config(buf, hide_sensitive_data, verbose);
       sendit(sock, "%s", buf.c_str());
       break;
    default:
@@ -2282,8 +2401,9 @@ void dump_resource(int type, RES *ures,
       break;
    }
 
+bail_out:
    if (recurse && res->res_dir.hdr.next) {
-      dump_resource(type, res->res_dir.hdr.next, sendit, sock, hide_sensitive_data);
+      dump_resource(type, res->res_dir.hdr.next, sendit, sock, hide_sensitive_data, verbose);
    }
 }
 
@@ -2387,33 +2507,6 @@ void free_resource(RES *sres, int type)
       if (res->res_dir.DIRsrc_addr) {
          free_addresses(res->res_dir.DIRsrc_addr);
       }
-      if (res->res_dir.tls_ctx) {
-         free_tls_context(res->res_dir.tls_ctx);
-      }
-      if (res->res_dir.tls_ca_certfile) {
-         free(res->res_dir.tls_ca_certfile);
-      }
-      if (res->res_dir.tls_ca_certdir) {
-         free(res->res_dir.tls_ca_certdir);
-      }
-      if (res->res_dir.tls_crlfile) {
-         free(res->res_dir.tls_crlfile);
-      }
-      if (res->res_dir.tls_certfile) {
-         free(res->res_dir.tls_certfile);
-      }
-      if (res->res_dir.tls_keyfile) {
-         free(res->res_dir.tls_keyfile);
-      }
-      if (res->res_dir.tls_dhfile) {
-         free(res->res_dir.tls_dhfile);
-      }
-      if (res->res_dir.tls_cipherlist) {
-         free(res->res_dir.tls_cipherlist);
-      }
-      if (res->res_dir.tls_allowed_cns) {
-         delete res->res_dir.tls_allowed_cns;
-      }
       if (res->res_dir.verid) {
          free(res->res_dir.verid);
       }
@@ -2429,6 +2522,7 @@ void free_resource(RES *sres, int type)
       if (res->res_dir.log_timestamp_format) {
          free(res->res_dir.log_timestamp_format);
       }
+      free_tls_t(res->res_dir.tls);
       break;
    case R_DEVICE:
    case R_COUNTER:
@@ -2445,33 +2539,6 @@ void free_resource(RES *sres, int type)
       if (res->res_con.password.value) {
          free(res->res_con.password.value);
       }
-      if (res->res_con.tls_ctx) {
-         free_tls_context(res->res_con.tls_ctx);
-      }
-      if (res->res_con.tls_ca_certfile) {
-         free(res->res_con.tls_ca_certfile);
-      }
-      if (res->res_con.tls_ca_certdir) {
-         free(res->res_con.tls_ca_certdir);
-      }
-      if (res->res_con.tls_crlfile) {
-         free(res->res_con.tls_crlfile);
-      }
-      if (res->res_con.tls_certfile) {
-         free(res->res_con.tls_certfile);
-      }
-      if (res->res_con.tls_keyfile) {
-         free(res->res_con.tls_keyfile);
-      }
-      if (res->res_con.tls_dhfile) {
-         free(res->res_con.tls_dhfile);
-      }
-      if (res->res_con.tls_cipherlist) {
-         free(res->res_con.tls_cipherlist);
-      }
-      if (res->res_con.tls_allowed_cns) {
-         delete res->res_con.tls_allowed_cns;
-      }
       if (res->res_con.profiles) {
          delete res->res_con.profiles;
       }
@@ -2481,6 +2548,7 @@ void free_resource(RES *sres, int type)
             res->res_con.ACL_lists[i] = NULL;
          }
       }
+      free_tls_t(res->res_con.tls);
       break;
    case R_CLIENT:
       if (res->res_client.address) {
@@ -2492,30 +2560,10 @@ void free_resource(RES *sres, int type)
       if (res->res_client.password.value) {
          free(res->res_client.password.value);
       }
-      if (res->res_client.tls_ctx) {
-         free_tls_context(res->res_client.tls_ctx);
+      if (res->res_client.rcs) {
+         free(res->res_client.rcs);
       }
-      if (res->res_client.tls_ca_certfile) {
-         free(res->res_client.tls_ca_certfile);
-      }
-      if (res->res_client.tls_ca_certdir) {
-         free(res->res_client.tls_ca_certdir);
-      }
-      if (res->res_client.tls_crlfile) {
-         free(res->res_client.tls_crlfile);
-      }
-      if (res->res_client.tls_certfile) {
-         free(res->res_client.tls_certfile);
-      }
-      if (res->res_client.tls_keyfile) {
-         free(res->res_client.tls_keyfile);
-      }
-      if (res->res_client.tls_cipherlist) {
-         free(res->res_client.tls_cipherlist);
-      }
-      if (res->res_client.tls_allowed_cns) {
-         delete res->res_client.tls_allowed_cns;
-      }
+      free_tls_t(res->res_client.tls);
       break;
    case R_STORAGE:
       if (res->res_store.address) {
@@ -2530,30 +2578,37 @@ void free_resource(RES *sres, int type)
       if (res->res_store.media_type) {
          free(res->res_store.media_type);
       }
+      if (res->res_store.changer_device) {
+         free(res->res_store.changer_device);
+      }
+      if (res->res_store.tape_devices) {
+         delete res->res_store.tape_devices;
+      }
       if (res->res_store.device) {
          delete res->res_store.device;
       }
-      if (res->res_store.tls_ctx) {
-         free_tls_context(res->res_store.tls_ctx);
+      if (res->res_store.rss) {
+         if (res->res_store.rss->storage_mappings) {
+            delete res->res_store.rss->storage_mappings;
+         }
+         if (res->res_store.rss->vol_list) {
+            if (res->res_store.rss->vol_list->contents) {
+               vol_list_t *vl;
+
+               foreach_dlist(vl, res->res_store.rss->vol_list->contents) {
+                  if (vl->VolName) {
+                     free(vl->VolName);
+                  }
+               }
+               res->res_store.rss->vol_list->contents->destroy();
+               delete res->res_store.rss->vol_list->contents;
+            }
+            free(res->res_store.rss->vol_list);
+         }
+         pthread_mutex_destroy(&res->res_store.rss->changer_lock);
+         free(res->res_store.rss);
       }
-      if (res->res_store.tls_ca_certfile) {
-         free(res->res_store.tls_ca_certfile);
-      }
-      if (res->res_store.tls_ca_certdir) {
-         free(res->res_store.tls_ca_certdir);
-      }
-      if (res->res_store.tls_crlfile) {
-         free(res->res_store.tls_crlfile);
-      }
-      if (res->res_store.tls_certfile) {
-         free(res->res_store.tls_certfile);
-      }
-      if (res->res_store.tls_keyfile) {
-         free(res->res_store.tls_keyfile);
-      }
-      if (res->res_store.tls_cipherlist) {
-         free(res->res_store.tls_cipherlist);
-      }
+      free_tls_t(res->res_store.tls);
       break;
    case R_CATALOG:
       if (res->res_cat.db_address) {
@@ -2670,6 +2725,9 @@ void free_resource(RES *sres, int type)
          free_runscripts(res->res_job.RunScripts);
          delete res->res_job.RunScripts;
       }
+      if (res->res_job.rjs) {
+         free(res->res_job.rjs);
+      }
       break;
    case R_MSGS:
       if (res->res_msgs.mail_cmd) {
@@ -2698,17 +2756,228 @@ void free_resource(RES *sres, int type)
    }
 }
 
+static bool update_resource_pointer(int type, RES_ITEM *items)
+{
+   URES *res;
+   bool result = true;
+
+   switch (type) {
+   case R_PROFILE:
+   case R_CATALOG:
+   case R_MSGS:
+   case R_FILESET:
+   case R_DEVICE:
+      /*
+       * Resources not containing a resource
+       */
+      break;
+   case R_POOL:
+      /*
+       * Resources containing another resource or alist. First
+       * look up the resource which contains another resource. It
+       * was written during pass 1.  Then stuff in the pointers to
+       * the resources it contains, which were inserted this pass.
+       * Finally, it will all be stored back.
+       *
+       * Find resource saved in pass 1
+       */
+      if (!(res = (URES *)GetResWithName(R_POOL, res_all.res_pool.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Pool resource %s\n"), res_all.res_pool.name());
+         return false;
+      } else {
+         /*
+          * Explicitly copy resource pointers from this pass (res_all)
+          */
+         res->res_pool.NextPool = res_all.res_pool.NextPool;
+         res->res_pool.RecyclePool = res_all.res_pool.RecyclePool;
+         res->res_pool.ScratchPool = res_all.res_pool.ScratchPool;
+         res->res_pool.storage = res_all.res_pool.storage;
+         if (res_all.res_pool.catalog || !res->res_pool.use_catalog) {
+            res->res_pool.catalog = res_all.res_pool.catalog;
+         }
+      }
+      break;
+   case R_CONSOLE:
+      if (!(res = (URES *)GetResWithName(R_CONSOLE, res_all.res_con.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Console resource %s\n"), res_all.res_con.name());
+         return false;
+      } else {
+         res->res_con.tls.allowed_cns = res_all.res_con.tls.allowed_cns;
+         res->res_con.profiles = res_all.res_con.profiles;
+      }
+      break;
+   case R_DIRECTOR:
+      if (!(res = (URES *)GetResWithName(R_DIRECTOR, res_all.res_dir.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Director resource %s\n"), res_all.res_dir.name());
+         return false;
+      } else {
+         res->res_dir.plugin_names = res_all.res_dir.plugin_names;
+         res->res_dir.messages = res_all.res_dir.messages;
+         res->res_dir.backend_directories = res_all.res_dir.backend_directories;
+         res->res_dir.tls.allowed_cns = res_all.res_dir.tls.allowed_cns;
+      }
+      break;
+   case R_STORAGE:
+      if (!(res = (URES *)GetResWithName(type, res_all.res_store.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Storage resource %s\n"), res_all.res_dir.name());
+         return false;
+      } else {
+         int status;
+
+         res->res_store.tape_devices = res_all.res_store.tape_devices;
+         res->res_store.paired_storage = res_all.res_store.paired_storage;
+         res->res_store.tls.allowed_cns = res_all.res_store.tls.allowed_cns;
+
+         /*
+          * We must explicitly copy the device alist pointer
+          */
+         res->res_store.device = res_all.res_store.device;
+
+         res->res_store.rss = (runtime_storage_status_t *)malloc(sizeof(runtime_storage_status_t));
+         memset(res->res_store.rss, 0, sizeof(runtime_storage_status_t));
+         if ((status = pthread_mutex_init(&res->res_store.rss->changer_lock, NULL)) != 0) {
+            berrno be;
+
+            Emsg1(M_ERROR_TERM, 0, _("pthread_mutex_init: ERR=%s\n"), be.bstrerror(status));
+         }
+      }
+      break;
+   case R_JOBDEFS:
+   case R_JOB:
+      if (!(res = (URES *)GetResWithName(type, res_all.res_job.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Job resource %s\n"), res_all.res_job.name());
+         return false;
+      } else {
+         res->res_job.messages = res_all.res_job.messages;
+         res->res_job.schedule = res_all.res_job.schedule;
+         res->res_job.client = res_all.res_job.client;
+         res->res_job.fileset = res_all.res_job.fileset;
+         res->res_job.storage = res_all.res_job.storage;
+         res->res_job.catalog = res_all.res_job.catalog;
+         res->res_job.FdPluginOptions = res_all.res_job.FdPluginOptions;
+         res->res_job.SdPluginOptions = res_all.res_job.SdPluginOptions;
+         res->res_job.DirPluginOptions = res_all.res_job.DirPluginOptions;
+         res->res_job.base = res_all.res_job.base;
+         res->res_job.pool = res_all.res_job.pool;
+         res->res_job.full_pool = res_all.res_job.full_pool;
+         res->res_job.vfull_pool = res_all.res_job.vfull_pool;
+         res->res_job.inc_pool = res_all.res_job.inc_pool;
+         res->res_job.diff_pool = res_all.res_job.diff_pool;
+         res->res_job.next_pool = res_all.res_job.next_pool;
+         res->res_job.verify_job = res_all.res_job.verify_job;
+         res->res_job.jobdefs = res_all.res_job.jobdefs;
+         res->res_job.run_cmds = res_all.res_job.run_cmds;
+         res->res_job.RunScripts = res_all.res_job.RunScripts;
+
+         /*
+          * TODO: JobDefs where/regexwhere doesn't work well (but this is not very useful)
+          * We have to set_bit(index, res_all.hdr.item_present); or something like that
+          *
+          * We take RegexWhere before all other options
+          */
+         if (!res->res_job.RegexWhere &&
+               (res->res_job.strip_prefix ||
+                res->res_job.add_suffix ||
+                res->res_job.add_prefix)) {
+            int len = bregexp_get_build_where_size(res->res_job.strip_prefix,
+                  res->res_job.add_prefix,
+                  res->res_job.add_suffix);
+            res->res_job.RegexWhere = (char *) bmalloc (len * sizeof(char));
+            bregexp_build_where(res->res_job.RegexWhere, len,
+                  res->res_job.strip_prefix,
+                  res->res_job.add_prefix,
+                  res->res_job.add_suffix);
+            /*
+             * TODO: test bregexp
+             */
+         }
+
+         if (res->res_job.RegexWhere && res->res_job.RestoreWhere) {
+            free(res->res_job.RestoreWhere);
+            res->res_job.RestoreWhere = NULL;
+         }
+
+         if (type == R_JOB) {
+            res->res_job.rjs = (runtime_job_status_t *)malloc(sizeof(runtime_job_status_t));
+            memset(res->res_job.rjs, 0, sizeof(runtime_job_status_t));
+         }
+      }
+      break;
+   case R_COUNTER:
+      if (!(res = (URES *)GetResWithName(R_COUNTER, res_all.res_counter.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Counter resource %s\n"), res_all.res_counter.name());
+         return false;
+      } else {
+         res->res_counter.Catalog = res_all.res_counter.Catalog;
+         res->res_counter.WrapCounter = res_all.res_counter.WrapCounter;
+      }
+      break;
+   case R_CLIENT:
+      if (!(res = (URES *)GetResWithName(R_CLIENT, res_all.res_client.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Client resource %s\n"), res_all.res_client.name());
+         return false;
+      } else {
+         if (res_all.res_client.catalog) {
+            res->res_client.catalog = res_all.res_client.catalog;
+         } else {
+            /*
+             * No catalog overwrite given use the first catalog definition.
+             */
+            res->res_client.catalog = (CATRES *)GetNextRes(R_CATALOG, NULL);
+         }
+         res->res_client.tls.allowed_cns = res_all.res_client.tls.allowed_cns;
+
+         res->res_client.rcs = (runtime_client_status_t *)malloc(sizeof(runtime_client_status_t));
+         memset(res->res_client.rcs, 0, sizeof(runtime_client_status_t));
+      }
+      break;
+   case R_SCHEDULE:
+      /*
+       * Schedule is a bit different in that it contains a RUNRES record
+       * chain which isn't a "named" resource. This chain was linked
+       * in by run_conf.c during pass 2, so here we jam the pointer
+       * into the Schedule resource.
+       */
+      if (!(res = (URES *)GetResWithName(R_SCHEDULE, res_all.res_client.name()))) {
+         Emsg1(M_ERROR, 0, _("Cannot find Schedule resource %s\n"), res_all.res_client.name());
+         return false;
+      } else {
+         res->res_sch.run = res_all.res_sch.run;
+      }
+      break;
+   default:
+      Emsg1(M_ERROR, 0, _("Unknown resource type %d in save_resource.\n"), type);
+      result = false;
+      break;
+   }
+
+   /*
+    * Note, the resource name was already saved during pass 1,
+    * so here, we can just release it.
+    */
+   if (res_all.res_dir.hdr.name) {
+      free(res_all.res_dir.hdr.name);
+      res_all.res_dir.hdr.name = NULL;
+   }
+
+   if (res_all.res_dir.hdr.desc) {
+      free(res_all.res_dir.hdr.desc);
+      res_all.res_dir.hdr.desc = NULL;
+   }
+
+   return result;
+}
+
 /*
  * Save the new resource by chaining it into the head list for
  * the resource. If this is pass 2, we update any resource
  * pointers because they may not have been defined until
  * later in pass 1.
  */
-void save_resource(int type, RES_ITEM *items, int pass)
+bool save_resource(int type, RES_ITEM *items, int pass)
 {
    URES *res;
    int rindex = type - R_FIRST;
-   bool error = false;
 
    switch (type) {
    case R_JOBDEFS:
@@ -2720,9 +2989,10 @@ void save_resource(int type, RES_ITEM *items, int pass)
        */
       if (items[0].flags & CFG_ITEM_REQUIRED) {
          if (!bit_is_set(0, res_all.res_dir.hdr.item_present)) {
-             Emsg2(M_ERROR_TERM, 0,
-                   _("%s item is required in %s resource, but not found.\n"),
-                   items[0].name, resources[rindex]);
+            Emsg2(M_ERROR, 0,
+                  _("%s item is required in %s resource, but not found.\n"),
+                  items[0].name, resources[rindex]);
+            return false;
          }
       }
       break;
@@ -2730,8 +3000,8 @@ void save_resource(int type, RES_ITEM *items, int pass)
       /*
        * Ensure that all required items are present
        */
-      if (!validate_resource(items, &res_all.res_dir, resources[rindex].name)) {
-         return;
+      if (!validate_resource(type, items, &res_all.res_dir)) {
+         return false;
       }
    }
 
@@ -2742,217 +3012,86 @@ void save_resource(int type, RES_ITEM *items, int pass)
     * record.
     */
    if (pass == 2) {
-      switch (type) {
-      case R_PROFILE:
-      case R_CATALOG:
-      case R_MSGS:
-      case R_FILESET:
-      case R_DEVICE:
-         /*
-          * Resources not containing a resource
-          */
-         break;
-      case R_POOL:
-         /*
-          * Resources containing another resource or alist. First
-          * look up the resource which contains another resource. It
-          * was written during pass 1.  Then stuff in the pointers to
-          * the resources it contains, which were inserted this pass.
-          * Finally, it will all be stored back.
-          *
-          * Find resource saved in pass 1
-          */
-         if (!(res = (URES *)GetResWithName(R_POOL, res_all.res_pool.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Pool resource %s\n"), res_all.res_pool.name());
-         } else {
-            /*
-             * Explicitly copy resource pointers from this pass (res_all)
-             */
-            res->res_pool.NextPool = res_all.res_pool.NextPool;
-            res->res_pool.RecyclePool = res_all.res_pool.RecyclePool;
-            res->res_pool.ScratchPool = res_all.res_pool.ScratchPool;
-            res->res_pool.storage = res_all.res_pool.storage;
-            if (res_all.res_pool.catalog || !res->res_pool.use_catalog) {
-               res->res_pool.catalog = res_all.res_pool.catalog;
-            }
-         }
-         break;
-      case R_CONSOLE:
-         if (!(res = (URES *)GetResWithName(R_CONSOLE, res_all.res_con.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Console resource %s\n"), res_all.res_con.name());
-         } else {
-            res->res_con.tls_allowed_cns = res_all.res_con.tls_allowed_cns;
-            res->res_con.profiles = res_all.res_con.profiles;
-         }
-         break;
-      case R_DIRECTOR:
-         if (!(res = (URES *)GetResWithName(R_DIRECTOR, res_all.res_dir.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Director resource %s\n"), res_all.res_dir.name());
-         } else {
-            res->res_dir.plugin_names = res_all.res_dir.plugin_names;
-            res->res_dir.messages = res_all.res_dir.messages;
-            res->res_dir.backend_directories = res_all.res_dir.backend_directories;
-            res->res_dir.tls_allowed_cns = res_all.res_dir.tls_allowed_cns;
-         }
-         break;
-      case R_STORAGE:
-         if (!(res = (URES *)GetResWithName(type, res_all.res_store.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Storage resource %s\n"), res_all.res_dir.name());
-         } else {
-            res->res_store.paired_storage = res_all.res_store.paired_storage;
-
-            /*
-             * We must explicitly copy the device alist pointer
-             */
-            res->res_store.device = res_all.res_store.device;
-         }
-         break;
-      case R_JOBDEFS:
-      case R_JOB:
-         if (!(res = (URES *)GetResWithName(type, res_all.res_job.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Job resource %s\n"), res_all.res_job.name());
-         } else {
-            res->res_job.messages = res_all.res_job.messages;
-            res->res_job.schedule = res_all.res_job.schedule;
-            res->res_job.client = res_all.res_job.client;
-            res->res_job.fileset = res_all.res_job.fileset;
-            res->res_job.storage = res_all.res_job.storage;
-            res->res_job.catalog = res_all.res_job.catalog;
-            res->res_job.FdPluginOptions = res_all.res_job.FdPluginOptions;
-            res->res_job.SdPluginOptions = res_all.res_job.SdPluginOptions;
-            res->res_job.DirPluginOptions = res_all.res_job.DirPluginOptions;
-            res->res_job.base = res_all.res_job.base;
-            res->res_job.pool = res_all.res_job.pool;
-            res->res_job.full_pool = res_all.res_job.full_pool;
-            res->res_job.vfull_pool = res_all.res_job.vfull_pool;
-            res->res_job.inc_pool = res_all.res_job.inc_pool;
-            res->res_job.diff_pool = res_all.res_job.diff_pool;
-            res->res_job.next_pool = res_all.res_job.next_pool;
-            res->res_job.verify_job = res_all.res_job.verify_job;
-            res->res_job.jobdefs = res_all.res_job.jobdefs;
-            res->res_job.run_cmds = res_all.res_job.run_cmds;
-            res->res_job.RunScripts = res_all.res_job.RunScripts;
-
-            /*
-             * TODO: JobDefs where/regexwhere doesn't work well (but this is not very useful)
-             * We have to set_bit(index, res_all.hdr.item_present); or something like that
-             *
-             * We take RegexWhere before all other options
-             */
-            if (!res->res_job.RegexWhere &&
-                (res->res_job.strip_prefix ||
-                 res->res_job.add_suffix ||
-                 res->res_job.add_prefix)) {
-               int len = bregexp_get_build_where_size(res->res_job.strip_prefix,
-                                                      res->res_job.add_prefix,
-                                                      res->res_job.add_suffix);
-               res->res_job.RegexWhere = (char *) bmalloc (len * sizeof(char));
-               bregexp_build_where(res->res_job.RegexWhere, len,
-                                   res->res_job.strip_prefix,
-                                   res->res_job.add_prefix,
-                                   res->res_job.add_suffix);
-               /*
-                * TODO: test bregexp
-                */
-            }
-
-            if (res->res_job.RegexWhere && res->res_job.RestoreWhere) {
-               free(res->res_job.RestoreWhere);
-               res->res_job.RestoreWhere = NULL;
-            }
-         }
-         break;
-      case R_COUNTER:
-         if (!(res = (URES *)GetResWithName(R_COUNTER, res_all.res_counter.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Counter resource %s\n"), res_all.res_counter.name());
-         } else {
-            res->res_counter.Catalog = res_all.res_counter.Catalog;
-            res->res_counter.WrapCounter = res_all.res_counter.WrapCounter;
-         }
-         break;
-      case R_CLIENT:
-         if (!(res = (URES *)GetResWithName(R_CLIENT, res_all.res_client.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Client resource %s\n"), res_all.res_client.name());
-         } else {
-            if (res_all.res_client.catalog) {
-               res->res_client.catalog = res_all.res_client.catalog;
-            } else {
-               /*
-                * No catalog overwrite given use the first catalog definition.
-                */
-               res->res_client.catalog = (CATRES *)GetNextRes(R_CATALOG, NULL);
-            }
-            res->res_client.tls_allowed_cns = res_all.res_client.tls_allowed_cns;
-         }
-         break;
-      case R_SCHEDULE:
-         /*
-          * Schedule is a bit different in that it contains a RUNRES record
-          * chain which isn't a "named" resource. This chain was linked
-          * in by run_conf.c during pass 2, so here we jam the pointer
-          * into the Schedule resource.
-          */
-         if (!(res = (URES *)GetResWithName(R_SCHEDULE, res_all.res_client.name()))) {
-            Emsg1(M_ERROR_TERM, 0, _("Cannot find Schedule resource %s\n"), res_all.res_client.name());
-         } else {
-            res->res_sch.run = res_all.res_sch.run;
-         }
-         break;
-      default:
-         Emsg1(M_ERROR, 0, _("Unknown resource type %d in save_resource.\n"), type);
-         error = true;
-         break;
-      }
-
-      /*
-       * Note, the resource name was already saved during pass 1,
-       * so here, we can just release it.
-       */
-      if (res_all.res_dir.hdr.name) {
-         free(res_all.res_dir.hdr.name);
-         res_all.res_dir.hdr.name = NULL;
-      }
-
-      if (res_all.res_dir.hdr.desc) {
-         free(res_all.res_dir.hdr.desc);
-         res_all.res_dir.hdr.desc = NULL;
-      }
-
-      return;
+      return update_resource_pointer(type, items);
    }
 
    /*
     * Common
     */
-   if (!error) {
-      res = (URES *)malloc(resources[rindex].size);
-      memcpy(res, &res_all, resources[rindex].size);
-      if (!res_head[rindex]) {
-         res_head[rindex] = (RES *)res; /* store first entry */
-         Dmsg3(900, "Inserting first %s res: %s index=%d\n", res_to_str(type),
-               res->res_dir.name(), rindex);
-      } else {
-         RES *next, *last;
-         if (!res->res_dir.name()) {
-            Emsg1(M_ERROR_TERM, 0, _("Name item is required in %s resource, but not found.\n"),
-                  resources[rindex]);
-         }
-         /*
-          * Add new res to end of chain
-          */
-         for (last = next = res_head[rindex]; next; next = next->next) {
-            last = next;
-            if (bstrcmp(next->name, res->res_dir.name())) {
-               Emsg2(M_ERROR_TERM, 0,
+   res = (URES *)malloc(resources[rindex].size);
+   memcpy(res, &res_all, resources[rindex].size);
+   if (!res_head[rindex]) {
+      res_head[rindex] = (RES *)res; /* store first entry */
+      Dmsg3(900, "Inserting first %s res: %s index=%d\n", res_to_str(type),
+            res->res_dir.name(), rindex);
+   } else {
+      RES *next, *last;
+      if (!res->res_dir.name()) {
+         Emsg1(M_ERROR, 0, _("Name item is required in %s resource, but not found.\n"),
+               resources[rindex]);
+         return false;
+      }
+      /*
+       * Add new res to end of chain
+       */
+      for (last = next = res_head[rindex]; next; next = next->next) {
+         last = next;
+         if (bstrcmp(next->name, res->res_dir.name())) {
+            Emsg2(M_ERROR, 0,
                   _("Attempt to define second %s resource named \"%s\" is not permitted.\n"),
                   resources[rindex].name, res->res_dir.name());
-            }
+            return false;
          }
-         last->next = (RES *)res;
-         Dmsg4(900, _("Inserting %s res: %s index=%d pass=%d\n"), res_to_str(type),
-               res->res_dir.name(), rindex, pass);
+      }
+      last->next = (RES *)res;
+      Dmsg4(900, _("Inserting %s res: %s index=%d pass=%d\n"), res_to_str(type),
+            res->res_dir.name(), rindex, pass);
+   }
+   return true;
+}
+
+bool propagate_jobdefs(int res_type, JOBRES *res)
+{
+   JOBRES *jobdefs = NULL;
+
+   if (!res->jobdefs) {
+      return true;
+   }
+
+   /*
+    * Don't allow the JobDefs pointing to itself.
+    */
+   if (res->jobdefs == res) {
+      return false;
+   }
+
+   if (res_type == R_JOB) {
+      jobdefs = res->jobdefs;
+
+      /*
+       * Handle RunScripts alists specifically
+       */
+      if (jobdefs->RunScripts) {
+         RUNSCRIPT *rs, *elt;
+
+         if (!res->RunScripts) {
+            res->RunScripts = New(alist(10, not_owned_by_alist));
+         }
+
+         foreach_alist(rs, jobdefs->RunScripts) {
+            elt = copy_runscript(rs);
+            elt->from_jobdef = true;
+            res->RunScripts->append(elt); /* we have to free it */
+         }
       }
    }
+
+   /*
+    * Transfer default items from JobDefs Resource
+    */
+   propagate_resource(job_items, res->jobdefs, res);
+
+   return true;
 }
 
 /*
@@ -2967,89 +3106,23 @@ static inline bool populate_jobdefs()
     * Propagate the content of a JobDefs to another.
     */
    foreach_res(jobdefs, R_JOBDEFS) {
-      /*
-       * Don't allow the JobDefs pointing to itself.
-       */
-      if (!jobdefs->jobdefs || jobdefs->jobdefs == jobdefs) {
-         continue;
-      }
-
-      propagate_resource(job_items, jobdefs->jobdefs, jobdefs);
+      propagate_jobdefs(R_JOBDEFS, jobdefs);
    }
 
    /*
     * Propagate the content of the JobDefs to the actual Job.
     */
    foreach_res(job, R_JOB) {
-      if (job->jobdefs) {
-         jobdefs = job->jobdefs;
-
-         /*
-          * Handle RunScripts alists specifically
-          */
-         if (jobdefs->RunScripts) {
-            RUNSCRIPT *rs, *elt;
-
-            if (!job->RunScripts) {
-               job->RunScripts = New(alist(10, not_owned_by_alist));
-            }
-
-            foreach_alist(rs, jobdefs->RunScripts) {
-               elt = copy_runscript(rs);
-               elt->from_jobdef = true;
-               job->RunScripts->append(elt); /* we have to free it */
-            }
-         }
-
-         /*
-          * Transfer default items from JobDefs Resource
-          */
-         propagate_resource(job_items, jobdefs, job);
-      }
+      propagate_jobdefs(R_JOB, job);
 
       /*
        * Ensure that all required items are present
        */
-      if (!validate_resource(job_items, job, "Job")) {
+      if (!validate_resource(R_JOB, job_items, job)) {
          retval = false;
          goto bail_out;
       }
 
-      /*
-       * For Copy and Migrate we can have Jobs without a client or fileset.
-       * As for a copy we use the original Job as a reference for the Read storage
-       * we also don't need to check if there is an explicit storage definition in
-       * either the Job or the Read pool.
-       */
-      switch (job->JobType) {
-      case JT_COPY:
-      case JT_MIGRATE:
-         break;
-      default:
-         /*
-          * All others must have a client and fileset.
-          */
-         if (!job->client) {
-            Jmsg(NULL, M_ERROR_TERM, 0,
-                 _("\"client\" directive in Job \"%s\" resource is required, but not found.\n"), job->name());
-            retval = false;
-            goto bail_out;
-         }
-
-         if (!job->fileset) {
-            Jmsg(NULL, M_ERROR_TERM, 0,
-                 _("\"fileset\" directive in Job \"%s\" resource is required, but not found.\n"), job->name());
-            retval = false;
-            goto bail_out;
-         }
-
-         if (!job->storage && !job->pool->storage) {
-            Jmsg(NULL, M_FATAL, 0, _("No storage specified in Job \"%s\" nor in Pool.\n"), job->name());
-            retval = false;
-            goto bail_out;
-         }
-         break;
-      }
    } /* End loop over Job res */
 
 bail_out:
@@ -3058,15 +3131,7 @@ bail_out:
 
 bool populate_defs()
 {
-   bool retval;
-
-   retval = populate_jobdefs();
-   if (!retval) {
-      goto bail_out;
-   }
-
-bail_out:
-   return retval;
+   return populate_jobdefs();
 }
 
 static void store_pooltype(LEX *lc, RES_ITEM *item, int index, int pass)
@@ -3920,7 +3985,7 @@ static void parse_config_cb(LEX *lc, RES_ITEM *item, int index, int pass)
  * callback function for print_config
  * See ../lib/res.c, function BRSRES::print_config, for more generic handling.
  */
-static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide_sensitive_data)
+static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide_sensitive_data, bool inherited)
 {
    POOL_MEM temp;
 
@@ -3937,7 +4002,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
       list = *(items[i].alistvalue);
       if (list != NULL) {
          Mmsg(temp, "%s = ", items[i].name);
-         indent_config_item(cfg_str, 1, temp.c_str());
+         indent_config_item(cfg_str, 1, temp.c_str(), inherited);
 
          pm_strcpy(res_names, "");
          foreach_alist(res, list) {
@@ -3973,7 +4038,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
       list = items[i].alistvalue[items[i].code];
       if (list != NULL) {
          Mmsg(temp, "%s = ", items[i].name);
-         indent_config_item(cfg_str, 1, temp.c_str());
+         indent_config_item(cfg_str, 1, temp.c_str(), inherited);
          foreach_alist(value, list) {
             if (cnt) {
                Mmsg(temp, ",\"%s\"", value);
@@ -3999,7 +4064,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; jobtypes[j].type_name; j++) {
             if (jobtypes[j].job_type == jobtype) {
                Mmsg(temp, "%s = %s\n", items[i].name, jobtypes[j].type_name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4022,7 +4087,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
                }
 
                Mmsg(temp, "%s = %s\n", items[i].name, backupprotocols[j].name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4036,7 +4101,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; migtypes[j].type_name; j++) {
             if (migtypes[j].job_type == migtype) {
                Mmsg(temp, "%s = %s\n", items[i].name, migtypes[j].type_name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4059,7 +4124,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
                }
 
                Mmsg(temp, "%s = %s\n", items[i].name, ReplaceOptions[j].name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4073,7 +4138,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; joblevels[j].level_name; j++) {
             if (joblevels[j].level == level) {
                Mmsg(temp, "%s = %s\n", items[i].name, joblevels[j].level_name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4087,7 +4152,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; ActionOnPurgeOptions[j].name; j++) {
             if (ActionOnPurgeOptions[j].token == action) {
                Mmsg(temp, "%s = %s\n", items[i].name, ActionOnPurgeOptions[j].name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4101,7 +4166,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; authprotocols[j].name; j++) {
             if (authprotocols[j].token == authprotocol) {
                Mmsg(temp, "%s = %s\n", items[i].name, authprotocols[j].name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4115,7 +4180,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
          for (int j = 0; authmethods[j].name; j++) {
             if (authprotocols[j].token == authtype) {
                Mmsg(temp, "%s = %s\n", items[i].name, authmethods[j].name);
-               indent_config_item(cfg_str, 1, temp.c_str());
+               indent_config_item(cfg_str, 1, temp.c_str(), inherited);
                break;
             }
          }
@@ -4134,7 +4199,7 @@ static void print_config_cb(RES_ITEM *items, int i, POOL_MEM &cfg_str, bool hide
       list = *(items[i].alistvalue);
       if (list != NULL) {
          Mmsg(temp, "%s = ", items[i].name);
-         indent_config_item(cfg_str, 1, temp.c_str());
+         indent_config_item(cfg_str, 1, temp.c_str(), inherited);
 
          pm_strcpy(audit_events, "");
          foreach_alist(audit_event, list) {
@@ -4177,6 +4242,8 @@ void init_dir_config(CONFIG *config, const char *configfile, int exit_code)
                 R_LAST,
                 resources,
                 res_head);
+   config->set_default_config_filename(CONFIG_FILE);
+   config->set_config_include_dir("bareos-dir.d");
 }
 
 bool parse_dir_config(CONFIG *config, const char *configfile, int exit_code)

@@ -95,7 +95,7 @@ typedef enum {
    bsdEventDeviceInit = 3,
    bsdEventDeviceMount = 4,
    bsdEventVolumeLoad = 5,
-   bsdEventDeviceTryOpen = 6,
+   bsdEventDeviceReserve = 6,
    bsdEventDeviceOpen = 7,
    bsdEventLabelRead = 8,
    bsdEventLabelVerified = 9,
@@ -110,11 +110,13 @@ typedef enum {
    bsdEventSetupRecordTranslation = 18,
    bsdEventReadRecordTranslation = 19,
    bsdEventWriteRecordTranslation = 20,
-   bsdEventDeviceReleased = 21,
-   bsdEventNewPluginOptions = 22
+   bsdEventDeviceRelease = 21,
+   bsdEventNewPluginOptions = 22,
+   bsdEventChangerLock = 23,
+   bsdEventChangerUnlock = 24
 } bsdEventType;
 
-#define SD_NR_EVENTS bsdEventNewPluginOptions /* keep this updated ! */
+#define SD_NR_EVENTS bsdEventChangerUnlock /* keep this updated ! */
 
 typedef struct s_bsdEvent {
    uint32_t eventType;
@@ -139,13 +141,15 @@ typedef struct s_sdbareosFuncs {
    uint32_t size;
    uint32_t version;
    bRC (*registerBareosEvents)(bpContext *ctx, int nr_events, ...);
+   bRC (*unregisterBareosEvents)(bpContext *ctx, int nr_events, ...);
+   bRC (*getInstanceCount)(bpContext *ctx, int *ret);
    bRC (*getBareosValue)(bpContext *ctx, bsdrVariable var, void *value);
    bRC (*setBareosValue)(bpContext *ctx, bsdwVariable var, void *value);
    bRC (*JobMessage)(bpContext *ctx, const char *file, int line,
                      int type, utime_t mtime, const char *fmt, ...);
    bRC (*DebugMessage)(bpContext *ctx, const char *file, int line,
                        int level, const char *fmt, ...);
-   char *(*EditDeviceCodes)(DCR *dcr, char *omsg,
+   char *(*EditDeviceCodes)(DCR *dcr, POOLMEM *&omsg,
                             const char *imsg, const char *cmd);
    char *(*LookupCryptoKey)(const char *VolumeName);
    bool (*UpdateVolumeInfo)(DCR *dcr);
@@ -165,7 +169,7 @@ int list_sd_plugins(POOL_MEM &msg);
 void dispatch_new_plugin_options(JCR *jcr);
 void new_plugins(JCR *jcr);
 void free_plugins(JCR *jcr);
-int generate_plugin_event(JCR *jcr, bsdEventType event,
+bRC generate_plugin_event(JCR *jcr, bsdEventType event,
                           void *value = NULL, bool reverse = false);
 #endif
 
@@ -181,7 +185,7 @@ typedef enum {
 } psdVariable;
 
 #define SD_PLUGIN_MAGIC     "*SDPluginData*"
-#define SD_PLUGIN_INTERFACE_VERSION  3
+#define SD_PLUGIN_INTERFACE_VERSION  4
 
 /*
  * Functions that must be defined in every plugin

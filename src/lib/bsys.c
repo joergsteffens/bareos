@@ -243,8 +243,8 @@ char *bstrinlinecpy(char *dest, const char *src)
  */
 char *bstrncpy(char *dest, const char *src, int maxlen)
 {
-   strncpy(dest, src, maxlen-1);
-   dest[maxlen-1] = 0;
+   strncpy(dest, src, maxlen - 1);
+   dest[maxlen - 1] = 0;
    return dest;
 }
 
@@ -253,8 +253,8 @@ char *bstrncpy(char *dest, const char *src, int maxlen)
  */
 char *bstrncpy(char *dest, POOL_MEM &src, int maxlen)
 {
-   strncpy(dest, src.c_str(), maxlen-1);
-   dest[maxlen-1] = 0;
+   strncpy(dest, src.c_str(), maxlen - 1);
+   dest[maxlen - 1] = 0;
    return dest;
 }
 
@@ -266,10 +266,10 @@ char *bstrncpy(char *dest, POOL_MEM &src, int maxlen)
 char *bstrncat(char *dest, const char *src, int maxlen)
 {
    int len = strlen(dest);
-   if (len < maxlen-1) {
-      strncpy(dest+len, src, maxlen-len-1);
+   if (len < maxlen - 1) {
+      strncpy(dest + len, src, maxlen - len - 1);
    }
-   dest[maxlen-1] = 0;
+   dest[maxlen - 1] = 0;
    return dest;
 }
 
@@ -281,10 +281,10 @@ char *bstrncat(char *dest, const char *src, int maxlen)
 char *bstrncat(char *dest, POOL_MEM &src, int maxlen)
 {
    int len = strlen(dest);
-   if (len < maxlen-1) {
-      strncpy(dest+len, src.c_str(), maxlen-len-1);
+   if (len < maxlen - 1) {
+      strncpy(dest + len, src.c_str(), maxlen - (len + 1));
    }
-   dest[maxlen-1] = 0;
+   dest[maxlen - 1] = 0;
    return dest;
 }
 
@@ -469,7 +469,7 @@ int bvsnprintf(char *str, int32_t size, const char  *format, va_list ap)
 #ifdef HAVE_VSNPRINTF
    int len;
    len = vsnprintf(str, size, format, ap);
-   str[size-1] = 0;
+   str[size - 1] = 0;
    return len;
 
 #else
@@ -582,7 +582,7 @@ void create_pid_file(char *dir, const char *progname, int port)
    POOLMEM *fname = get_pool_memory(PM_FNAME);
    struct stat statp;
 
-   Mmsg(&fname, "%s/%s.%d.pid", dir, progname, port);
+   Mmsg(fname, "%s/%s.%d.pid", dir, progname, port);
    if (stat(fname, &statp) == 0) {
       /* File exists, see what we have */
       *pidbuf = 0;
@@ -651,7 +651,7 @@ int delete_pid_file(char *dir, const char *progname, int port)
       return 0;
    }
    del_pid_file_ok = false;
-   Mmsg(&fname, "%s/%s.%d.pid", dir, progname, port);
+   Mmsg(fname, "%s/%s.%d.pid", dir, progname, port);
    unlink(fname);
    free_pool_memory(fname);
 #endif
@@ -683,7 +683,7 @@ void read_state_file(char *dir, const char *progname, int port)
    struct s_state_hdr hdr;
    int hdr_size = sizeof(hdr);
 
-   Mmsg(&fname, "%s/%s.%d.state", dir, progname, port);
+   Mmsg(fname, "%s/%s.%d.state", dir, progname, port);
    /*
     * If file exists, see what we have
     */
@@ -738,7 +738,7 @@ void write_state_file(char *dir, const char *progname, int port)
    POOLMEM *fname = get_pool_memory(PM_FNAME);
 
    P(state_mutex);                    /* Only one job at a time can call here */
-   Mmsg(&fname, "%s/%s.%d.state", dir, progname, port);
+   Mmsg(fname, "%s/%s.%d.state", dir, progname, port);
 
    /*
     * Create new state file
@@ -746,7 +746,6 @@ void write_state_file(char *dir, const char *progname, int port)
    secure_erase(NULL, fname);
    if ((sfd = open(fname, O_CREAT|O_WRONLY|O_BINARY, 0640)) < 0) {
       berrno be;
-      Dmsg2(000, "Could not create state file. %s ERR=%s\n", fname, be.bstrerror());
       Emsg2(M_ERROR, 0, _("Could not create state file. %s ERR=%s\n"), fname, be.bstrerror());
       goto bail_out;
    }
@@ -802,7 +801,7 @@ char *bfgets(char *s, int size, FILE *fd)
    char *p = s;
    int ch;
    *p = 0;
-   for (int i=0; i < size-1; i++) {
+   for (int i = 0; i < size - 1; i++) {
       do {
          errno = 0;
          ch = fgetc(fd);
@@ -872,7 +871,7 @@ char *bfgets(POOLMEM *&s, FILE *fd)
          if (ch != '\n') { /* Mac (\r only) */
             (void)ungetc(ch, fd); /* Push next character back to fd */
          }
-         s[i-1] = '\n';
+         s[i - 1] = '\n';
          break;
       }
       if (ch == '\n') {
@@ -889,7 +888,7 @@ char *bfgets(POOLMEM *&s, FILE *fd)
  *   without saving its name, and re-generate the name
  *   so that it can be deleted.
  */
-void make_unique_filename(POOLMEM **name, int Id, char *what)
+void make_unique_filename(POOLMEM *&name, int Id, char *what)
 {
    Mmsg(name, "%s/%s.%s.%d.tmp", working_directory, my_name, what, Id);
 }
@@ -914,6 +913,267 @@ char *escape_filename(const char *file_path)
    *cur_char = '\0';
 
    return escaped_path;
+}
+
+bool path_exists(const char *path)
+{
+   struct stat statp;
+
+   if (!path || !strlen(path)) {
+      return false;
+   }
+
+   return (stat(path, &statp) == 0);
+}
+
+bool path_exists(POOL_MEM &path)
+{
+   return path_exists(path.c_str());
+}
+
+bool path_is_directory(const char *path)
+{
+   struct stat statp;
+
+   if (!path || !strlen(path)) {
+      return false;
+   }
+
+   if (stat(path, &statp) == 0) {
+      return (S_ISDIR(statp.st_mode));
+   } else {
+      return false;
+   }
+}
+
+bool path_is_directory(POOL_MEM &path)
+{
+   return path_is_directory(path.c_str());
+}
+
+bool path_is_absolute(const char *path)
+{
+   if (!path || !strlen(path)) {
+      /*
+       * No path: not an absolute path
+       */
+      return false;
+   }
+
+   /*
+    * Is path absolute?
+    */
+   if (IsPathSeparator(path[0])) {
+      return true;
+   }
+
+#ifdef HAVE_WIN32
+   /*
+    * Windows:
+    * Does path begin with drive? if yes, it is absolute
+    */
+   if (strlen(path) >= 3) {
+      if (isalpha(path[0]) && path[1] == ':' && IsPathSeparator(path[2])) {
+         return true;
+      }
+   }
+#endif
+
+   return false;
+}
+
+bool path_is_absolute(POOL_MEM &path)
+{
+   return path_is_absolute(path.c_str());
+}
+
+/*
+ * Get directory from path.
+ */
+bool path_get_directory(POOL_MEM &directory, POOL_MEM &path)
+{
+   char *dir = NULL;
+   int i = path.strlen();
+
+   directory.strcpy(path);
+   if (!path_is_directory(directory)) {
+      dir = directory.addr();
+      while ((!IsPathSeparator(dir[i])) && (i > 0)) {
+         dir[i] = 0;
+         i--;
+      }
+   }
+
+   if (path_is_directory(directory)) {
+      /*
+       * Make sure, path ends with path separator
+       */
+      path_append(directory, "");
+      return true;
+   }
+
+   return false;
+}
+
+bool path_append(char *path, const char *extra, unsigned int max_path)
+{
+   unsigned int path_len;
+   unsigned int required_length;
+
+   if (!path || !extra) {
+      return true;
+   }
+
+   path_len = strlen(path);
+   required_length = path_len + 1 + strlen(extra);
+   if (required_length > max_path) {
+      return false;
+   }
+
+   /*
+    * Add path separator after original path if missing.
+    */
+   if (!IsPathSeparator(path[path_len - 1])) {
+      path[path_len] = PathSeparator;
+      path_len++;
+   }
+
+   memcpy(path + path_len, extra, strlen(extra) + 1);
+
+   return true;
+}
+
+bool path_append(POOL_MEM &path, const char *extra)
+{
+   unsigned int required_length;
+
+   if (!extra) {
+      return true;
+   }
+
+   required_length = path.strlen() + 1 + strlen(extra);
+   if (!path.check_size(required_length)) {
+      return false;
+   }
+
+   return path_append(path.c_str(), extra, required_length);
+}
+
+/*
+ * Append to paths together.
+ */
+bool path_append(POOL_MEM &path, POOL_MEM &extra)
+{
+   return path_append(path, extra.c_str());
+}
+
+/*
+ * based on
+ * src/findlib/mkpath.c:bool makedir(...)
+ */
+static bool path_mkdir(char *path, mode_t mode)
+{
+   if (path_exists(path)) {
+      Dmsg1(500, "skipped, path %s already exists.\n", path);
+      return path_is_directory(path);
+   }
+
+   if (mkdir(path, mode) != 0) {
+      berrno be;
+      Emsg2(M_ERROR, 0, "Falied to create directory %s: ERR=%s\n",
+              path, be.bstrerror());
+      return false;
+   }
+
+   return true;
+}
+
+/*
+ * based on
+ * src/findlib/mkpath.c:bool makepath(ATTR *attr, const char *apath, mode_t mode, mode_t parent_mode, ...
+ */
+bool path_create(const char *apath, mode_t mode)
+{
+   char *p;
+   int len;
+   bool ok = false;
+   struct stat statp;
+   char *path = NULL;
+
+   if (stat(apath, &statp) == 0) {     /* Does dir exist? */
+      if (!S_ISDIR(statp.st_mode)) {
+         Emsg1(M_ERROR, 0, "%s exists but is not a directory.\n", path);
+         return false;
+      }
+      return true;
+   }
+
+   len = strlen(apath);
+   path = (char *)alloca(len + 1);
+   bstrncpy(path, apath, len + 1);
+   strip_trailing_slashes(path);
+
+#if defined(HAVE_WIN32)
+   /*
+    * Validate drive letter
+    */
+   if (path[1] == ':') {
+      char drive[4] = "X:\\";
+
+      drive[0] = path[0];
+
+      UINT drive_type = GetDriveType(drive);
+
+      if (drive_type == DRIVE_UNKNOWN || drive_type == DRIVE_NO_ROOT_DIR) {
+         Emsg1(M_ERROR, 0, "%c: is not a valid drive.\n", path[0]);
+         goto bail_out;
+      }
+
+      if (path[2] == '\0') {          /* attempt to create a drive */
+         ok = true;
+         goto bail_out;               /* OK, it is already there */
+      }
+
+      p = &path[3];
+   } else {
+      p = path;
+   }
+#else
+   p = path;
+#endif
+
+   /*
+    * Skip leading slash(es)
+    */
+   while (IsPathSeparator(*p)) {
+      p++;
+   }
+   while ((p = first_path_separator(p))) {
+      char save_p;
+      save_p = *p;
+      *p = 0;
+      if (!path_mkdir(path, mode)) {
+         goto bail_out;
+      }
+      *p = save_p;
+      while (IsPathSeparator(*p)) {
+         p++;
+      }
+   }
+
+   if (!path_mkdir(path, mode)) {
+      goto bail_out;
+   }
+
+   ok = true;
+
+bail_out:
+   return ok;
+}
+
+bool path_create(POOL_MEM &path, mode_t mode)
+{
+   return path_create(path.c_str(), mode);
 }
 
 /*

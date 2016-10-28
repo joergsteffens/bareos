@@ -250,6 +250,8 @@ const char *JCR::get_OperationName()
       return _("Migration");
    case JT_SCAN:
       return _("Scanning");
+   case JT_CONSOLIDATE:
+      return _("Consolidating");
    default:
       return _("Unknown operation");
    }
@@ -275,6 +277,8 @@ const char *JCR::get_ActionName(bool past)
       return (past) ? _("migrated") : _("migrate");
    case JT_SCAN:
       return (past) ? _("scanned") : _("scan");
+   case JT_CONSOLIDATE:
+      return (past) ? _("consolidated") : _("consolidate");
    default:
       return _("unknown action");
    }
@@ -300,25 +304,34 @@ bool JCR::JobReads()
 }
 
 /*
- * Push a subroutine address into the job end callback stack
+ * Push a job_push_item onto the job end callback stack.
  */
-void job_end_push(JCR *jcr, void job_end_cb(JCR *jcr,void *), void *ctx)
+void job_end_push(JCR *jcr, void job_end_cb(JCR *jcr, void *), void *ctx)
 {
-   jcr->job_end_push.append((void *)job_end_cb);
-   jcr->job_end_push.append(ctx);
+   job_push_item *item;
+
+   item = (job_push_item *)malloc(sizeof(job_push_item));
+
+   item->job_end_cb = job_end_cb;
+   item->ctx = ctx;
+
+   jcr->job_end_push.push((void *)item);
 }
 
 /*
- * Pop each job_end subroutine and call it
+ * Pop each job_push_item and process it.
  */
 static void job_end_pop(JCR *jcr)
 {
-   void (*job_end_cb)(JCR *jcr, void *ctx);
-   void *ctx;
-   for (int i=jcr->job_end_push.size()-1; i > 0; ) {
-      ctx = jcr->job_end_push.get(i--);
-      job_end_cb = (void (*)(JCR *,void *))jcr->job_end_push.get(i--);
-      job_end_cb(jcr, ctx);
+   job_push_item *item;
+
+   if (jcr->job_end_push.size() > 0) {
+      item = (job_push_item *)jcr->job_end_push.pop();
+      while (item) {
+         item->job_end_cb(jcr, item->ctx);
+         free(item);
+         item = (job_push_item *)jcr->job_end_push.pop();
+      }
    }
 }
 
@@ -979,10 +992,15 @@ void JCR::setJobStarted()
 
 void JCR::setJobStatus(int newJobStatus)
 {
-   int priority, old_priority;
-   int oldJobStatus = JobStatus;
+   int priority;
+   int old_priority = 0;
+   int oldJobStatus = ' ';
+
+   if (JobStatus) {
+      oldJobStatus = JobStatus;
+      old_priority = get_status_priority(oldJobStatus);
+   }
    priority = get_status_priority(newJobStatus);
-   old_priority = get_status_priority(oldJobStatus);
 
    Dmsg2(800, "set_jcr_job_status(%s, %c)\n", Job, newJobStatus);
 
@@ -1005,7 +1023,7 @@ void JCR::setJobStatus(int newJobStatus)
    if (priority > old_priority || (
        priority == 0 && old_priority == 0)) {
       Dmsg4(800, "Set new stat. old: %c,%d new: %c,%d\n",
-            JobStatus, old_priority, newJobStatus, priority);
+            oldJobStatus, old_priority, newJobStatus, priority);
       JobStatus = newJobStatus;     /* replace with new status */
    }
 

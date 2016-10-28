@@ -3,7 +3,29 @@
 /usr/lib/bareos/scripts/make_catalog_backup
 /usr/lib/bareos/scripts/make_catalog_backup.pl
 /usr/lib/bareos/scripts/query.sql
-/etc/bareos/bareos-dir.conf    /usr/lib/bareos/defaultconfigs
+/etc/bareos/bareos-dir.d/catalog/MyCatalog.conf                /usr/lib/bareos/defaultconfigs/bareos-dir.d/catalog/
+/etc/bareos/bareos-dir.d/client/bareos-fd.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/client/
+/etc/bareos/bareos-dir.d/console/bareos-mon.conf               /usr/lib/bareos/defaultconfigs/bareos-dir.d/console/
+/etc/bareos/bareos-dir.d/director/bareos-dir.conf              /usr/lib/bareos/defaultconfigs/bareos-dir.d/director/
+/etc/bareos/bareos-dir.d/fileset/Catalog.conf                  /usr/lib/bareos/defaultconfigs/bareos-dir.d/fileset/
+/etc/bareos/bareos-dir.d/fileset/LinuxAll.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/fileset/
+/etc/bareos/bareos-dir.d/fileset/SelfTest.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/fileset/
+/etc/bareos/bareos-dir.d/fileset/Windows?All?Drives.conf       /usr/lib/bareos/defaultconfigs/bareos-dir.d/fileset/
+/etc/bareos/bareos-dir.d/job/backup-bareos-fd.conf             /usr/lib/bareos/defaultconfigs/bareos-dir.d/job/
+/etc/bareos/bareos-dir.d/job/BackupCatalog.conf                /usr/lib/bareos/defaultconfigs/bareos-dir.d/job/
+/etc/bareos/bareos-dir.d/job/RestoreFiles.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/job/
+/etc/bareos/bareos-dir.d/jobdefs/DefaultJob.conf               /usr/lib/bareos/defaultconfigs/bareos-dir.d/jobdefs/
+/etc/bareos/bareos-dir.d/messages/Daemon.conf                  /usr/lib/bareos/defaultconfigs/bareos-dir.d/messages/
+/etc/bareos/bareos-dir.d/messages/Standard.conf                /usr/lib/bareos/defaultconfigs/bareos-dir.d/messages/
+/etc/bareos/bareos-dir.d/pool/Differential.conf                /usr/lib/bareos/defaultconfigs/bareos-dir.d/pool/
+/etc/bareos/bareos-dir.d/pool/Full.conf                        /usr/lib/bareos/defaultconfigs/bareos-dir.d/pool/
+/etc/bareos/bareos-dir.d/pool/Incremental.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/pool/
+/etc/bareos/bareos-dir.d/pool/Scratch.conf                     /usr/lib/bareos/defaultconfigs/bareos-dir.d/pool/
+/etc/bareos/bareos-dir.d/profile/operator.conf                 /usr/lib/bareos/defaultconfigs/bareos-dir.d/profile/
+/etc/bareos/bareos-dir.d/schedule/WeeklyCycleAfterBackup.conf  /usr/lib/bareos/defaultconfigs/bareos-dir.d/schedule/
+/etc/bareos/bareos-dir.d/schedule/WeeklyCycle.conf             /usr/lib/bareos/defaultconfigs/bareos-dir.d/schedule/
+/etc/bareos/bareos-dir.d/storage/File.conf                     /usr/lib/bareos/defaultconfigs/bareos-dir.d/storage/
+/etc/bareos/tray-monitor.d/director/Director-local*.conf       /usr/lib/bareos/defaultconfigs/tray-monitor.d/director/
 /usr/sbin/bareos-dir
 /usr/share/man/man8/bareos-dir.8.gz
 /usr/share/man/man8/bareos.8.gz

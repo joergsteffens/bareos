@@ -1,5 +1,10 @@
 /usr/lib/bareos/plugins/autoxflate-sd.so
 /usr/lib/bareos/scripts/disk-changer
-/etc/bareos/bareos-sd.conf     /usr/lib/bareos/defaultconfigs
+/etc/bareos/bareos-sd.d/device/FileStorage.conf   @configtemplatedir@/bareos-sd.d/device/
+/etc/bareos/bareos-sd.d/director/bareos-dir.conf  @configtemplatedir@/bareos-sd.d/director/
+/etc/bareos/bareos-sd.d/director/bareos-mon.conf  @configtemplatedir@/bareos-sd.d/director/
+/etc/bareos/bareos-sd.d/messages/Standard.conf    @configtemplatedir@/bareos-sd.d/messages/
+/etc/bareos/bareos-sd.d/storage/bareos-sd.conf    @configtemplatedir@/bareos-sd.d/storage/
+/etc/bareos/tray-monitor.d/storage/StorageDaemon-local*.conf @configtemplatedir@/tray-monitor.d/storage/
 /usr/sbin/bareos-sd
 /usr/share/man/man8/bareos-sd.8.gz

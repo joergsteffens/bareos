@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2010 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -205,7 +205,7 @@ bool setup_job(JCR *jcr, bool suppress_output)
       goto bail_out;
    }
 
-   if (jcr->JobReads() && !jcr->rstorage) {
+   if (jcr->JobReads() && !jcr->res.rstorage) {
       if (jcr->res.job->storage) {
          copy_rwstorage(jcr, jcr->res.job->storage, _("Job resource"));
       } else {
@@ -300,6 +300,12 @@ bool setup_job(JCR *jcr, bool suppress_output)
          goto bail_out;
       }
       break;
+   case JT_ARCHIVE:
+      if (!do_archive_init(jcr)) {
+         archive_cleanup(jcr, JS_ErrorTerminated);
+         goto bail_out;
+      }
+      break;
    case JT_COPY:
    case JT_MIGRATE:
       if (!do_migration_init(jcr)) {
@@ -316,6 +322,21 @@ bool setup_job(JCR *jcr, bool suppress_output)
          goto bail_out;
       }
       break;
+   case JT_CONSOLIDATE:
+      if (!do_consolidate_init(jcr)) {
+         consolidate_cleanup(jcr, JS_ErrorTerminated);
+         goto bail_out;
+      }
+
+      /*
+       * If there is nothing to do the do_consolidation_init() function will set
+       * the termination status to JS_Terminated.
+       */
+      if (job_terminated_successfully(jcr)) {
+         consolidate_cleanup(jcr, jcr->getJobStatus());
+         goto bail_out;
+      }
+      break;
    default:
       Pmsg1(0, _("Unimplemented job type: %d\n"), jcr->getJobType());
       jcr->setJobStatus(JS_ErrorTerminated);
@@ -328,6 +349,49 @@ bool setup_job(JCR *jcr, bool suppress_output)
 
 bail_out:
    return false;
+}
+
+bool is_connecting_to_client_allowed(CLIENTRES *res)
+{
+   return res->conn_from_dir_to_fd;
+}
+
+bool is_connecting_to_client_allowed(JCR *jcr)
+{
+   return is_connecting_to_client_allowed(jcr->res.client);
+}
+
+bool is_connect_from_client_allowed(CLIENTRES *res)
+{
+   return res->conn_from_fd_to_dir;
+}
+
+bool is_connect_from_client_allowed(JCR *jcr)
+{
+   return is_connect_from_client_allowed(jcr->res.client);
+}
+
+bool use_waiting_client(JCR *jcr, int timeout)
+{
+   bool result = false;
+   CONNECTION *connection = NULL;
+   CONNECTION_POOL *connections = get_client_connections();
+
+   if (!is_connect_from_client_allowed(jcr)) {
+      Dmsg1(120, "Client Initiated Connection from \"%s\" is not allowed.\n", jcr->res.client->name());
+   } else {
+      connection = connections->remove(jcr->res.client->name(), timeout);
+      if (connection) {
+         jcr->file_bsock = connection->bsock();
+         jcr->FDVersion = connection->protocol_version();
+         jcr->authenticated = connection->authenticated();
+         delete(connection);
+         Jmsg(jcr, M_INFO, 0, _("Using Client Initiated Connection (%s).\n"), jcr->res.client->name());
+         result = true;
+      }
+   }
+
+   return result;
 }
 
 void update_job_end(JCR *jcr, int TermCode)
@@ -491,6 +555,17 @@ static void *job_thread(void *arg)
          admin_cleanup(jcr, JS_Canceled);
       }
       break;
+   case JT_ARCHIVE:
+      if (!job_canceled(jcr)) {
+         if (do_archive(jcr)) {
+            do_autoprune(jcr);
+         } else {
+            archive_cleanup(jcr, JS_ErrorTerminated);
+         }
+      } else {
+         archive_cleanup(jcr, JS_Canceled);
+      }
+      break;
    case JT_COPY:
    case JT_MIGRATE:
       if (!job_canceled(jcr)) {
@@ -501,6 +576,17 @@ static void *job_thread(void *arg)
          }
       } else {
          migration_cleanup(jcr, JS_Canceled);
+      }
+      break;
+   case JT_CONSOLIDATE:
+      if (!job_canceled(jcr)) {
+         if (do_consolidate(jcr)) {
+            do_autoprune(jcr);
+         } else {
+            consolidate_cleanup(jcr, JS_ErrorTerminated);
+         }
+      } else {
+         consolidate_cleanup(jcr, JS_Canceled);
       }
       break;
    default:
@@ -970,12 +1056,12 @@ bool get_level_since_time(JCR *jcr)
        * This is probably redundant, but some of the code below
        * uses jcr->stime, so don't remove unless you are sure.
        */
-      if (!db_find_job_start_time(jcr,jcr->db, &jcr->jr, &jcr->stime, jcr->PrevJob)) {
+      if (!db_find_job_start_time(jcr,jcr->db, &jcr->jr, jcr->stime, jcr->PrevJob)) {
          do_full = true;
       }
 
       have_full = db_find_last_job_start_time(jcr, jcr->db, &jcr->jr,
-                                              &stime, prev_job, L_FULL);
+                                              stime, prev_job, L_FULL);
       if (have_full) {
          last_full_time = str_to_utime(stime);
       } else {
@@ -993,7 +1079,7 @@ bool get_level_since_time(JCR *jcr)
           * Lookup last diff job
           */
          if (db_find_last_job_start_time(jcr, jcr->db, &jcr->jr,
-                                         &stime, prev_job, L_DIFFERENTIAL)) {
+                                         stime, prev_job, L_DIFFERENTIAL)) {
             last_diff_time = str_to_utime(stime);
             /*
              * If no Diff since Full, use Full time
@@ -1261,7 +1347,7 @@ bool get_or_create_fileset_record(JCR *jcr)
        !db_get_fileset_record(jcr, jcr->db, &fsr)) {
       POOL_MEM FileSetText(PM_MESSAGE);
 
-      jcr->res.fileset->print_config(FileSetText, false);
+      jcr->res.fileset->print_config(FileSetText, false, false);
       fsr.FileSetText = FileSetText.c_str();
 
       if (!db_create_fileset_record(jcr, jcr->db, &fsr)) {
@@ -1417,6 +1503,7 @@ void dird_free_jcr(JCR *jcr)
    }
 
    dird_free_jcr_pointers(jcr);
+
    if (jcr->term_wait_inited) {
       pthread_cond_destroy(&jcr->term_wait);
       jcr->term_wait_inited = false;
@@ -1455,6 +1542,9 @@ void dird_free_jcr(JCR *jcr)
    free_and_null_pool_memory(jcr->res.wstore_source);
    free_and_null_pool_memory(jcr->res.rstore_source);
    free_and_null_pool_memory(jcr->res.catalog_source);
+   free_and_null_pool_memory(jcr->FDSecureEraseCmd);
+   free_and_null_pool_memory(jcr->SDSecureEraseCmd);
+   free_and_null_pool_memory(jcr->vf_jobids);
 
    /*
     * Delete lists setup to hold storage pointers
@@ -1515,6 +1605,9 @@ void set_jcr_defaults(JCR *jcr, JOBRES *job)
 
    switch (jcr->getJobType()) {
    case JT_ADMIN:
+      jcr->setJobLevel(L_NONE);
+      break;
+   case JT_ARCHIVE:
       jcr->setJobLevel(L_NONE);
       break;
    default:
@@ -1629,467 +1722,6 @@ void set_jcr_defaults(JCR *jcr, JOBRES *job)
    }
 }
 
-/*
- * Copy the storage definitions from an alist to the JCR
- */
-void copy_rwstorage(JCR *jcr, alist *storage, const char *where)
-{
-   if (jcr->JobReads()) {
-      copy_rstorage(jcr, storage, where);
-   }
-   copy_wstorage(jcr, storage, where);
-}
-
-
-/* Set storage override.  Releases any previous storage definition */
-void set_rwstorage(JCR *jcr, USTORERES *store)
-{
-   if (!store) {
-      Jmsg(jcr, M_FATAL, 0, _("No storage specified.\n"));
-      return;
-   }
-   if (jcr->JobReads()) {
-      set_rstorage(jcr, store);
-   }
-   set_wstorage(jcr, store);
-}
-
-void free_rwstorage(JCR *jcr)
-{
-   free_rstorage(jcr);
-   free_wstorage(jcr);
-}
-
-/*
- * Copy the storage definitions from an alist to the JCR
- */
-void copy_rstorage(JCR *jcr, alist *storage, const char *where)
-{
-   if (storage) {
-      STORERES *store;
-      if (jcr->rstorage) {
-         delete jcr->rstorage;
-      }
-      jcr->rstorage = New(alist(10, not_owned_by_alist));
-      foreach_alist(store, storage) {
-         jcr->rstorage->append(store);
-      }
-      if (!jcr->res.rstore_source) {
-         jcr->res.rstore_source = get_pool_memory(PM_MESSAGE);
-      }
-      pm_strcpy(jcr->res.rstore_source, where);
-      if (jcr->rstorage) {
-         jcr->res.rstore = (STORERES *)jcr->rstorage->first();
-      }
-   }
-}
-
-/* Set storage override.  Remove all previous storage */
-void set_rstorage(JCR *jcr, USTORERES *store)
-{
-   STORERES *storage;
-
-   if (!store->store) {
-      return;
-   }
-   if (jcr->rstorage) {
-      free_rstorage(jcr);
-   }
-   if (!jcr->rstorage) {
-      jcr->rstorage = New(alist(10, not_owned_by_alist));
-   }
-   jcr->res.rstore = store->store;
-   if (!jcr->res.rstore_source) {
-      jcr->res.rstore_source = get_pool_memory(PM_MESSAGE);
-   }
-   pm_strcpy(jcr->res.rstore_source, store->store_source);
-   foreach_alist(storage, jcr->rstorage) {
-      if (store->store == storage) {
-         return;
-      }
-   }
-   /* Store not in list, so add it */
-   jcr->rstorage->prepend(store->store);
-}
-
-void free_rstorage(JCR *jcr)
-{
-   if (jcr->rstorage) {
-      delete jcr->rstorage;
-      jcr->rstorage = NULL;
-   }
-   jcr->res.rstore = NULL;
-}
-
-/*
- * Copy the storage definitions from an alist to the JCR
- */
-void copy_wstorage(JCR *jcr, alist *storage, const char *where)
-{
-   if (storage) {
-      STORERES *st;
-      if (jcr->wstorage) {
-         delete jcr->wstorage;
-      }
-      jcr->wstorage = New(alist(10, not_owned_by_alist));
-      foreach_alist(st, storage) {
-         Dmsg1(100, "wstorage=%s\n", st->name());
-         jcr->wstorage->append(st);
-      }
-      if (!jcr->res.wstore_source) {
-         jcr->res.wstore_source = get_pool_memory(PM_MESSAGE);
-      }
-      pm_strcpy(jcr->res.wstore_source, where);
-      if (jcr->wstorage) {
-         jcr->res.wstore = (STORERES *)jcr->wstorage->first();
-         Dmsg2(100, "wstore=%s where=%s\n", jcr->res.wstore->name(), jcr->res.wstore_source);
-      }
-   }
-}
-
-/* Set storage override. Remove all previous storage */
-void set_wstorage(JCR *jcr, USTORERES *store)
-{
-   STORERES *storage;
-
-   if (!store->store) {
-      return;
-   }
-   if (jcr->wstorage) {
-      free_wstorage(jcr);
-   }
-   if (!jcr->wstorage) {
-      jcr->wstorage = New(alist(10, not_owned_by_alist));
-   }
-   jcr->res.wstore = store->store;
-   if (!jcr->res.wstore_source) {
-      jcr->res.wstore_source = get_pool_memory(PM_MESSAGE);
-   }
-   pm_strcpy(jcr->res.wstore_source, store->store_source);
-   Dmsg2(50, "wstore=%s where=%s\n", jcr->res.wstore->name(), jcr->res.wstore_source);
-   foreach_alist(storage, jcr->wstorage) {
-      if (store->store == storage) {
-         return;
-      }
-   }
-   /* Store not in list, so add it */
-   jcr->wstorage->prepend(store->store);
-}
-
-void free_wstorage(JCR *jcr)
-{
-   if (jcr->wstorage) {
-      delete jcr->wstorage;
-      jcr->wstorage = NULL;
-   }
-   jcr->res.wstore = NULL;
-}
-
-/*
- * For NDMP backup we can setup the backup to run to a NDMP instance
- * of the same Storage Daemon that also does native native backups.
- * This way a Normal Storage Daemon can perform NDMP protocol based
- * saves and restores.
- */
-void set_paired_storage(JCR *jcr)
-{
-   STORERES *store, *pstore;
-
-   switch (jcr->getJobType()) {
-   case JT_BACKUP:
-      /*
-       * For a backup we look at the write storage.
-       */
-      if (jcr->wstorage) {
-         /*
-          * Setup the jcr->wstorage to point to all paired_storage
-          * entries of all the storage currently in the jcr->wstorage.
-          * Save the original list under jcr->pstorage.
-          */
-         jcr->pstorage = jcr->wstorage;
-         jcr->wstorage = New(alist(10, not_owned_by_alist));
-         foreach_alist(store, jcr->pstorage) {
-            if (store->paired_storage) {
-               Dmsg1(100, "wstorage=%s\n", store->paired_storage->name());
-               jcr->wstorage->append(store->paired_storage);
-            }
-         }
-
-         /*
-          * Swap the actual jcr->res.wstore to point to the paired storage entry.
-          * We save the actual storage entry in pstore which is for restore
-          * in the free_paired_storage() function.
-          */
-         store = jcr->res.wstore;
-         if (store->paired_storage) {
-            jcr->res.wstore = store->paired_storage;
-            jcr->res.pstore = store;
-         }
-      } else {
-         Jmsg(jcr, M_FATAL, 0,
-              _("No write storage, don't know how to setup paired storage\n"));
-      }
-      break;
-   case JT_RESTORE:
-      /*
-       * For a restores we look at the read storage.
-       */
-      if (jcr->rstorage) {
-         /*
-          * Setup the jcr->pstorage to point to all paired_storage
-          * entries of all the storage currently in the jcr->rstorage.
-          */
-         jcr->pstorage = New(alist(10, not_owned_by_alist));
-         foreach_alist(pstore, jcr->rstorage) {
-            store = (STORERES *)GetNextRes(R_STORAGE, NULL);
-            while (store) {
-               if (store->paired_storage == pstore) {
-                  break;
-               }
-
-               store = (STORERES *)GetNextRes(R_STORAGE, (RES *)store);
-            }
-
-            /*
-             * See if we found a store that has the current pstore as
-             * its paired storage.
-             */
-            if (store) {
-               jcr->pstorage->append(store);
-
-               /*
-                * If the current processed pstore is also the current
-                * entry in jcr->res.rstore update the jcr->pstore to point
-                * to this storage entry.
-                */
-               if (pstore == jcr->res.rstore) {
-                  jcr->res.pstore = store;
-               }
-            }
-         }
-      } else {
-         Jmsg(jcr, M_FATAL, 0,
-              _("No read storage, don't know how to setup paired storage\n"));
-      }
-      break;
-   case JT_MIGRATE:
-   case JT_COPY:
-      /*
-       * For a migrate or copy we look at the read storage.
-       */
-      if (jcr->rstorage) {
-         /*
-          * Setup the jcr->rstorage to point to all paired_storage
-          * entries of all the storage currently in the jcr->rstorage.
-          * Save the original list under jcr->pstorage.
-          */
-         jcr->pstorage = jcr->rstorage;
-         jcr->rstorage = New(alist(10, not_owned_by_alist));
-         foreach_alist(store, jcr->pstorage) {
-            if (store->paired_storage) {
-               Dmsg1(100, "rstorage=%s\n", store->paired_storage->name());
-               jcr->rstorage->append(store->paired_storage);
-            }
-         }
-
-         /*
-          * Swap the actual jcr->res.rstore to point to the paired storage entry.
-          * We save the actual storage entry in pstore which is for restore
-          * in the free_paired_storage() function.
-          */
-         store = jcr->res.rstore;
-         if (store->paired_storage) {
-            jcr->res.rstore = store->paired_storage;
-            jcr->res.pstore = store;
-         }
-      } else {
-         Jmsg(jcr, M_FATAL, 0,
-              _("No read storage, don't know how to setup paired storage\n"));
-      }
-      break;
-   default:
-      Jmsg(jcr, M_FATAL, 0,
-           _("Unknown Job Type %s, don't know how to setup paired storage\n"),
-           job_type_to_str(jcr->getJobType()));
-      break;
-   }
-}
-
-/*
- * This performs an undo of the actions the set_paired_storage() function
- * performed. We reset the storage write storage back to its original
- * and remove the paired storage override if any.
- */
-void free_paired_storage(JCR *jcr)
-{
-   if (jcr->pstorage) {
-      switch (jcr->getJobType()) {
-      case JT_BACKUP:
-         /*
-          * For a backup we look at the write storage.
-          */
-         if (jcr->wstorage) {
-            /*
-             * The jcr->wstorage contain a set of paired storages.
-             * We just delete it content and swap back to the real master storage.
-             */
-            delete jcr->wstorage;
-            jcr->wstorage = jcr->pstorage;
-            jcr->pstorage = NULL;
-            jcr->res.wstore = jcr->res.pstore;
-            jcr->res.pstore = NULL;
-         }
-         break;
-      case JT_RESTORE:
-         /*
-          * The jcr->rstorage contain a set of paired storages.
-          * For the read we created a list of alternative storage which we
-          * can just drop now.
-          */
-         delete jcr->pstorage;
-         jcr->pstorage = NULL;
-         jcr->res.pstore = NULL;
-         break;
-      case JT_MIGRATE:
-      case JT_COPY:
-         /*
-          * For a migrate or copy we look at the read storage.
-          */
-         if (jcr->rstorage) {
-            /*
-             * The jcr->rstorage contains a set of paired storages.
-             * We just delete it content and swap back to the real master storage.
-             */
-            delete jcr->rstorage;
-            jcr->rstorage = jcr->pstorage;
-            jcr->pstorage = NULL;
-            jcr->res.rstore = jcr->res.pstore;
-            jcr->res.pstore = NULL;
-         }
-         break;
-      default:
-         Jmsg(jcr, M_FATAL, 0,
-              _("Unknown Job Type %s, don't know how to free paired storage\n"),
-              job_type_to_str(jcr->getJobType()));
-         break;
-      }
-   }
-}
-
-/*
- * Check if every possible storage has paired storage associated.
- */
-bool has_paired_storage(JCR *jcr)
-{
-   STORERES *store;
-
-   switch (jcr->getJobType()) {
-   case JT_BACKUP:
-      /*
-       * For a backup we look at the write storage.
-       */
-      if (jcr->wstorage) {
-         foreach_alist(store, jcr->wstorage) {
-            if (!store->paired_storage) {
-               return false;
-            }
-         }
-      } else {
-         Jmsg(jcr, M_FATAL, 0,
-               _("No write storage, don't know how to check for paired storage\n"));
-         return false;
-      }
-      break;
-   case JT_RESTORE:
-   case JT_MIGRATE:
-   case JT_COPY:
-      if (jcr->rstorage) {
-         foreach_alist(store, jcr->rstorage) {
-            if (!store->paired_storage) {
-               return false;
-            }
-         }
-      } else {
-         Jmsg(jcr, M_FATAL, 0,
-               _("No read storage, don't know how to check for paired storage\n"));
-         return false;
-      }
-      break;
-   default:
-      Jmsg(jcr, M_FATAL, 0,
-           _("Unknown Job Type %s, don't know how to free paired storage\n"),
-           job_type_to_str(jcr->getJobType()));
-      return false;
-   }
-
-   return true;
-}
-
-#define MAX_TRIES 6 * 360   /* 6 hours (10 sec intervals) */
-
-/*
- * Change the read storage resource for the current job.
- */
-bool select_next_rstore(JCR *jcr, bootstrap_info &info)
-{
-   USTORERES ustore;
-
-   if (bstrcmp(jcr->res.rstore->name(), info.storage)) {
-      return true;                 /* Same SD nothing to change */
-   }
-
-   if (!(ustore.store = (STORERES *)GetResWithName(R_STORAGE,info.storage))) {
-      Jmsg(jcr, M_FATAL, 0,
-           _("Could not get storage resource '%s'.\n"), info.storage);
-      jcr->setJobStatus(JS_ErrorTerminated);
-      return false;
-   }
-
-   /*
-    * We start communicating with a new storage daemon so close the
-    * old connection when it is still open.
-    */
-   if (jcr->store_bsock) {
-      jcr->store_bsock->close();
-      delete jcr->store_bsock;
-      jcr->store_bsock = NULL;
-   }
-
-   /*
-    * Release current read storage and get a new one
-    */
-   dec_read_store(jcr);
-   free_rstorage(jcr);
-   set_rstorage(jcr, &ustore);
-   jcr->setJobStatus(JS_WaitSD);
-
-   /*
-    * Wait for up to 6 hours to increment read stoage counter
-    */
-   for (int i = 0; i < MAX_TRIES; i++) {
-      /*
-       * Try to get read storage counter incremented
-       */
-      if (inc_read_store(jcr)) {
-         jcr->setJobStatus(JS_Running);
-         return true;
-      }
-      bmicrosleep(10, 0);          /* Sleep 10 secs */
-      if (job_canceled(jcr)) {
-         free_rstorage(jcr);
-         return false;
-      }
-   }
-
-   /*
-    * Failed to inc_read_store()
-    */
-   free_rstorage(jcr);
-   Jmsg(jcr, M_FATAL, 0,
-      _("Could not acquire read storage lock for \"%s\""), info.storage);
-   return false;
-}
-
 void create_clones(JCR *jcr)
 {
    /*
@@ -2174,11 +1806,7 @@ bool run_console_command(JCR *jcr, const char *cmd)
    Mmsg(ua->cmd, "%s", cmd);
    Dmsg1(100, "Console command: %s\n", ua->cmd);
    parse_ua_args(ua);
-   if (ua->argc > 0 && ua->argk[0][0] == '.') {
-      ok = do_a_dot_command(ua);
-   } else {
-     ok = do_a_command(ua);
-   }
+   ok = do_a_command(ua);
    free_ua_context(ua);
    free_jcr(ljcr);
    return ok;

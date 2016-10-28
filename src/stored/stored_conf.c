@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2009 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -79,18 +79,6 @@ static RES_ITEM store_items[] = {
    { "FdConnectTimeout", CFG_TYPE_TIME, ITEM(res_store.FDConnectTimeout), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
    { "HeartbeatInterval", CFG_TYPE_TIME, ITEM(res_store.heartbeat_interval), 0, CFG_ITEM_DEFAULT, "0", NULL, NULL },
    { "MaximumNetworkBufferSize", CFG_TYPE_PINT32, ITEM(res_store.max_network_buffer_size), 0, 0, NULL, NULL, NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_store.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_store.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_store.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_store.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_store.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_store.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_store.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_store.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_store.tls_dhfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_store.tls_cipherlist), 0, 0, NULL, NULL, NULL },
-   { "TlsAllowedCn", CFG_TYPE_ALIST_STR, ITEM(res_store.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
    { "ClientConnectWait", CFG_TYPE_TIME, ITEM(res_store.client_wait), 0, CFG_ITEM_DEFAULT, "1800" /* 30 minutes */, NULL, NULL },
    { "VerId", CFG_TYPE_STR, ITEM(res_store.verid), 0, 0, NULL, NULL, NULL },
    { "Compatible", CFG_TYPE_BOOL, ITEM(res_store.compatible), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
@@ -109,8 +97,10 @@ static RES_ITEM store_items[] = {
    { "StatisticsCollectInterval", CFG_TYPE_PINT32, ITEM(res_store.stats_collect_interval), 0, CFG_ITEM_DEFAULT, "30", NULL, NULL },
    { "DeviceReserveByMediaType", CFG_TYPE_BOOL, ITEM(res_store.device_reserve_by_mediatype), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
    { "FileDeviceConcurrentRead", CFG_TYPE_BOOL, ITEM(res_store.filedevice_concurrent_read), 0, CFG_ITEM_DEFAULT, "false", NULL, NULL },
-   { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_store.secure_erase_cmdline), 0, 0, NULL, NULL, NULL },
+   { "SecureEraseCommand", CFG_TYPE_STR, ITEM(res_store.secure_erase_cmdline), 0, 0, NULL, "15.2.1-",
+     "Specify command that will be called when bareos unlinks files." },
    { "LogTimestampFormat", CFG_TYPE_STR, ITEM(res_store.log_timestamp_format), 0, 0, NULL, "15.2.3-", NULL },
+   TLS_CONFIG(res_store)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -122,20 +112,9 @@ static RES_ITEM dir_items[] = {
    { "Description", CFG_TYPE_STR, ITEM(res_dir.hdr.desc), 0, 0, NULL, NULL, NULL },
    { "Password", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.password), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
    { "Monitor", CFG_TYPE_BOOL, ITEM(res_dir.monitor), 0, 0, NULL, NULL, NULL },
-   { "TlsAuthenticate", CFG_TYPE_BOOL, ITEM(res_dir.tls_authenticate), 0, 0, NULL, NULL, NULL },
-   { "TlsEnable", CFG_TYPE_BOOL, ITEM(res_dir.tls_enable), 0, 0, NULL, NULL, NULL },
-   { "TlsRequire", CFG_TYPE_BOOL, ITEM(res_dir.tls_require), 0, 0, NULL, NULL, NULL },
-   { "TlsVerifyPeer", CFG_TYPE_BOOL, ITEM(res_dir.tls_verify_peer), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
-   { "TlsCaCertificateFile", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCaCertificateDir", CFG_TYPE_DIR, ITEM(res_dir.tls_ca_certdir), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificateRevocationList", CFG_TYPE_DIR, ITEM(res_dir.tls_crlfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCertificate", CFG_TYPE_DIR, ITEM(res_dir.tls_certfile), 0, 0, NULL, NULL, NULL },
-   { "TlsKey", CFG_TYPE_DIR, ITEM(res_dir.tls_keyfile), 0, 0, NULL, NULL, NULL },
-   { "TlsDhFile", CFG_TYPE_DIR, ITEM(res_dir.tls_dhfile), 0, 0, NULL, NULL, NULL },
-   { "TlsCipherList", CFG_TYPE_STR, ITEM(res_dir.tls_cipherlist), 0, 0, NULL, NULL, NULL },
-   { "TlsAllowedCn", CFG_TYPE_ALIST_STR, ITEM(res_dir.tls_allowed_cns), 0, 0, NULL, NULL, NULL },
    { "MaximumBandwidthPerJob", CFG_TYPE_SPEED, ITEM(res_dir.max_bandwidth_per_job), 0, 0, NULL, NULL, NULL },
    { "KeyEncryptionKey", CFG_TYPE_AUTOPASSWORD, ITEM(res_dir.keyencrkey), 1, 0, NULL, NULL, NULL },
+   TLS_CONFIG(res_dir)
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
 };
 
@@ -157,9 +136,9 @@ static RES_ITEM ndmp_items[] = {
  */
 static RES_ITEM dev_items[] = {
    { "Name", CFG_TYPE_NAME, ITEM(res_dev.hdr.name), 0, CFG_ITEM_REQUIRED, NULL, NULL,
-      "Unique identifier of the resource." },
+     "Unique identifier of the resource." },
    { "Description", CFG_TYPE_STR, ITEM(res_dev.hdr.desc), 0, 0, NULL, NULL,
-      "The Description directive provides easier human recognition, but is not used by Bareos directly." },
+     "The Description directive provides easier human recognition, but is not used by Bareos directly." },
    { "MediaType", CFG_TYPE_STRNAME, ITEM(res_dev.media_type), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
    { "DeviceType", CFG_TYPE_DEVTYPE, ITEM(res_dev.dev_type), 0, 0, NULL, NULL, NULL },
    { "ArchiveDevice", CFG_TYPE_STRNAME, ITEM(res_dev.device_name), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
@@ -207,7 +186,7 @@ static RES_ITEM dev_items[] = {
    { "SpoolDirectory", CFG_TYPE_DIR, ITEM(res_dev.spool_directory), 0, 0, NULL, NULL, NULL },
    { "MaximumSpoolSize", CFG_TYPE_SIZE64, ITEM(res_dev.max_spool_size), 0, 0, NULL, NULL, NULL },
    { "MaximumJobSpoolSize", CFG_TYPE_SIZE64, ITEM(res_dev.max_job_spool_size), 0, 0, NULL, NULL, NULL },
-   { "DriveIndex", CFG_TYPE_PINT32, ITEM(res_dev.drive_index), 0, 0, NULL, NULL, NULL },
+   { "DriveIndex", CFG_TYPE_PINT16, ITEM(res_dev.drive_index), 0, 0, NULL, NULL, NULL },
    { "MaximumPartSize", CFG_TYPE_SIZE64, ITEM(res_dev.max_part_size), 0, CFG_ITEM_DEPRECATED, NULL, NULL, NULL },
    { "MountPoint", CFG_TYPE_STRNAME, ITEM(res_dev.mount_point), 0, 0, NULL, NULL, NULL },
    { "MountCommand", CFG_TYPE_STRNAME, ITEM(res_dev.mount_command), 0, 0, NULL, NULL, NULL },
@@ -221,7 +200,7 @@ static RES_ITEM dev_items[] = {
    { "QueryCryptoStatus", CFG_TYPE_BOOL, ITEM(res_dev.query_crypto_status), 0, 0, NULL, NULL, NULL },
    { "AutoDeflate", CFG_TYPE_IODIRECTION, ITEM(res_dev.autodeflate), 0, 0, NULL, "13.4.0-", NULL },
    { "AutoDeflateAlgorithm", CFG_TYPE_CMPRSALGO, ITEM(res_dev.autodeflate_algorithm), 0, 0, NULL, "13.4.0-", NULL },
-   { "AutoDeflateLevel", CFG_TYPE_PINT32, ITEM(res_dev.autodeflate_level), 0, CFG_ITEM_DEFAULT, "6", "13.4.0-", NULL },
+   { "AutoDeflateLevel", CFG_TYPE_PINT16, ITEM(res_dev.autodeflate_level), 0, CFG_ITEM_DEFAULT, "6", "13.4.0-", NULL },
    { "AutoInflate", CFG_TYPE_IODIRECTION, ITEM(res_dev.autoinflate), 0, 0, NULL, "13.4.0-", NULL },
    { "CollectStatistics", CFG_TYPE_BOOL, ITEM(res_dev.collectstats), 0, CFG_ITEM_DEFAULT, "true", NULL, NULL },
    { NULL, 0, { 0 }, 0, 0, NULL, NULL, NULL }
@@ -412,7 +391,7 @@ static void store_io_direction(LEX *lc, RES_ITEM *item, int index, int pass)
    lex_get_token(lc, T_NAME);
    for (i = 0; io_directions[i].name; i++) {
       if (bstrcasecmp(lc->str, io_directions[i].name)) {
-         *(uint32_t *)(item->value) = io_directions[i].token;
+         *(uint16_t *)(item->value) = io_directions[i].token & 0xffff;
          i = 0;
          break;
       }
@@ -435,7 +414,7 @@ static void store_compressionalgorithm(LEX *lc, RES_ITEM *item, int index, int p
    lex_get_token(lc, T_NAME);
    for (i = 0; compression_algorithms[i].name; i++) {
       if (bstrcasecmp(lc->str, compression_algorithms[i].name)) {
-         *(uint32_t *)(item->value) = compression_algorithms[i].token;
+         *(uint32_t *)(item->value) = compression_algorithms[i].token & 0xffffffff;
          i = 0;
          break;
       }
@@ -453,7 +432,7 @@ static void store_compressionalgorithm(LEX *lc, RES_ITEM *item, int index, int p
  */
 void dump_resource(int type, RES *reshdr,
                    void sendit(void *sock, const char *fmt, ...),
-                   void *sock, bool hide_sensitive_data)
+                   void *sock, bool hide_sensitive_data, bool verbose)
 {
    POOL_MEM buf;
    URES *res = (URES *)reshdr;
@@ -484,7 +463,7 @@ void dump_resource(int type, RES *reshdr,
    sendit(sock, "%s", buf.c_str());
 
    if (recurse && res->res_dir.hdr.next) {
-      dump_resource(type, (RES *)res->res_dir.hdr.next, sendit, sock, hide_sensitive_data);
+      dump_resource(type, (RES *)res->res_dir.hdr.next, sendit, sock, hide_sensitive_data, verbose);
    }
 }
 
@@ -522,36 +501,10 @@ void free_resource(RES *sres, int type)
       if (res->res_dir.address) {
          free(res->res_dir.address);
       }
-      if (res->res_dir.tls_ctx) {
-         free_tls_context(res->res_dir.tls_ctx);
-      }
-      if (res->res_dir.tls_ca_certfile) {
-         free(res->res_dir.tls_ca_certfile);
-      }
-      if (res->res_dir.tls_ca_certdir) {
-         free(res->res_dir.tls_ca_certdir);
-      }
-      if (res->res_dir.tls_crlfile) {
-         free(res->res_dir.tls_crlfile);
-      }
-      if (res->res_dir.tls_certfile) {
-         free(res->res_dir.tls_certfile);
-      }
-      if (res->res_dir.tls_keyfile) {
-         free(res->res_dir.tls_keyfile);
-      }
-      if (res->res_dir.tls_dhfile) {
-         free(res->res_dir.tls_dhfile);
-      }
-      if (res->res_dir.tls_cipherlist) {
-         free(res->res_dir.tls_cipherlist);
-      }
-      if (res->res_dir.tls_allowed_cns) {
-         delete res->res_dir.tls_allowed_cns;
-      }
       if (res->res_dir.keyencrkey.value) {
          free(res->res_dir.keyencrkey.value);
       }
+      free_tls_t(res->res_dir.tls);
       break;
    case R_NDMP:
       if (res->res_ndmp.username) {
@@ -604,33 +557,6 @@ void free_resource(RES *sres, int type)
       if (res->res_store.backend_directories) {
          delete res->res_store.backend_directories;
       }
-      if (res->res_store.tls_ctx) {
-         free_tls_context(res->res_store.tls_ctx);
-      }
-      if (res->res_store.tls_ca_certfile) {
-         free(res->res_store.tls_ca_certfile);
-      }
-      if (res->res_store.tls_ca_certdir) {
-         free(res->res_store.tls_ca_certdir);
-      }
-      if (res->res_store.tls_crlfile) {
-         free(res->res_store.tls_crlfile);
-      }
-      if (res->res_store.tls_certfile) {
-         free(res->res_store.tls_certfile);
-      }
-      if (res->res_store.tls_keyfile) {
-         free(res->res_store.tls_keyfile);
-      }
-      if (res->res_store.tls_dhfile) {
-         free(res->res_store.tls_dhfile);
-      }
-      if (res->res_store.tls_cipherlist) {
-         free(res->res_store.tls_cipherlist);
-      }
-      if (res->res_store.tls_allowed_cns) {
-         delete res->res_store.tls_allowed_cns;
-      }
       if (res->res_store.verid) {
          free(res->res_store.verid);
       }
@@ -640,6 +566,7 @@ void free_resource(RES *sres, int type)
       if (res->res_store.log_timestamp_format) {
          free(res->res_store.log_timestamp_format);
       }
+      free_tls_t(res->res_store.tls);
       break;
    case R_DEVICE:
       if (res->res_dev.media_type) {
@@ -715,7 +642,7 @@ void free_resource(RES *sres, int type)
  * the resource. If this is pass 2, we update any resource
  * or alist pointers.
  */
-void save_resource(int type, RES_ITEM *items, int pass)
+bool save_resource(int type, RES_ITEM *items, int pass)
 {
    URES *res;
    int rindex = type - R_FIRST;
@@ -766,7 +693,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
          if ((res = (URES *)GetResWithName(R_DIRECTOR, res_all.res_dir.name())) == NULL) {
             Emsg1(M_ERROR_TERM, 0, _("Cannot find Director resource %s\n"), res_all.res_dir.name());
          } else {
-            res->res_dir.tls_allowed_cns = res_all.res_dir.tls_allowed_cns;
+            res->res_dir.tls.allowed_cns = res_all.res_dir.tls.allowed_cns;
          }
          break;
       case R_STORAGE:
@@ -776,7 +703,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
             res->res_store.plugin_names = res_all.res_store.plugin_names;
             res->res_store.messages = res_all.res_store.messages;
             res->res_store.backend_directories = res_all.res_store.backend_directories;
-            res->res_store.tls_allowed_cns = res_all.res_store.tls_allowed_cns;
+            res->res_store.tls.allowed_cns = res_all.res_store.tls.allowed_cns;
          }
          break;
       case R_AUTOCHANGER:
@@ -817,7 +744,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
          res_all.res_dir.hdr.desc = NULL;
       }
 
-      return;
+      return (error == 0);
    }
 
    /*
@@ -845,6 +772,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
          Dmsg2(90, "Inserting %s res: %s\n", res_to_str(type), res->res_dir.name());
       }
    }
+   return (error == 0);
 }
 
 /*
@@ -917,6 +845,8 @@ void init_sd_config(CONFIG *config, const char *configfile, int exit_code)
                 R_LAST,
                 resources,
                 res_head);
+   config->set_default_config_filename(CONFIG_FILE);
+   config->set_config_include_dir("bareos-sd.d");
 }
 
 bool parse_sd_config(CONFIG *config, const char *configfile, int exit_code)

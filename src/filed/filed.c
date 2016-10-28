@@ -47,8 +47,6 @@ bool backup_only_mode = false;
 bool restore_only_mode = false;
 void *start_heap;
 
-#define CONFIG_FILE "bareos-fd.conf"  /* default config file */
-
 char *configfile = NULL;
 static bool foreground = false;
 
@@ -57,9 +55,9 @@ static void usage()
    fprintf(stderr, _(
 PROG_COPYRIGHT
 "\nVersion: %s (%s)\n\n"
-"Usage: bareos-fd [options] [-c config_file]\n"
+"Usage: bareos-fd [options]\n"
 "        -b          backup only mode\n"
-"        -c <file>   use <file> as configuration file\n"
+"        -c <path>   use <path> as configuration file or directory\n"
 "        -d <nn>     set debug level to <nn>\n"
 "        -dt         print timestamp in debug output\n"
 "        -f          run in foreground (for debugging)\n"
@@ -199,10 +197,6 @@ int main (int argc, char *argv[])
       usage();
    }
 
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
-   }
-
    if (!uid && keep_readall_caps) {
       Emsg0(M_ERROR_TERM, 0, _("-k option has no meaning without -u option.\n"));
    }
@@ -252,7 +246,7 @@ int main (int argc, char *argv[])
    }
 
    if (!check_resources()) {
-      Emsg1(M_ERROR, 0, _("Please correct configuration file: %s\n"), configfile);
+      Emsg1(M_ERROR, 0, _("Please correct configuration file: %s\n"), my_config->get_base_config_path());
       terminate_filed(1);
    }
 
@@ -288,6 +282,14 @@ int main (int argc, char *argv[])
       }
    }
 
+   /*
+    * if configured, start threads and connect to Director.
+    */
+   start_connect_to_director_threads();
+
+   /*
+    * start socket server to listen for new connections.
+    */
    start_socket_server(me->FDaddrs);
 
    terminate_filed(0);
@@ -308,7 +310,8 @@ void terminate_filed(int sig)
    debug_level = 0;                   /* turn off debug */
    stop_watchdog();
 
-   stop_socket_server();
+   stop_connect_to_director_threads(true);
+   stop_socket_server(true);
 
    unload_fd_plugins();
    flush_mntent_cache();
@@ -344,6 +347,7 @@ static bool check_resources()
    bool OK = true;
    DIRRES *director;
    bool need_tls;
+   const char *configfile = my_config->get_base_config_path();
 
    LockRes();
 
@@ -374,17 +378,17 @@ static bool check_resources()
          }
       }
       /* tls_require implies tls_enable */
-      if (me->tls_require) {
+      if (me->tls.require) {
 #ifndef HAVE_TLS
          Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in Bareos.\n"));
          OK = false;
 #else
-         me->tls_enable = true;
+         me->tls.enable = true;
 #endif
       }
-      need_tls = me->tls_enable || me->tls_authenticate;
+      need_tls = me->tls.enable || me->tls.authenticate;
 
-      if ((!me->tls_ca_certfile && !me->tls_ca_certdir) && need_tls) {
+      if ((!me->tls.ca_certfile && !me->tls.ca_certdir) && need_tls) {
          Emsg1(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
             " or \"TLS CA Certificate Dir\" are defined for File daemon in %s.\n"),
                             configfile);
@@ -392,29 +396,29 @@ static bool check_resources()
       }
 
       /* If everything is well, attempt to initialize our per-resource TLS context */
-      if (OK && (need_tls || me->tls_require)) {
+      if (OK && (need_tls || me->tls.require)) {
          /* Initialize TLS context:
           * Args: CA certfile, CA certdir, Certfile, Keyfile,
           * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer */
-         me->tls_ctx = new_tls_context(me->tls_ca_certfile,
-                                       me->tls_ca_certdir,
-                                       me->tls_crlfile,
-                                       me->tls_certfile,
-                                       me->tls_keyfile,
+         me->tls.ctx = new_tls_context(me->tls.ca_certfile,
+                                       me->tls.ca_certdir,
+                                       me->tls.crlfile,
+                                       me->tls.certfile,
+                                       me->tls.keyfile,
                                        NULL,
                                        NULL,
                                        NULL,
-                                       me->tls_cipherlist,
-                                       me->tls_verify_peer);
+                                       me->tls.cipherlist,
+                                       me->tls.verify_peer);
 
-         if (!me->tls_ctx) {
+         if (!me->tls.ctx) {
             Emsg2(M_FATAL, 0, _("Failed to initialize TLS context for File daemon \"%s\" in %s.\n"),
                                 me->name(), configfile);
             OK = false;
          }
 
-         set_tls_enable(me->tls_ctx, need_tls);
-         set_tls_require(me->tls_ctx, me->tls_require);
+         set_tls_enable(me->tls.ctx, need_tls);
+         set_tls_require(me->tls.ctx, me->tls.require);
       }
 
       if (me->pki_encrypt || me->pki_sign) {
@@ -543,30 +547,30 @@ static bool check_resources()
 
    foreach_res(director, R_DIRECTOR) {
       /* tls_require implies tls_enable */
-      if (director->tls_require) {
+      if (director->tls.require) {
 #ifndef HAVE_TLS
          Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in Bareos.\n"));
          OK = false;
          continue;
 #else
-         director->tls_enable = true;
+         director->tls.enable = true;
 #endif
       }
-      need_tls = director->tls_enable || director->tls_authenticate;
+      need_tls = director->tls.enable || director->tls.authenticate;
 
-      if (!director->tls_certfile && need_tls) {
+      if (!director->tls.certfile && need_tls) {
          Emsg2(M_FATAL, 0, _("\"TLS Certificate\" file not defined for Director \"%s\" in %s.\n"),
                director->name(), configfile);
          OK = false;
       }
 
-      if (!director->tls_keyfile && need_tls) {
+      if (!director->tls.keyfile && need_tls) {
          Emsg2(M_FATAL, 0, _("\"TLS Key\" file not defined for Director \"%s\" in %s.\n"),
                director->name(), configfile);
          OK = false;
       }
 
-      if ((!director->tls_ca_certfile && !director->tls_ca_certdir) && need_tls && director->tls_verify_peer) {
+      if ((!director->tls.ca_certfile && !director->tls.ca_certdir) && need_tls && director->tls.verify_peer) {
          Emsg2(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
                              " or \"TLS CA Certificate Dir\" are defined for Director \"%s\" in %s."
                              " At least one CA certificate store is required"
@@ -576,29 +580,29 @@ static bool check_resources()
       }
 
       /* If everything is well, attempt to initialize our per-resource TLS context */
-      if (OK && (need_tls || director->tls_require)) {
+      if (OK && (need_tls || director->tls.require)) {
          /* Initialize TLS context:
           * Args: CA certfile, CA certdir, Certfile, Keyfile,
           * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer */
-         director->tls_ctx = new_tls_context(director->tls_ca_certfile,
-                                             director->tls_ca_certdir,
-                                             director->tls_crlfile,
-                                             director->tls_certfile,
-                                             director->tls_keyfile,
+         director->tls.ctx = new_tls_context(director->tls.ca_certfile,
+                                             director->tls.ca_certdir,
+                                             director->tls.crlfile,
+                                             director->tls.certfile,
+                                             director->tls.keyfile,
                                              NULL,
                                              NULL,
-                                             director->tls_dhfile,
-                                             director->tls_cipherlist,
-                                             director->tls_verify_peer);
+                                             director->tls.dhfile,
+                                             director->tls.cipherlist,
+                                             director->tls.verify_peer);
 
-         if (!director->tls_ctx) {
+         if (!director->tls.ctx) {
             Emsg2(M_FATAL, 0, _("Failed to initialize TLS context for Director \"%s\" in %s.\n"),
                                 director->name(), configfile);
             OK = false;
          }
 
-         set_tls_enable(director->tls_ctx, need_tls);
-         set_tls_require(director->tls_ctx, director->tls_require);
+         set_tls_enable(director->tls.ctx, need_tls);
+         set_tls_require(director->tls.ctx, director->tls.require);
       }
    }
 

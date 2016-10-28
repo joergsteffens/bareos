@@ -172,7 +172,7 @@ bool purge_cmd(UAContext *ua, const char *cmd)
        * Restore ua args based on cmd_holder
        */
       pm_strcpy(ua->cmd, cmd_holder);
-      parse_args(ua->cmd, &ua->args, &ua->argc, ua->argk, ua->argv, MAX_CMD_ARGS);
+      parse_args(ua->cmd, ua->args, &ua->argc, ua->argk, ua->argv, MAX_CMD_ARGS);
 
       /*
        * Perform ActionOnPurge (action=truncate)
@@ -637,7 +637,7 @@ bail_out:
  */
 static void do_truncate_on_purge(UAContext *ua, MEDIA_DBR *mr,
                                  char *pool, char *storage,
-                                 int drive, BSOCK *sd)
+                                 drive_number_t drive, BSOCK *sd)
 {
    bool ok=false;
    uint64_t VolBytes = 0;
@@ -653,6 +653,8 @@ static void do_truncate_on_purge(UAContext *ua, MEDIA_DBR *mr,
     * Do it only if action on purge = truncate is set
     */
    if (!(mr->ActionOnPurge & ON_PURGE_TRUNCATE)) {
+      ua->error_msg(_("\nThe option \"Action On Purge = Truncate\" was not defined in the Pool resource.\n"
+                      "Unable to truncate volume \"%s\"\n"), mr->VolumeName);
       return;
    }
 
@@ -673,7 +675,7 @@ static void do_truncate_on_purge(UAContext *ua, MEDIA_DBR *mr,
     * Do it by relabeling the Volume, which truncates it
     */
    sd->fsend("relabel %s OldName=%s NewName=%s PoolName=%s "
-             "MediaType=%s Slot=%d drive=%d MinBlocksize=%d MaxBlocksize=%d\n",
+             "MediaType=%s Slot=%hd drive=%hd MinBlocksize=%d MaxBlocksize=%d\n",
              storage,
              mr->VolumeName, mr->VolumeName,
              pool, mr->MediaType, mr->Slot, drive,
@@ -717,7 +719,7 @@ static void do_truncate_on_purge(UAContext *ua, MEDIA_DBR *mr,
 static bool action_on_purge_cmd(UAContext *ua, const char *cmd)
 {
    bool allpools = false;
-   int drive = -1;
+   drive_number_t drive = -1;
    int nb = 0;
    uint32_t *results = NULL;
    const char *action = "all";
@@ -741,7 +743,7 @@ static bool action_on_purge_cmd(UAContext *ua, const char *cmd)
       if (bstrcasecmp(ua->argk[i], NT_("allpools"))) {
          allpools = true;
       } else if (bstrcasecmp(ua->argk[i], NT_("volume")) &&
-                 is_name_valid(ua->argv[i], NULL)) {
+                 is_name_valid(ua->argv[i])) {
          db_escape_string(ua->jcr, ua->db, esc, ua->argv[i], strlen(ua->argv[i]));
          if (!*volumes.c_str()) {
             Mmsg(buf, "'%s'", esc);
@@ -757,7 +759,7 @@ static bool action_on_purge_cmd(UAContext *ua, const char *cmd)
          drive = atoi(ua->argv[i]);
 
       } else if (bstrcasecmp(ua->argk[i], NT_("action")) &&
-                 is_name_valid(ua->argv[i], NULL)) {
+                 is_name_valid(ua->argv[i])) {
          action=ua->argv[i];
       }
    }

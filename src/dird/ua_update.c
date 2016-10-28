@@ -300,7 +300,7 @@ static void update_volslot(UAContext *ua, char *val, MEDIA_DBR *mr)
    }
    /*
     * Make sure to use db_update... rather than doing this directly,
-    *   so that any Slot is handled correctly.
+    * so that any Slot is handled correctly.
     */
    set_storageid_in_mr(NULL, mr);
    if (!db_update_media_record(ua->jcr, ua->db, mr)) {
@@ -310,7 +310,9 @@ static void update_volslot(UAContext *ua, char *val, MEDIA_DBR *mr)
    }
 }
 
-/* Modify the Pool in which this Volume is located */
+/*
+ * Modify the Pool in which this Volume is located
+ */
 void update_vol_pool(UAContext *ua, char *val, MEDIA_DBR *mr, POOL_DBR *opr)
 {
    POOL_DBR pr;
@@ -323,8 +325,7 @@ void update_vol_pool(UAContext *ua, char *val, MEDIA_DBR *mr, POOL_DBR *opr)
       return;
    }
    mr->PoolId = pr.PoolId;            /* set new PoolId */
-   /*
-    */
+
    db_lock(ua->db);
    Mmsg(query, "UPDATE Media SET PoolId=%s WHERE MediaId=%s",
       edit_int64(mr->PoolId, ed1), edit_int64(mr->MediaId, ed2));
@@ -344,7 +345,9 @@ void update_vol_pool(UAContext *ua, char *val, MEDIA_DBR *mr, POOL_DBR *opr)
    db_unlock(ua->db);
 }
 
-/* Modify the RecyclePool of a Volume */
+/*
+ * Modify the RecyclePool of a Volume
+ */
 void update_vol_recyclepool(UAContext *ua, char *val, MEDIA_DBR *mr)
 {
    POOL_DBR pr;
@@ -353,17 +356,20 @@ void update_vol_recyclepool(UAContext *ua, char *val, MEDIA_DBR *mr)
    const char *poolname;
 
    if (val && *val) { /* update volume recyclepool="Scratch" */
-      /* If a pool name is given, look up the PoolId */
+      /*
+       * If a pool name is given, look up the PoolId
+       */
       memset(&pr, 0, sizeof(pr));
       bstrncpy(pr.Name, val, sizeof(pr.Name));
       if (!get_pool_dbr(ua, &pr, NT_("recyclepool"))) {
          return;
       }
-      /* pool = select_pool_resource(ua);  */
       mr->RecyclePoolId = pr.PoolId;            /* get the PoolId */
       poolname = pr.Name;
    } else { /* update volume recyclepool="" */
-      /* If no pool name is given, set the PoolId to 0 (the default) */
+      /*
+       * If no pool name is given, set the PoolId to 0 (the default)
+       */
       mr->RecyclePoolId = 0;
       poolname = _("*None*");
    }
@@ -380,6 +386,32 @@ void update_vol_recyclepool(UAContext *ua, char *val, MEDIA_DBR *mr)
 }
 
 /*
+ * Modify the Storage in which this Volume is located
+ */
+void update_vol_storage(UAContext *ua, char *val, MEDIA_DBR *mr)
+{
+   STORAGE_DBR sr;
+   POOL_MEM query(PM_MESSAGE);
+   char ed1[50], ed2[50];
+
+   memset(&sr, 0, sizeof(sr));
+   bstrncpy(sr.Name, val, sizeof(sr.Name));
+   if (!get_storage_dbr(ua, &sr)) {
+      return;
+   }
+   mr->StorageId = sr.StorageId;            /* set new StorageId */
+
+   db_lock(ua->db);
+   Mmsg(query, "UPDATE Media SET StorageId=%s WHERE MediaId=%s",
+      edit_int64(mr->StorageId, ed1), edit_int64(mr->MediaId, ed2));
+   if (!db_sql_query(ua->db, query.c_str())) {
+      ua->error_msg("%s", db_strerror(ua->db));
+   }
+
+   db_unlock(ua->db);
+}
+
+/*
  * Refresh the Volume information from the Pool record
  */
 static void update_vol_from_pool(UAContext *ua, MEDIA_DBR *mr)
@@ -389,7 +421,7 @@ static void update_vol_from_pool(UAContext *ua, MEDIA_DBR *mr)
    memset(&pr, 0, sizeof(pr));
    pr.PoolId = mr->PoolId;
    if (!db_get_pool_record(ua->jcr, ua->db, &pr) ||
-       !acl_access_ok(ua, Pool_ACL, pr.Name, true)) {
+       !ua->acl_access_ok(Pool_ACL, pr.Name, true)) {
       return;
    }
    set_pool_dbr_defaults_in_media_dbr(mr, &pr);
@@ -451,7 +483,7 @@ static void update_all_vols(UAContext *ua)
       /*
        * Check access to pool.
        */
-      if (!acl_access_ok(ua, Pool_ACL, pr.Name, false)) {
+      if (!ua->acl_access_ok(Pool_ACL, pr.Name, false)) {
          continue;
       }
 
@@ -532,6 +564,7 @@ static bool update_volume(UAContext *ua)
       NT_("Enabled"),       /* 12 */
       NT_("RecyclePool"),   /* 13 */
       NT_("ActionOnPurge"), /* 14 */
+      NT_("Storage"),       /* 15 */
       NULL
    };
 
@@ -601,6 +634,9 @@ static bool update_volume(UAContext *ua)
          case 14:
             update_vol_actiononpurge(ua, ua->argv[j], &mr);
             break;
+         case 15:
+            update_vol_storage(ua, ua->argv[j], &mr);
+            break;
          }
          done = true;
       }
@@ -615,9 +651,11 @@ static bool update_volume(UAContext *ua)
    for ( ; !done; ) {
       POOL_DBR pr;
       MEDIA_DBR mr;
+      STORAGE_DBR sr;
 
       memset(&pr, 0, sizeof(pr));
       memset(&mr, 0, sizeof(mr));
+      memset(&sr, 0, sizeof(sr));
 
       start_prompt(ua, _("Parameters to modify:\n"));
       add_prompt(ua, _("Volume Status"));              /* 0 */
@@ -637,12 +675,13 @@ static bool update_volume(UAContext *ua)
       add_prompt(ua, _("Enabled")),                    /* 14 */
       add_prompt(ua, _("RecyclePool")),                /* 15 */
       add_prompt(ua, _("Action On Purge")),            /* 16 */
-      add_prompt(ua, _("Done"));                       /* 17 */
+      add_prompt(ua, _("Storage")),                    /* 17 */
+      add_prompt(ua, _("Done"));                       /* 18 */
       i = do_prompt(ua, "", _("Select parameter to modify"), NULL, 0);
 
       /* For All Volumes, All Volumes from Pool, and Done, we don't need
            * a Volume record */
-      if ( i != 12 && i != 13 && i != 17) {
+      if ( i != 12 && i != 13 && i != 18) {
          if (!select_media_dbr(ua, &mr)) {  /* Get Volume record */
             return false;
          }
@@ -713,7 +752,7 @@ static bool update_volume(UAContext *ua)
 
       case 6:                         /* Recycle */
          ua->info_msg(_("Current recycle flag is: %s\n"),
-            mr.Recycle==1?_("yes"):_("no"));
+                      (mr.Recycle == 1) ? _("yes") : _("no"));
          if (!get_yesno(ua, _("Enter new Recycle status: "))) {
             return false;
          }
@@ -730,8 +769,7 @@ static bool update_volume(UAContext *ua)
 
       case 8:                         /* InChanger */
          ua->info_msg(_("Current InChanger flag is: %d\n"), mr.InChanger);
-         bsnprintf(buf, sizeof(buf), _("Set InChanger flag for Volume \"%s\": yes/no: "),
-            mr.VolumeName);
+         bsnprintf(buf, sizeof(buf), _("Set InChanger flag for Volume \"%s\": yes/no: "), mr.VolumeName);
          if (!get_yesno(ua, buf)) {
             return false;
          }
@@ -760,7 +798,7 @@ static bool update_volume(UAContext *ua)
          VolFiles = ua->pint32_val;
          if (VolFiles != (int)(mr.VolFiles + 1)) {
             ua->warning_msg(_("Normally, you should only increase Volume Files by one!\n"));
-            if (!get_yesno(ua, _("Increase Volume Files? (yes/no): ")) || ua->pint32_val == 0) {
+            if (!get_yesno(ua, _("Increase Volume Files? (yes/no): ")) || !ua->pint32_val) {
                break;
             }
          }
@@ -835,6 +873,20 @@ static bool update_volume(UAContext *ua)
          update_vol_actiononpurge(ua, ua->cmd, &mr);
          break;
 
+      case 17:
+         sr.StorageId = mr.StorageId;
+         if (db_get_storage_record(ua->jcr, ua->db, &sr)) {
+            ua->info_msg(_("Current Storage is: %s\n"), sr.Name);
+         } else {
+            ua->info_msg(_("Warning, could not find current Storage\n"));
+         }
+         if (!select_storage_dbr(ua, &sr, NT_("storage"))) {
+            return false;
+         }
+         update_vol_storage(ua, sr.Name, &mr);
+         ua->info_msg(_("New Storage is: %s\n"), sr.Name);
+         return true;
+
       default:                        /* Done or error */
          ua->info_msg(_("Selection terminated.\n"));
          return true;
@@ -900,24 +952,29 @@ static bool update_pool(UAContext *ua)
 }
 
 /*
- * Update a Job record -- allows you to change the
- *  date fields in a Job record. This helps when
- *  providing migration from other vendors.
+ * Update a Job record -- allows to change the fields in a Job record.
  */
 static bool update_job(UAContext *ua)
 {
    int i;
-   char ed1[50], ed2[50];
+   char ed1[50], ed2[50], ed3[50], ed4[50];
    POOL_MEM cmd(PM_MESSAGE);
    JOB_DBR jr;
    CLIENT_DBR cr;
    utime_t StartTime;
    char *client_name = NULL;
+   char *job_name = NULL;
    char *start_time = NULL;
+   char job_type = '\0';
+   DBId_t fileset_id = 0;
    const char *kw[] = {
       NT_("starttime"),                   /* 0 */
       NT_("client"),                      /* 1 */
-      NULL };
+      NT_("filesetid"),                   /* 2 */
+      NT_("jobname"),                     /* 3 */
+      NT_("jobtype"),                     /* 4 */
+      NULL
+   };
 
    Dmsg1(200, "cmd=%s\n", ua->cmd);
    i = find_arg_with_value(ua, NT_("jobid"));
@@ -937,17 +994,26 @@ static bool update_job(UAContext *ua)
       int j;
       if ((j=find_arg_with_value(ua, kw[i])) >= 0) {
          switch (i) {
-         case 0:                         /* start time */
+         case 0:                         /* Start time */
             start_time = ua->argv[j];
             break;
          case 1:                         /* Client name */
             client_name = ua->argv[j];
             break;
+         case 2:                         /* Fileset id */
+            fileset_id = str_to_uint64(ua->argv[j]);
+            break;
+         case 3:                         /* Job name */
+            job_name = ua->argv[j];
+            break;
+         case 4:                         /* Job Type */
+            job_type = ua->argv[j][0];
+            break;
          }
       }
    }
-   if (!client_name && !start_time) {
-      ua->error_msg(_("Neither Client nor StartTime specified.\n"));
+   if (!client_name && !start_time && !fileset_id && !job_name && !job_type) {
+      ua->error_msg(_("Neither Client, StartTime, Filesetid, JobType nor Name specified.\n"));
       return false;
    }
    if (client_name) {
@@ -955,6 +1021,15 @@ static bool update_job(UAContext *ua)
          return false;
       }
       jr.ClientId = cr.ClientId;
+   }
+   if (fileset_id) {
+      jr.FileSetId = fileset_id;
+   }
+   if (job_name) {
+      bstrncpy(jr.Name, job_name, MAX_NAME_LENGTH);
+   }
+   if (job_type) {
+      jr.JobType = job_type;
    }
    if (start_time) {
       utime_t delta_start;
@@ -976,14 +1051,17 @@ static bool update_job(UAContext *ua)
       bstrutime(jr.cSchedTime, sizeof(jr.cSchedTime), jr.SchedTime);
       bstrutime(jr.cEndTime, sizeof(jr.cEndTime), jr.EndTime);
    }
-   Mmsg(cmd, "UPDATE Job SET ClientId=%s,StartTime='%s',SchedTime='%s',"
-             "EndTime='%s',JobTDate=%s WHERE JobId=%s",
+   Mmsg(cmd, "UPDATE Job SET Name='%s', ClientId=%s,StartTime='%s',SchedTime='%s',"
+             "EndTime='%s',JobTDate=%s, FileSetId='%s', Type='%c' WHERE JobId=%s",
+             jr.Name,
              edit_int64(jr.ClientId, ed1),
              jr.cStartTime,
              jr.cSchedTime,
              jr.cEndTime,
-             edit_uint64(jr.JobTDate, ed1),
-             edit_int64(jr.JobId, ed2));
+             edit_uint64(jr.JobTDate, ed2),
+             edit_uint64(jr.FileSetId, ed3),
+             jr.JobType,
+             edit_int64(jr.JobId, ed4));
    if (!db_sql_query(ua->db, cmd.c_str())) {
       ua->error_msg("%s", db_strerror(ua->db));
       return false;
@@ -998,12 +1076,12 @@ static void update_slots(UAContext *ua)
 {
    USTORERES store;
    vol_list_t *vl;
-   dlist *vol_list = NULL;
+   changer_vol_list_t *vol_list = NULL;
    MEDIA_DBR mr;
    char *slot_list;
    bool scan;
-   int max_slots;
-   int drive = -1;
+   slot_number_t max_slots;
+   drive_number_t drive = -1;
    int Enabled = VOL_ENABLED;
    bool have_enabled;
    int i;
@@ -1032,7 +1110,7 @@ static void update_slots(UAContext *ua)
       have_enabled = false;
    }
 
-   max_slots = get_num_slots_from_SD(ua);
+   max_slots = get_num_slots(ua, ua->jcr->res.wstore);
    Dmsg1(100, "max_slots=%d\n", max_slots);
    if (max_slots <= 0) {
       ua->warning_msg(_("No slots in changer to scan.\n"));
@@ -1046,7 +1124,7 @@ static void update_slots(UAContext *ua)
       return;
    }
 
-   vol_list = get_vol_list_from_SD(ua, store.store, false, scan);
+   vol_list = get_vol_list_from_storage(ua, store.store, false, scan, false);
    if (!vol_list) {
       ua->warning_msg(_("No Volumes found to update, or no barcodes.\n"));
       goto bail_out;
@@ -1061,7 +1139,7 @@ static void update_slots(UAContext *ua)
     * Walk through the list updating the media records
     */
    memset(&mr, 0, sizeof(mr));
-   foreach_dlist(vl, vol_list) {
+   foreach_dlist(vl, vol_list->contents) {
       if (vl->Slot > max_slots) {
          ua->warning_msg(_("Slot %d greater than max %d ignored.\n"), vl->Slot, max_slots);
          continue;
@@ -1166,7 +1244,7 @@ static void update_slots(UAContext *ua)
 
 bail_out:
    if (vol_list) {
-      free_vol_list(vol_list);
+      storage_release_vol_list(store.store, vol_list);
    }
    free(slot_list);
    close_sd_bsock(ua);
@@ -1185,7 +1263,7 @@ bail_out:
  *
  * The vol_list passed here needs to be from an "autochanger listall" cmd.
  */
-void update_slots_from_vol_list(UAContext *ua, STORERES *store, dlist *vol_list, char *slot_list)
+void update_slots_from_vol_list(UAContext *ua, STORERES *store, changer_vol_list_t *vol_list, char *slot_list)
 {
    vol_list_t *vl;
    MEDIA_DBR mr;
@@ -1197,7 +1275,7 @@ void update_slots_from_vol_list(UAContext *ua, STORERES *store, dlist *vol_list,
    /*
     * Walk through the list updating the media records
     */
-   foreach_dlist(vl, vol_list) {
+   foreach_dlist(vl, vol_list->contents) {
       /*
        * We are only interested in normal slots.
        */
@@ -1290,7 +1368,7 @@ void update_slots_from_vol_list(UAContext *ua, STORERES *store, dlist *vol_list,
  *
  * The vol_list passed here needs to be from an "autochanger listall" cmd.
  */
-void update_inchanger_for_export(UAContext *ua, STORERES *store, dlist *vol_list, char *slot_list)
+void update_inchanger_for_export(UAContext *ua, STORERES *store, changer_vol_list_t *vol_list, char *slot_list)
 {
    vol_list_t *vl;
    MEDIA_DBR mr;
@@ -1302,7 +1380,7 @@ void update_inchanger_for_export(UAContext *ua, STORERES *store, dlist *vol_list
    /*
     * Walk through the list updating the media records
     */
-   foreach_dlist(vl, vol_list) {
+   foreach_dlist(vl, vol_list->contents) {
       /*
        * We are only interested in normal slots.
        */

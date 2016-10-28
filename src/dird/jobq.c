@@ -764,12 +764,12 @@ static bool reschedule_job(JCR *jcr, jobq_t *jq, jobq_item_t *je)
          njcr->JobStatus = -1;
          njcr->setJobStatus(jcr->JobStatus);
          if (jcr->res.rstore) {
-            copy_rstorage(njcr, jcr->rstorage, _("previous Job"));
+            copy_rstorage(njcr, jcr->res.rstorage, _("previous Job"));
          } else {
             free_rstorage(njcr);
          }
          if (jcr->res.wstore) {
-            copy_wstorage(njcr, jcr->wstorage, _("previous Job"));
+            copy_wstorage(njcr, jcr->res.wstorage, _("previous Job"));
          } else {
             free_wstorage(njcr);
          }
@@ -807,8 +807,9 @@ static bool acquire_resources(JCR *jcr)
    switch (jcr->getJobType()) {
    case JT_MIGRATE:
    case JT_COPY:
+   case JT_CONSOLIDATE:
       /*
-       * Migration/Copy jobs are not counted for client concurrency
+       * Migration/Copy and Consolidation jobs are not counted for client concurrency
        * as they do not touch the client at all
        */
       jcr->IgnoreClientConcurrency = true;
@@ -897,10 +898,10 @@ static bool inc_client_concurrency(JCR *jcr)
    }
 
    P(mutex);
-   if (jcr->res.client->NumConcurrentJobs < jcr->res.client->MaxConcurrentJobs) {
-      jcr->res.client->NumConcurrentJobs++;
+   if (jcr->res.client->rcs->NumConcurrentJobs < jcr->res.client->MaxConcurrentJobs) {
+      jcr->res.client->rcs->NumConcurrentJobs++;
       Dmsg2(50, "Inc Client=%s rncj=%d\n",
-            jcr->res.client->name(), jcr->res.client->NumConcurrentJobs);
+            jcr->res.client->name(), jcr->res.client->rcs->NumConcurrentJobs);
       V(mutex);
 
       return true;
@@ -919,9 +920,9 @@ static void dec_client_concurrency(JCR *jcr)
 
    P(mutex);
    if (jcr->res.client) {
-      jcr->res.client->NumConcurrentJobs--;
+      jcr->res.client->rcs->NumConcurrentJobs--;
       Dmsg2(50, "Dec Client=%s rncj=%d\n",
-            jcr->res.client->name(), jcr->res.client->NumConcurrentJobs);
+            jcr->res.client->name(), jcr->res.client->rcs->NumConcurrentJobs);
    }
    V(mutex);
 }
@@ -929,10 +930,10 @@ static void dec_client_concurrency(JCR *jcr)
 static bool inc_job_concurrency(JCR *jcr)
 {
    P(mutex);
-   if (jcr->res.job->NumConcurrentJobs < jcr->res.job->MaxConcurrentJobs) {
-      jcr->res.job->NumConcurrentJobs++;
+   if (jcr->res.job->rjs->NumConcurrentJobs < jcr->res.job->MaxConcurrentJobs) {
+      jcr->res.job->rjs->NumConcurrentJobs++;
       Dmsg2(50, "Inc Job=%s rncj=%d\n",
-            jcr->res.job->name(), jcr->res.job->NumConcurrentJobs);
+            jcr->res.job->name(), jcr->res.job->rjs->NumConcurrentJobs);
       V(mutex);
 
       return true;
@@ -946,9 +947,9 @@ static bool inc_job_concurrency(JCR *jcr)
 static void dec_job_concurrency(JCR *jcr)
 {
    P(mutex);
-   jcr->res.job->NumConcurrentJobs--;
+   jcr->res.job->rjs->NumConcurrentJobs--;
    Dmsg2(50, "Dec Job=%s rncj=%d\n",
-         jcr->res.job->name(), jcr->res.job->NumConcurrentJobs);
+         jcr->res.job->name(), jcr->res.job->rjs->NumConcurrentJobs);
    V(mutex);
 }
 
@@ -963,11 +964,11 @@ bool inc_read_store(JCR *jcr)
    }
 
    P(mutex);
-   if (jcr->res.rstore->NumConcurrentJobs < jcr->res.rstore->MaxConcurrentJobs) {
-      jcr->res.rstore->NumConcurrentReadJobs++;
-      jcr->res.rstore->NumConcurrentJobs++;
+   if (jcr->res.rstore->rss->NumConcurrentJobs < jcr->res.rstore->MaxConcurrentJobs) {
+      jcr->res.rstore->rss->NumConcurrentReadJobs++;
+      jcr->res.rstore->rss->NumConcurrentJobs++;
       Dmsg2(50, "Inc Rstore=%s rncj=%d\n",
-            jcr->res.rstore->name(), jcr->res.rstore->NumConcurrentJobs);
+            jcr->res.rstore->name(), jcr->res.rstore->rss->NumConcurrentJobs);
       V(mutex);
 
       return true;
@@ -975,7 +976,7 @@ bool inc_read_store(JCR *jcr)
    V(mutex);
 
    Dmsg2(50, "Fail to acquire Rstore=%s rncj=%d\n",
-         jcr->res.rstore->name(), jcr->res.rstore->NumConcurrentJobs);
+         jcr->res.rstore->name(), jcr->res.rstore->rss->NumConcurrentJobs);
 
    return false;
 }
@@ -984,19 +985,19 @@ void dec_read_store(JCR *jcr)
 {
    if (jcr->res.rstore && !jcr->IgnoreStorageConcurrency) {
       P(mutex);
-      jcr->res.rstore->NumConcurrentReadJobs--;    /* back out rstore */
-      jcr->res.rstore->NumConcurrentJobs--;        /* back out rstore */
+      jcr->res.rstore->rss->NumConcurrentReadJobs--;
+      jcr->res.rstore->rss->NumConcurrentJobs--;
       Dmsg2(50, "Dec Rstore=%s rncj=%d\n",
-            jcr->res.rstore->name(), jcr->res.rstore->NumConcurrentJobs);
+            jcr->res.rstore->name(), jcr->res.rstore->rss->NumConcurrentJobs);
 
-      if (jcr->res.rstore->NumConcurrentReadJobs < 0) {
+      if (jcr->res.rstore->rss->NumConcurrentReadJobs < 0) {
          Jmsg(jcr, M_FATAL, 0, _("NumConcurrentReadJobs Dec Rstore=%s rncj=%d\n"),
-              jcr->res.rstore->name(), jcr->res.rstore->NumConcurrentReadJobs);
+              jcr->res.rstore->name(), jcr->res.rstore->rss->NumConcurrentReadJobs);
       }
 
-      if (jcr->res.rstore->NumConcurrentJobs < 0) {
+      if (jcr->res.rstore->rss->NumConcurrentJobs < 0) {
          Jmsg(jcr, M_FATAL, 0, _("NumConcurrentJobs Dec Rstore=%s rncj=%d\n"),
-              jcr->res.rstore->name(), jcr->res.rstore->NumConcurrentJobs);
+              jcr->res.rstore->name(), jcr->res.rstore->rss->NumConcurrentJobs);
       }
       V(mutex);
    }
@@ -1009,10 +1010,10 @@ static bool inc_write_store(JCR *jcr)
    }
 
    P(mutex);
-   if (jcr->res.wstore->NumConcurrentJobs < jcr->res.wstore->MaxConcurrentJobs) {
-      jcr->res.wstore->NumConcurrentJobs++;
+   if (jcr->res.wstore->rss->NumConcurrentJobs < jcr->res.wstore->MaxConcurrentJobs) {
+      jcr->res.wstore->rss->NumConcurrentJobs++;
       Dmsg2(50, "Inc Wstore=%s wncj=%d\n",
-            jcr->res.wstore->name(), jcr->res.wstore->NumConcurrentJobs);
+            jcr->res.wstore->name(), jcr->res.wstore->rss->NumConcurrentJobs);
       V(mutex);
 
       return true;
@@ -1020,7 +1021,7 @@ static bool inc_write_store(JCR *jcr)
    V(mutex);
 
    Dmsg2(50, "Fail to acquire Wstore=%s wncj=%d\n",
-         jcr->res.wstore->name(), jcr->res.wstore->NumConcurrentJobs);
+         jcr->res.wstore->name(), jcr->res.wstore->rss->NumConcurrentJobs);
 
    return false;
 }
@@ -1029,13 +1030,13 @@ static void dec_write_store(JCR *jcr)
 {
    if (jcr->res.wstore && !jcr->IgnoreStorageConcurrency) {
       P(mutex);
-      jcr->res.wstore->NumConcurrentJobs--;
+      jcr->res.wstore->rss->NumConcurrentJobs--;
       Dmsg2(50, "Dec Wstore=%s wncj=%d\n",
-            jcr->res.wstore->name(), jcr->res.wstore->NumConcurrentJobs);
+            jcr->res.wstore->name(), jcr->res.wstore->rss->NumConcurrentJobs);
 
-      if (jcr->res.wstore->NumConcurrentJobs < 0) {
+      if (jcr->res.wstore->rss->NumConcurrentJobs < 0) {
          Jmsg(jcr, M_FATAL, 0, _("NumConcurrentJobs Dec Wstore=%s wncj=%d\n"),
-              jcr->res.wstore->name(), jcr->res.wstore->NumConcurrentJobs);
+              jcr->res.wstore->name(), jcr->res.wstore->rss->NumConcurrentJobs);
       }
       V(mutex);
    }

@@ -3,7 +3,7 @@
 
    Copyright (C) 2001-2012 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2015 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -59,24 +59,24 @@ static char cancelcmd[] =
    "cancel Job=%127s";
 static char relabelcmd[] =
    "relabel %127s OldName=%127s NewName=%127s PoolName=%127s "
-   "MediaType=%127s Slot=%d drive=%d MinBlocksize=%d MaxBlocksize=%d";
+   "MediaType=%127s Slot=%hd drive=%hd MinBlocksize=%d MaxBlocksize=%d";
 static char labelcmd[] =
    "label %127s VolumeName=%127s PoolName=%127s "
-   "MediaType=%127s Slot=%d drive=%d MinBlocksize=%d MaxBlocksize=%d";
+   "MediaType=%127s Slot=%hd drive=%hd MinBlocksize=%d MaxBlocksize=%d";
 static char mountslotcmd[] =
-   "mount %127s drive=%d slot=%d";
+   "mount %127s drive=%hd slot=%hd";
 static char mountcmd[] =
-   "mount %127s drive=%d";
+   "mount %127s drive=%hd";
 static char unmountcmd[] =
-   "unmount %127s drive=%d";
+   "unmount %127s drive=%hd";
 #if 0
 static char actionopcmd[] =
    "action_on_purge %127s vol=%127s action=%d";
 #endif
 static char releasecmd[] =
-   "release %127s drive=%d";
+   "release %127s drive=%hd";
 static char readlabelcmd[] =
-   "readlabel %127s Slot=%d drive=%d";
+   "readlabel %127s Slot=%hd drive=%hd";
 static char replicatecmd[] =
    "replicate Job=%127s address=%s port=%d ssl=%d Authorization=%100s";
 static char passiveclientcmd[] =
@@ -109,6 +109,8 @@ static char OKpassive[] =
    "2000 OK passive client\n";
 static char OKpluginoptions[] =
    "2000 OK plugin options\n";
+static char OKsecureerase[] =
+   "2000 OK SDSecureEraseCmd %s \n";
 
 /* Imported functions */
 extern bool finish_cmd(JCR *jcr);
@@ -141,16 +143,18 @@ static bool relabel_cmd(JCR *jcr);
 static bool release_cmd(JCR *jcr);
 static bool replicate_cmd(JCR *jcr);
 static bool run_cmd(JCR *jcr);
+static bool secureerasereq_cmd(JCR *jcr);
 static bool setbandwidth_cmd(JCR *jcr);
 static bool setdebug_cmd(JCR *jcr);
 static bool unmount_cmd(JCR *jcr);
 
-static DCR *find_device(JCR *jcr, POOL_MEM &dev_name, int drive, BLOCKSIZES *blocksizes);
-static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, int Slot);
+static DCR *find_device(JCR *jcr, POOL_MEM &dev_name,
+                        drive_number_t drive, BLOCKSIZES *blocksizes);
+static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, slot_number_t slot);
 static void label_volume_if_ok(DCR *dcr, char *oldname,
                                char *newname, char *poolname,
-                               int Slot, bool relabel);
-static bool try_autoload_device(JCR *jcr, DCR *dcr, int slot, const char *VolName);
+                               slot_number_t Slot, bool relabel);
+static int try_autoload_device(JCR *jcr, DCR *dcr, slot_number_t slot, const char *VolName);
 static void send_dir_busy_message(BSOCK *dir, DEVICE *dev);
 
 struct s_cmds {
@@ -185,6 +189,7 @@ static struct s_cmds cmds[] = {
    { "resolve", resolve_cmd, false },
    { "replicate", replicate_cmd, false },   /* Replicate data to an external SD */
    { "run", run_cmd, false },               /* Start of Job */
+   { "getSecureEraseCmd", secureerasereq_cmd, false },
    { "setbandwidth=", setbandwidth_cmd, false },
    { "setdebug=", setdebug_cmd, false },    /* Set debug level */
    { "stats", stats_cmd, false },
@@ -352,6 +357,20 @@ static bool die_cmd(JCR *jcr)
    djcr->JobId = a;
 #endif
    return false;
+}
+
+
+/*
+ * Handles the secureerase request
+ * replies the configured secure erase command
+ * or "*None*"
+ */
+static bool secureerasereq_cmd(JCR *jcr) {
+   BSOCK *dir = jcr->dir_bsock;
+
+   Dmsg1(220,"Secure Erase Cmd Request: %s\n", (me->secure_erase_cmdline ? me->secure_erase_cmdline : "*None*"));
+
+   return dir->fsend(OKsecureerase, (me->secure_erase_cmdline ? me->secure_erase_cmdline : "*None*"));
 }
 
 /**
@@ -569,8 +588,8 @@ static bool do_label(JCR *jcr, bool relabel)
    DEVICE *dev;
    BLOCKSIZES blocksizes;
    bool ok = false;
-   int32_t slot, drive;
-   //, max_block_size, min_block_size;
+   slot_number_t slot;
+   drive_number_t drive;
 
    /*
     * Determine the length of the temporary buffers.
@@ -673,7 +692,7 @@ static bool relabel_cmd(JCR *jcr)
  */
 static void label_volume_if_ok(DCR *dcr, char *oldname,
                                char *newname, char *poolname,
-                               int slot, bool relabel)
+                               slot_number_t slot, bool relabel)
 {
    BSOCK *dir = dcr->jcr->dir_bsock;
    bsteal_lock_t hold;
@@ -687,30 +706,43 @@ static void label_volume_if_ok(DCR *dcr, char *oldname,
    Dmsg1(100, "Stole device %s lock, writing label.\n", dev->print_name());
 
    Dmsg0(90, "try_autoload_device - looking for volume_info\n");
-   if (!try_autoload_device(dcr->jcr, dcr, slot, volname)) {
-      goto bail_out;                  /* error */
+   switch (try_autoload_device(dcr->jcr, dcr, slot, volname)) {
+   case -1:
+      goto cleanup;
+   case -2:
+      goto bail_out;
+   case 0:
+   default:
+      break;
    }
 
-   /* Ensure that the device is open -- autoload_device() closes it */
+   /*
+    * Ensure that the device is open -- autoload_device() closes it
+    */
    if (dev->is_tape()) {
       mode = OPEN_READ_WRITE;
    } else {
       mode = CREATE_READ_WRITE;
    }
 
-   /* Set old volume name for open if relabeling */
+   /*
+    * Set old volume name for open if relabeling
+    */
    dcr->setVolCatName(volname);
 
    if (!dev->open(dcr, mode)) {
-      dir->fsend(_("3910 Unable to open device \"%s\": ERR=%s\n"),
-                 dev->print_name(), dev->bstrerror());
-      goto bail_out;
+      dir->fsend(_("3910 Unable to open device \"%s\": ERR=%s\n"), dev->print_name(), dev->bstrerror());
+      goto cleanup;
    }
 
-   /* See what we have for a Volume */
+   /*
+    * See what we have for a Volume
+    */
    label_status = read_dev_volume_label(dcr);
 
-   /* Set new volume name */
+   /*
+    * Set new volume name
+    */
    dcr->setVolCatName(newname);
    switch(label_status) {
    case VOL_NAME_ERROR:
@@ -718,29 +750,36 @@ static void label_volume_if_ok(DCR *dcr, char *oldname,
    case VOL_LABEL_ERROR:
    case VOL_OK:
       if (!relabel) {
-         dir->fsend(_("3920 Cannot label Volume because it is already labeled: \"%s\"\n"),
-             dev->VolHdr.VolumeName);
-         goto bail_out;
+         dir->fsend(_("3920 Cannot label Volume because it is already labeled: \"%s\"\n"), dev->VolHdr.VolumeName);
+         goto cleanup;
       }
 
-      /* Relabel request. If oldname matches, continue */
+      /*
+       * Relabel request. If oldname matches, continue
+       */
       if (!bstrcmp(oldname, dev->VolHdr.VolumeName)) {
          dir->fsend(_("3921 Wrong volume mounted.\n"));
-         goto bail_out;
+         goto cleanup;
       }
+
       if (dev->label_type != B_BAREOS_LABEL) {
          dir->fsend(_("3922 Cannot relabel an ANSI/IBM labeled Volume.\n"));
-         goto bail_out;
+         goto cleanup;
       }
-      /* Fall through wanted! */
+      /*
+       * Fall through wanted!
+       */
    case VOL_IO_ERROR:
    case VOL_NO_LABEL:
       if (!write_new_volume_label_to_dev(dcr, newname, poolname, relabel)) {
          dir->fsend(_("3912 Failed to label Volume: ERR=%s\n"), dev->bstrerror());
-         goto bail_out;
+         goto cleanup;
       }
       bstrncpy(dcr->VolumeName, newname, sizeof(dcr->VolumeName));
-      /* The following 3000 OK label. string is scanned in ua_label.c */
+
+      /*
+       * The following 3000 OK label. string is scanned in ua_label.c
+       */
       dir->fsend("3000 OK label. VolBytes=%s Volume=\"%s\" Device=%s\n",
                  edit_uint64(dev->VolCatInfo.VolCatBytes, ed1),
                  newname, dev->print_name());
@@ -754,7 +793,7 @@ static void label_volume_if_ok(DCR *dcr, char *oldname,
       break;
    }
 
-bail_out:
+cleanup:
    if (dev->is_open() && !dev->has_cap(CAP_ALWAYSOPEN)) {
       dev->close(dcr);
    }
@@ -762,7 +801,10 @@ bail_out:
       dev->clear_volhdr();
    }
    volume_unused(dcr);                   /* no longer using volume */
+
+bail_out:
    give_back_device_lock(dev, &hold);
+
    return;
 }
 
@@ -802,7 +844,7 @@ static bool read_label(DCR *dcr)
 /*
  * Searches for device by name, and if found, creates a dcr and returns it.
  */
-static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *blocksizes)
+static DCR *find_device(JCR *jcr, POOL_MEM &devname, drive_number_t drive, BLOCKSIZES *blocksizes)
 {
    DEVRES *device;
    AUTOCHANGERRES *changer;
@@ -811,14 +853,16 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
 
    unbash_spaces(devname);
    foreach_res(device, R_DEVICE) {
-      /* Find resource, and make sure we were able to open it */
+      /*
+       * Find resource, and make sure we were able to open it
+       */
       if (bstrcmp(device->name(), devname.c_str())) {
          if (!device->dev) {
             device->dev = init_dev(jcr, device);
          }
          if (!device->dev) {
             Jmsg(jcr, M_WARNING, 0, _("\n"
-               "     Device \"%s\" requested by DIR could not be opened or does not exist.\n"),
+                 "     Device \"%s\" requested by DIR could not be opened or does not exist.\n"),
                  devname.c_str());
             continue;
          }
@@ -827,11 +871,16 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
          break;
       }
    }
+
    if (!found) {
       foreach_res(changer, R_AUTOCHANGER) {
-         /* Find resource, and make sure we were able to open it */
+         /*
+          * Find resource, and make sure we were able to open it
+          */
          if (bstrcmp(devname.c_str(), changer->name())) {
-            /* Try each device in this AutoChanger */
+            /*
+             * Try each device in this AutoChanger
+             */
             foreach_alist(device, changer->device) {
                Dmsg1(100, "Try changer device %s\n", device->name());
                if (!device->dev) {
@@ -840,21 +889,21 @@ static DCR *find_device(JCR *jcr, POOL_MEM &devname, int drive, BLOCKSIZES *bloc
                if (!device->dev) {
                   Dmsg1(100, "Device %s could not be opened. Skipped\n", devname.c_str());
                   Jmsg(jcr, M_WARNING, 0, _("\n"
-                     "     Device \"%s\" in changer \"%s\" requested by DIR could not be opened or does not exist.\n"),
+                       "     Device \"%s\" in changer \"%s\" requested by DIR could not be opened or does not exist.\n"),
                        device->name(), devname.c_str());
                   continue;
                }
                if (!device->dev->autoselect) {
                   Dmsg1(100, "Device %s not autoselect skipped.\n", devname.c_str());
-                  continue;              /* device is not available */
+                  continue;           /* device is not available */
                }
-               if (drive < 0 || drive == (int)device->dev->drive_index) {
+               if (drive < 0 || drive == device->dev->drive) {
                   Dmsg1(20, "Found changer device %s\n", device->name());
                   found = true;
                   break;
                }
-               Dmsg3(100, "Device %s drive wrong: want=%d got=%d skipping\n",
-                  devname.c_str(), drive, (int)device->dev->drive_index);
+               Dmsg3(100, "Device %s drive wrong: want=%hd got=%hd skipping\n",
+                     devname.c_str(), drive, device->dev->drive);
             }
             break;                    /* we found it but could not open a device */
          }
@@ -880,8 +929,8 @@ static bool mount_cmd(JCR *jcr)
    BSOCK *dir = jcr->dir_bsock;
    DEVICE *dev;
    DCR *dcr;
-   int32_t drive;
-   int32_t slot = 0;
+   drive_number_t drive;
+   slot_number_t slot = 0;
    bool ok;
 
    ok = sscanf(dir->msg, mountslotcmd, devname.c_str(), &drive, &slot) == 3;
@@ -889,14 +938,14 @@ static bool mount_cmd(JCR *jcr)
       ok = sscanf(dir->msg, mountcmd, devname.c_str(), &drive) == 2;
    }
 
-   Dmsg3(100, "ok=%d drive=%d slot=%d\n", ok, drive, slot);
+   Dmsg3(100, "ok=%d drive=%hd slot=%hd\n", ok, drive, slot);
    if (ok) {
       dcr = find_device(jcr, devname, drive, NULL);
       if (dcr) {
          dev = dcr->dev;
          dev->Lock();                  /* Use P to avoid indefinite block */
-         Dmsg2(100, "mount cmd blocked=%d must_unload=%d\n", dev->blocked(),
-            dev->must_unload());
+         Dmsg2(100, "mount cmd blocked=%d must_unload=%d\n",
+               dev->blocked(), dev->must_unload());
          switch (dev->blocked()) {         /* device blocked? */
          case BST_WAITING_FOR_SYSOP:
             /* Someone is waiting, wake him */
@@ -912,7 +961,7 @@ static bool mount_cmd(JCR *jcr)
          /* In both of these two cases, we (the user) unmounted the Volume */
          case BST_UNMOUNTED_WAITING_FOR_SYSOP:
          case BST_UNMOUNTED:
-            Dmsg2(100, "Unmounted changer=%d slot=%d\n", dev->is_autochanger(), slot);
+            Dmsg2(100, "Unmounted changer=%d slot=%hd\n", dev->is_autochanger(), slot);
             if (dev->is_autochanger() && slot > 0) {
                try_autoload_device(jcr, dcr, slot, "");
             }
@@ -956,7 +1005,7 @@ static bool mount_cmd(JCR *jcr)
             break;
 
          case BST_NOT_BLOCKED:
-            Dmsg2(100, "Not blocked changer=%d slot=%d\n", dev->is_autochanger(), slot);
+            Dmsg2(100, "Not blocked changer=%d slot=%hd\n", dev->is_autochanger(), slot);
             if (dev->is_autochanger() && slot > 0) {
                try_autoload_device(jcr, dcr, slot, "");
             }
@@ -1026,7 +1075,7 @@ static bool unmount_cmd(JCR *jcr)
    BSOCK *dir = jcr->dir_bsock;
    DEVICE *dev;
    DCR *dcr;
-   int32_t drive;
+   drive_number_t drive;
 
    if (sscanf(dir->msg, unmountcmd, devname.c_str(), &drive) == 2) {
       dcr = find_device(jcr, devname, drive, NULL);
@@ -1156,7 +1205,7 @@ static bool release_cmd(JCR *jcr)
    BSOCK *dir = jcr->dir_bsock;
    DEVICE *dev;
    DCR *dcr;
-   int32_t drive;
+   drive_number_t drive;
 
    if (sscanf(dir->msg, releasecmd, devname.c_str(), &drive) == 2) {
       dcr = find_device(jcr, devname, drive, NULL);
@@ -1281,7 +1330,7 @@ static bool bootstrap_cmd(JCR *jcr)
  */
 static bool changer_cmd(JCR *jcr)
 {
-   int src_slot, dst_slot;
+   slot_number_t src_slot, dst_slot;
    POOL_MEM devname;
    BSOCK *dir = jcr->dir_bsock;
    DEVICE *dev;
@@ -1307,7 +1356,7 @@ static bool changer_cmd(JCR *jcr)
    } else if (sscanf(dir->msg, "autochanger drives %127s", devname.c_str()) == 1) {
       cmd = "drives";
       safe_cmd = ok = true;
-   } else if (sscanf(dir->msg, "autochanger transfer %127s %d %d",
+   } else if (sscanf(dir->msg, "autochanger transfer %127s %hd %hd",
                      devname.c_str(), &src_slot, &dst_slot) == 3) {
       cmd = "transfer";
       safe_cmd = ok = true;
@@ -1358,24 +1407,24 @@ static bool readlabel_cmd(JCR *jcr)
    BSOCK *dir = jcr->dir_bsock;
    DEVICE *dev;
    DCR *dcr;
-   int32_t Slot, drive;
+   slot_number_t slot;
+   drive_number_t drive;
 
-   if (sscanf(dir->msg, readlabelcmd, devname.c_str(),
-       &Slot, &drive) == 3) {
+   if (sscanf(dir->msg, readlabelcmd, devname.c_str(), &slot, &drive) == 3) {
       dcr = find_device(jcr, devname, drive, NULL);
       if (dcr) {
          dev = dcr->dev;
          dev->Lock();                 /* Use P to avoid indefinite block */
          if (!dev->is_open()) {
-            read_volume_label(jcr, dcr, dev, Slot);
+            read_volume_label(jcr, dcr, dev, slot);
             dev->close(dcr);
          /* Under certain "safe" conditions, we can steal the lock */
          } else if (dev->can_steal_lock()) {
-            read_volume_label(jcr, dcr, dev, Slot);
+            read_volume_label(jcr, dcr, dev, slot);
          } else if (dev->is_busy() || dev->is_blocked()) {
             send_dir_busy_message(dir, dev);
          } else {                     /* device not being used */
-            read_volume_label(jcr, dcr, dev, Slot);
+            read_volume_label(jcr, dcr, dev, slot);
          }
          dev->Unlock();
          free_dcr(dcr);
@@ -1395,7 +1444,7 @@ static bool readlabel_cmd(JCR *jcr)
  *
  *  Enter with the mutex set
  */
-static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, int Slot)
+static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, slot_number_t Slot)
 {
    BSOCK *dir = jcr->dir_bsock;
    bsteal_lock_t hold;
@@ -1403,15 +1452,20 @@ static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, int Slot)
    dcr->set_dev(dev);
    steal_device_lock(dev, &hold, BST_WRITING_LABEL);
 
-   if (!try_autoload_device(jcr, dcr, Slot, "")) {
-      goto bail_out;                  /* error */
+   switch (try_autoload_device(dcr->jcr, dcr, Slot, "")) {
+   case -1:
+   case -2:
+      goto bail_out;
+   case 0:
+   default:
+      break;
    }
 
    dev->clear_labeled();              /* force read of label */
    switch (read_dev_volume_label(dcr)) {
    case VOL_OK:
       /* DO NOT add quotes around the Volume name. It is scanned in the DIR */
-      dir->fsend(_("3001 Volume=%s Slot=%d\n"), dev->VolHdr.VolumeName, Slot);
+      dir->fsend(_("3001 Volume=%s Slot=%hd\n"), dev->VolHdr.VolumeName, Slot);
       Dmsg1(100, "Volume: %s\n", dev->VolHdr.VolumeName);
       break;
    default:
@@ -1421,20 +1475,27 @@ static void read_volume_label(JCR *jcr, DCR *dcr, DEVICE *dev, int Slot)
 
 bail_out:
    give_back_device_lock(dev, &hold);
+
    return;
 }
 
-static bool try_autoload_device(JCR *jcr, DCR *dcr, int slot, const char *VolName)
+/*
+ * Try autoloading a device.
+ *
+ * Returns: 1 on success
+ *          0 on failure (no changer available)
+ *         -1 on error on autochanger
+ *         -2 on error locking the autochanger
+ */
+static int try_autoload_device(JCR *jcr, DCR *dcr, slot_number_t Slot, const char *VolName)
 {
    BSOCK *dir = jcr->dir_bsock;
 
    bstrncpy(dcr->VolumeName, VolName, sizeof(dcr->VolumeName));
-   dcr->VolCatInfo.Slot = slot;
-   dcr->VolCatInfo.InChanger = slot > 0;
-   if (autoload_device(dcr, 0, dir) < 0) {    /* autoload if possible */
-      return false;
-   }
-   return true;
+   dcr->VolCatInfo.Slot = Slot;
+   dcr->VolCatInfo.InChanger = Slot > 0;
+
+   return autoload_device(dcr, 0, dir);
 }
 
 static void send_dir_busy_message(BSOCK *dir, DEVICE *dev)

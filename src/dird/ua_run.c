@@ -112,7 +112,7 @@ static inline bool rerun_job(UAContext *ua, JobId_t JobId, bool yes, utime_t now
       case JT_MIGRATE: {
             JOBRES *job = NULL;
 
-            job = GetJobResWithName(jr.Name);
+            job = ua->GetJobResWithName(jr.Name, false);
             if (job) {
                Mmsg(cmdline, " pool=\"%s\"", job->pool->name());
                pm_strcat(ua->cmd, cmdline);
@@ -124,7 +124,7 @@ static inline bool rerun_job(UAContext *ua, JobId_t JobId, bool yes, utime_t now
          case L_VIRTUAL_FULL: {
             JOBRES *job = NULL;
 
-            job = GetJobResWithName(jr.Name);
+            job = ua->GetJobResWithName(jr.Name, false);
             if (job) {
                Mmsg(cmdline, " pool=\"%s\"", job->pool->name());
                pm_strcat(ua->cmd, cmdline);
@@ -309,7 +309,8 @@ bool rerun_cmd(UAContext *ua, const char *cmd)
       }
       ua->send_msg("\n");
 
-      if (!yes &&  (!get_yesno(ua, _("rerun these jobids? (yes/no): ")) || ua->pint32_val == 0 )) {
+      if (!yes &&
+          (!get_yesno(ua, _("rerun these jobids? (yes/no): ")) || !ua->pint32_val)) {
          goto bail_out;
       }
       /*
@@ -599,7 +600,7 @@ int modify_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
          select_job_level(ua, jcr);
          switch (jcr->getJobType()) {
          case JT_BACKUP:
-            if (!jcr->is_JobLevel(L_VIRTUAL_FULL)) {
+            if (!rc.pool_override && !jcr->is_JobLevel(L_VIRTUAL_FULL)) {
                apply_pool_overrides(jcr, true);
                rc.pool = jcr->res.pool;
                rc.level_override = true;
@@ -672,7 +673,7 @@ int modify_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
       case 7:
          /* Priority */
          if (get_pint(ua, _("Enter new Priority: "))) {
-            if (ua->pint32_val == 0) {
+            if (!ua->pint32_val) {
                ua->send_msg(_("Priority must be a positive integer.\n"));
             } else {
                jcr->JobPriority = ua->pint32_val;
@@ -690,6 +691,7 @@ int modify_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
             if (rc.pool) {
                jcr->res.pool = rc.pool;
                rc.level_override = false;
+               rc.pool_override = true;
                Dmsg1(100, "Set new pool=%s\n", jcr->res.pool->name());
                goto try_again;
             }
@@ -977,9 +979,18 @@ static bool reset_restore_context(UAContext *ua, JCR *jcr, RUN_CTX &rc)
    }
 
    if (rc.jid) {
-      /* Note, this is also MigrateJobId and a VerifyJobId */
-      jcr->RestoreJobId = str_to_int64(rc.jid);
-      rc.jid = 0;
+      if (jcr->is_JobType(JT_BACKUP) && jcr->is_JobLevel(L_VIRTUAL_FULL)) {
+         if (!jcr->vf_jobids) {
+            jcr->vf_jobids = get_pool_memory(PM_MESSAGE);
+         }
+         pm_strcpy(jcr->vf_jobids, rc.jid);
+      } else {
+         /*
+          * Note, this is also MigrateJobId and a VerifyJobId
+          */
+         jcr->RestoreJobId = str_to_int64(rc.jid);
+      }
+      rc.jid = NULL;
    }
 
    if (rc.backup_format) {
@@ -1228,33 +1239,101 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
       if (ua->api) {
          ua->signal(BNET_RUN_CMD);
          ua->send_msg("Type: Admin\n"
-                     "Title: Run Admin Job\n"
-                     "JobName:  %s\n"
-                     "FileSet:  %s\n"
-                     "Client:   %s\n"
-                     "Storage:  %s\n"
-                     "When:     %s\n"
-                     "Priority: %d\n",
-                 job->name(),
-                 jcr->res.fileset->name(),
-                 NPRT(jcr->res.client->name()),
-                 jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->JobPriority);
+                      "Title: Run Admin Job\n"
+                      "JobName:  %s\n"
+                      "FileSet:  %s\n"
+                      "Client:   %s\n"
+                      "Storage:  %s\n"
+                      "When:     %s\n"
+                      "Priority: %d\n",
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
       } else {
          ua->send_msg(_("Run Admin Job\n"
-                     "JobName:  %s\n"
-                     "FileSet:  %s\n"
-                     "Client:   %s\n"
-                     "Storage:  %s\n"
-                     "When:     %s\n"
-                     "Priority: %d\n"),
-                 job->name(),
-                 jcr->res.fileset->name(),
-                 NPRT(jcr->res.client->name()),
-                 jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->JobPriority);
+                        "JobName:  %s\n"
+                        "FileSet:  %s\n"
+                        "Client:   %s\n"
+                        "Storage:  %s\n"
+                        "When:     %s\n"
+                        "Priority: %d\n"),
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
+      }
+      jcr->setJobLevel(L_FULL);
+      break;
+   case JT_ARCHIVE:
+      if (ua->api) {
+         ua->signal(BNET_RUN_CMD);
+         ua->send_msg("Type: Archive\n"
+                      "Title: Run Archive Job\n"
+                      "JobName:  %s\n"
+                      "FileSet:  %s\n"
+                      "Client:   %s\n"
+                      "Storage:  %s\n"
+                      "When:     %s\n"
+                      "Priority: %d\n",
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
+      } else {
+         ua->send_msg(_("Run Archive Job\n"
+                        "JobName:  %s\n"
+                        "FileSet:  %s\n"
+                        "Client:   %s\n"
+                        "Storage:  %s\n"
+                        "When:     %s\n"
+                        "Priority: %d\n"),
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
+      }
+      jcr->setJobLevel(L_FULL);
+      break;
+   case JT_CONSOLIDATE:
+      if (ua->api) {
+         ua->signal(BNET_RUN_CMD);
+         ua->send_msg("Type: Consolidate\n"
+                      "Title: Run Consolidate Job\n"
+                      "JobName:  %s\n"
+                      "FileSet:  %s\n"
+                      "Client:   %s\n"
+                      "Storage:  %s\n"
+                      "When:     %s\n"
+                      "Priority: %d\n",
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
+      } else {
+         ua->send_msg(_("Run Consolidate Job\n"
+                        "JobName:  %s\n"
+                        "FileSet:  %s\n"
+                        "Client:   %s\n"
+                        "Storage:  %s\n"
+                        "When:     %s\n"
+                        "Priority: %d\n"),
+                      job->name(),
+                      jcr->res.fileset->name(),
+                      NPRT(jcr->res.client->name()),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->JobPriority);
       }
       jcr->setJobLevel(L_FULL);
       break;
@@ -1278,21 +1357,21 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
                          "When:     %s\n"
                          "Priority: %d\n"
                          "%s%s%s",
-                 job->name(),
-                 level_to_str(jcr->getJobLevel()),
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.fileset->name(),
-                 NPRT(jcr->res.pool->name()),
-                 is_virtual ? "NextPool: " : "",
-                 is_virtual ? (jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*")) : "",
-                 is_virtual ? "\n" : "",
-                 jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->JobPriority,
-                 jcr->plugin_options ? "Plugin Options: " : "",
-                 jcr->plugin_options ? jcr->plugin_options : "",
-                 jcr->plugin_options ? "\n" : "");
+                         job->name(),
+                         level_to_str(jcr->getJobLevel()),
+                         jcr->res.client->name(),
+                         jcr->backup_format,
+                         jcr->res.fileset->name(),
+                         NPRT(jcr->res.pool->name()),
+                         is_virtual ? "NextPool: " : "",
+                         is_virtual ? (jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*")) : "",
+                         is_virtual ? "\n" : "",
+                         jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                         bstrutime(dt, sizeof(dt), jcr->sched_time),
+                         jcr->JobPriority,
+                         jcr->plugin_options ? "Plugin Options: " : "",
+                         jcr->plugin_options ? jcr->plugin_options : "",
+                         jcr->plugin_options ? "\n" : "");
          } else {
             ua->send_msg(_("Run Backup job\n"
                            "JobName:  %s\n"
@@ -1306,24 +1385,24 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
                            "When:     %s\n"
                            "Priority: %d\n"
                            "%s%s%s"),
-                 job->name(),
-                 level_to_str(jcr->getJobLevel()),
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.fileset->name(),
-                 NPRT(jcr->res.pool->name()), jcr->res.pool_source,
-                 is_virtual ? "NextPool: " : "",
-                 is_virtual ? (jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*")) : "",
-                 is_virtual ? " (From " : "",
-                 is_virtual ? jcr->res.npool_source : "",
-                 is_virtual ? ")\n" : "",
-                 jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-                 jcr->res.wstore_source,
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->JobPriority,
-                 jcr->plugin_options ? "Plugin Options: " : "",
-                 jcr->plugin_options ? jcr->plugin_options : "",
-                 jcr->plugin_options ? "\n" : "");
+                         job->name(),
+                         level_to_str(jcr->getJobLevel()),
+                         jcr->res.client->name(),
+                         jcr->backup_format,
+                         jcr->res.fileset->name(),
+                         NPRT(jcr->res.pool->name()), jcr->res.pool_source,
+                         is_virtual ? "NextPool: " : "",
+                         is_virtual ? (jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*")) : "",
+                         is_virtual ? " (From " : "",
+                         is_virtual ? jcr->res.npool_source : "",
+                         is_virtual ? ")\n" : "",
+                         jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                         jcr->res.wstore_source,
+                         bstrutime(dt, sizeof(dt), jcr->sched_time),
+                         jcr->JobPriority,
+                         jcr->plugin_options ? "Plugin Options: " : "",
+                         jcr->plugin_options ? jcr->plugin_options : "",
+                         jcr->plugin_options ? "\n" : "");
          }
       } else {  /* JT_VERIFY */
          JOB_DBR jr;
@@ -1351,49 +1430,49 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
          if (ua->api) {
             ua->signal(BNET_RUN_CMD);
             ua->send_msg("Type: Verify\n"
-                        "Title: Run Verify Job\n"
-                        "JobName:     %s\n"
-                        "Level:       %s\n"
-                        "Client:      %s\n"
-                        "FileSet:     %s\n"
-                        "Pool:        %s (From %s)\n"
-                        "Storage:     %s (From %s)\n"
-                        "Verify Job:  %s\n"
-                        "Verify List: %s\n"
-                        "When:        %s\n"
-                        "Priority:    %d\n",
-              job->name(),
-              level_to_str(jcr->getJobLevel()),
-              jcr->res.client->name(),
-              jcr->res.fileset->name(),
-              NPRT(jcr->res.pool->name()), jcr->res.pool_source,
-              jcr->res.rstore->name(), jcr->res.rstore_source,
-              Name,
-              verify_list,
-              bstrutime(dt, sizeof(dt), jcr->sched_time),
-              jcr->JobPriority);
+                         "Title: Run Verify Job\n"
+                         "JobName:     %s\n"
+                         "Level:       %s\n"
+                         "Client:      %s\n"
+                         "FileSet:     %s\n"
+                         "Pool:        %s (From %s)\n"
+                         "Storage:     %s (From %s)\n"
+                         "Verify Job:  %s\n"
+                         "Verify List: %s\n"
+                         "When:        %s\n"
+                         "Priority:    %d\n",
+                         job->name(),
+                         level_to_str(jcr->getJobLevel()),
+                         jcr->res.client->name(),
+                         jcr->res.fileset->name(),
+                         NPRT(jcr->res.pool->name()), jcr->res.pool_source,
+                         jcr->res.rstore->name(), jcr->res.rstore_source,
+                         Name,
+                         verify_list,
+                         bstrutime(dt, sizeof(dt), jcr->sched_time),
+                         jcr->JobPriority);
          } else {
             ua->send_msg(_("Run Verify Job\n"
-                        "JobName:     %s\n"
-                        "Level:       %s\n"
-                        "Client:      %s\n"
-                        "FileSet:     %s\n"
-                        "Pool:        %s (From %s)\n"
-                        "Storage:     %s (From %s)\n"
-                        "Verify Job:  %s\n"
-                        "Verify List: %s\n"
-                        "When:        %s\n"
-                        "Priority:    %d\n"),
-              job->name(),
-              level_to_str(jcr->getJobLevel()),
-              jcr->res.client->name(),
-              jcr->res.fileset->name(),
-              NPRT(jcr->res.pool->name()), jcr->res.pool_source,
-              jcr->res.rstore->name(), jcr->res.rstore_source,
-              Name,
-              verify_list,
-              bstrutime(dt, sizeof(dt), jcr->sched_time),
-              jcr->JobPriority);
+                           "JobName:     %s\n"
+                           "Level:       %s\n"
+                           "Client:      %s\n"
+                           "FileSet:     %s\n"
+                           "Pool:        %s (From %s)\n"
+                           "Storage:     %s (From %s)\n"
+                           "Verify Job:  %s\n"
+                           "Verify List: %s\n"
+                           "When:        %s\n"
+                           "Priority:    %d\n"),
+                         job->name(),
+                         level_to_str(jcr->getJobLevel()),
+                         jcr->res.client->name(),
+                         jcr->res.fileset->name(),
+                         NPRT(jcr->res.pool->name()), jcr->res.pool_source,
+                         jcr->res.rstore->name(), jcr->res.rstore_source,
+                         Name,
+                         verify_list,
+                         bstrutime(dt, sizeof(dt), jcr->sched_time),
+                         jcr->JobPriority);
          }
       }
       break;
@@ -1416,121 +1495,121 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
             if (ua->api) {
                ua->signal(BNET_RUN_CMD);
                ua->send_msg("Type: Restore\n"
-                        "Title: Run Restore Job\n"
-                        "JobName:         %s\n"
-                        "Bootstrap:       %s\n"
-                        "RegexWhere:      %s\n"
-                        "Replace:         %s\n"
-                        "FileSet:         %s\n"
-                        "Backup Client:   %s\n"
-                        "Restore Client:  %s\n"
-                        "Format:          %s\n"
-                        "Storage:         %s\n"
-                        "When:            %s\n"
-                        "Catalog:         %s\n"
-                        "Priority:        %d\n"
-                        "Plugin Options:  %s\n",
-                 job->name(),
-                 NPRT(jcr->RestoreBootstrap),
-                 jcr->RegexWhere ? jcr->RegexWhere : job->RegexWhere,
-                 rc.replace,
-                 jcr->res.fileset->name(),
-                 rc.client_name,
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.rstore->name(),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->res.catalog->name(),
-                 jcr->JobPriority,
-                 NPRT(jcr->plugin_options));
+                            "Title: Run Restore Job\n"
+                            "JobName:         %s\n"
+                            "Bootstrap:       %s\n"
+                            "RegexWhere:      %s\n"
+                            "Replace:         %s\n"
+                            "FileSet:         %s\n"
+                            "Backup Client:   %s\n"
+                            "Restore Client:  %s\n"
+                            "Format:          %s\n"
+                            "Storage:         %s\n"
+                            "When:            %s\n"
+                            "Catalog:         %s\n"
+                            "Priority:        %d\n"
+                            "Plugin Options:  %s\n",
+                            job->name(),
+                            NPRT(jcr->RestoreBootstrap),
+                            jcr->RegexWhere ? jcr->RegexWhere : job->RegexWhere,
+                            rc.replace,
+                            jcr->res.fileset->name(),
+                            rc.client_name,
+                            jcr->res.client->name(),
+                            jcr->backup_format,
+                            jcr->res.rstore->name(),
+                            bstrutime(dt, sizeof(dt), jcr->sched_time),
+                            jcr->res.catalog->name(),
+                            jcr->JobPriority,
+                            NPRT(jcr->plugin_options));
             } else {
                ua->send_msg(_("Run Restore job\n"
-                        "JobName:         %s\n"
-                        "Bootstrap:       %s\n"
-                        "RegexWhere:      %s\n"
-                        "Replace:         %s\n"
-                        "FileSet:         %s\n"
-                        "Backup Client:   %s\n"
-                        "Restore Client:  %s\n"
-                        "Format:          %s\n"
-                        "Storage:         %s\n"
-                        "When:            %s\n"
-                        "Catalog:         %s\n"
-                        "Priority:        %d\n"
-                        "Plugin Options:  %s\n"),
-                 job->name(),
-                 NPRT(jcr->RestoreBootstrap),
-                 jcr->RegexWhere ? jcr->RegexWhere : job->RegexWhere,
-                 rc.replace,
-                 jcr->res.fileset->name(),
-                 rc.client_name,
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.rstore->name(),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->res.catalog->name(),
-                 jcr->JobPriority,
-                 NPRT(jcr->plugin_options));
+                              "JobName:         %s\n"
+                              "Bootstrap:       %s\n"
+                              "RegexWhere:      %s\n"
+                              "Replace:         %s\n"
+                              "FileSet:         %s\n"
+                              "Backup Client:   %s\n"
+                              "Restore Client:  %s\n"
+                              "Format:          %s\n"
+                              "Storage:         %s\n"
+                              "When:            %s\n"
+                              "Catalog:         %s\n"
+                              "Priority:        %d\n"
+                              "Plugin Options:  %s\n"),
+                            job->name(),
+                            NPRT(jcr->RestoreBootstrap),
+                            jcr->RegexWhere ? jcr->RegexWhere : job->RegexWhere,
+                            rc.replace,
+                            jcr->res.fileset->name(),
+                            rc.client_name,
+                            jcr->res.client->name(),
+                            jcr->backup_format,
+                            jcr->res.rstore->name(),
+                            bstrutime(dt, sizeof(dt), jcr->sched_time),
+                            jcr->res.catalog->name(),
+                            jcr->JobPriority,
+                            NPRT(jcr->plugin_options));
             }
          } else {
             if (ua->api) {
                ua->signal(BNET_RUN_CMD);
                ua->send_msg("Type: Restore\n"
-                        "Title: Run Restore job\n"
-                        "JobName:         %s\n"
-                        "Bootstrap:       %s\n"
-                        "Where:           %s\n"
-                        "Replace:         %s\n"
-                        "FileSet:         %s\n"
-                        "Backup Client:   %s\n"
-                        "Restore Client:  %s\n"
-                        "Format:          %s\n"
-                        "Storage:         %s\n"
-                        "When:            %s\n"
-                        "Catalog:         %s\n"
-                        "Priority:        %d\n"
-                        "Plugin Options:  %s\n",
-                 job->name(),
-                 NPRT(jcr->RestoreBootstrap),
-                 jcr->where ? jcr->where : NPRT(job->RestoreWhere),
-                 rc.replace,
-                 jcr->res.fileset->name(),
-                 rc.client_name,
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.rstore->name(),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->res.catalog->name(),
-                 jcr->JobPriority,
-                 NPRT(jcr->plugin_options));
+                            "Title: Run Restore job\n"
+                            "JobName:         %s\n"
+                            "Bootstrap:       %s\n"
+                            "Where:           %s\n"
+                            "Replace:         %s\n"
+                            "FileSet:         %s\n"
+                            "Backup Client:   %s\n"
+                            "Restore Client:  %s\n"
+                            "Format:          %s\n"
+                            "Storage:         %s\n"
+                            "When:            %s\n"
+                            "Catalog:         %s\n"
+                            "Priority:        %d\n"
+                            "Plugin Options:  %s\n",
+                            job->name(),
+                            NPRT(jcr->RestoreBootstrap),
+                            jcr->where ? jcr->where : NPRT(job->RestoreWhere),
+                            rc.replace,
+                            jcr->res.fileset->name(),
+                            rc.client_name,
+                            jcr->res.client->name(),
+                            jcr->backup_format,
+                            jcr->res.rstore->name(),
+                            bstrutime(dt, sizeof(dt), jcr->sched_time),
+                            jcr->res.catalog->name(),
+                            jcr->JobPriority,
+                            NPRT(jcr->plugin_options));
             } else {
                ua->send_msg(_("Run Restore job\n"
-                        "JobName:         %s\n"
-                        "Bootstrap:       %s\n"
-                        "Where:           %s\n"
-                        "Replace:         %s\n"
-                        "FileSet:         %s\n"
-                        "Backup Client:   %s\n"
-                        "Restore Client:  %s\n"
-                        "Format:          %s\n"
-                        "Storage:         %s\n"
-                        "When:            %s\n"
-                        "Catalog:         %s\n"
-                        "Priority:        %d\n"
-                        "Plugin Options:  %s\n"),
-                 job->name(),
-                 NPRT(jcr->RestoreBootstrap),
-                 jcr->where ? jcr->where : NPRT(job->RestoreWhere),
-                 rc.replace,
-                 jcr->res.fileset->name(),
-                 rc.client_name,
-                 jcr->res.client->name(),
-                 jcr->backup_format,
-                 jcr->res.rstore->name(),
-                 bstrutime(dt, sizeof(dt), jcr->sched_time),
-                 jcr->res.catalog->name(),
-                 jcr->JobPriority,
-                 NPRT(jcr->plugin_options));
+                              "JobName:         %s\n"
+                              "Bootstrap:       %s\n"
+                              "Where:           %s\n"
+                              "Replace:         %s\n"
+                              "FileSet:         %s\n"
+                              "Backup Client:   %s\n"
+                              "Restore Client:  %s\n"
+                              "Format:          %s\n"
+                              "Storage:         %s\n"
+                              "When:            %s\n"
+                              "Catalog:         %s\n"
+                              "Priority:        %d\n"
+                              "Plugin Options:  %s\n"),
+                            job->name(),
+                            NPRT(jcr->RestoreBootstrap),
+                            jcr->where ? jcr->where : NPRT(job->RestoreWhere),
+                            rc.replace,
+                            jcr->res.fileset->name(),
+                            rc.client_name,
+                            jcr->res.client->name(),
+                            jcr->backup_format,
+                            jcr->res.rstore->name(),
+                            bstrutime(dt, sizeof(dt), jcr->sched_time),
+                            jcr->res.catalog->name(),
+                            jcr->JobPriority,
+                            NPRT(jcr->plugin_options));
             }
          }
 
@@ -1561,15 +1640,15 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
                         "Catalog:         %s\n"
                         "Priority:        %d\n"
                         "Plugin Options:  %s\n"),
-              rc.replace,
-              jcr->res.client->name(),
-              jcr->backup_format,
-              jcr->res.rstore->name(),
-              (jcr->RestoreJobId == 0) ? _("*None*") : edit_uint64(jcr->RestoreJobId, ec1),
-              bstrutime(dt, sizeof(dt), jcr->sched_time),
-              jcr->res.catalog->name(),
-              jcr->JobPriority,
-              NPRT(jcr->plugin_options));
+                      rc.replace,
+                      jcr->res.client->name(),
+                      jcr->backup_format,
+                      jcr->res.rstore->name(),
+                      (jcr->RestoreJobId == 0) ? _("*None*") : edit_uint64(jcr->RestoreJobId, ec1),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->res.catalog->name(),
+                      jcr->JobPriority,
+                      NPRT(jcr->plugin_options));
       }
       break;
    case JT_COPY:
@@ -1584,26 +1663,28 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
          } else {
             prt_type = _("Type: Migration\nTitle: Run Migration Job\n");
          }
-         ua->send_msg(_("%s"
-                     "JobName:       %s\n"
-                     "Bootstrap:     %s\n"
-                     "Pool:          %s\n"
-                     "NextPool:      %s\n"
-                     "Write Storage: %s\n"
-                     "JobId:         %s\n"
-                     "When:          %s\n"
-                     "Catalog:       %s\n"
-                     "Priority:      %d\n"),
-           prt_type,
-           job->name(),
-           NPRT(jcr->RestoreBootstrap),
-           NPRT(jcr->res.pool->name()),
-           jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*"),
-           jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-           (jcr->MigrateJobId == 0) ? _("*None*") : edit_uint64(jcr->MigrateJobId, ec1),
-           bstrutime(dt, sizeof(dt), jcr->sched_time),
-           jcr->res.catalog->name(),
-           jcr->JobPriority);
+         ua->send_msg("%s"
+                      "JobName:       %s\n"
+                      "Bootstrap:     %s\n"
+                      "Read Storage:  %s\n"
+                      "Pool:          %s\n"
+                      "Write Storage: %s\n"
+                      "NextPool:      %s\n"
+                      "JobId:         %s\n"
+                      "When:          %s\n"
+                      "Catalog:       %s\n"
+                      "Priority:      %d\n",
+                      prt_type,
+                      job->name(),
+                      NPRT(jcr->RestoreBootstrap),
+                      jcr->res.rstore ? jcr->res.rstore->name() : _("*None*"),
+                      NPRT(jcr->res.pool->name()),
+                      jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*"),
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      (jcr->MigrateJobId == 0) ? _("*None*") : edit_uint64(jcr->MigrateJobId, ec1),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->res.catalog->name(),
+                      jcr->JobPriority);
       } else {
          if (jcr->is_JobType(JT_COPY)) {
             prt_type = _("Run Copy job\n");
@@ -1611,27 +1692,30 @@ static bool display_job_parameters(UAContext *ua, JCR *jcr, RUN_CTX &rc)
             prt_type = _("Run Migration job\n");
          }
          ua->send_msg(_("%s"
-                     "JobName:       %s\n"
-                     "Bootstrap:     %s\n"
-                     "Pool:          %s (From %s)\n"
-                     "NextPool:      %s (From %s)\n"
-                     "Write Storage: %s (From %s)\n"
-                     "JobId:         %s\n"
-                     "When:          %s\n"
-                     "Catalog:       %s\n"
-                     "Priority:      %d\n"),
-           prt_type,
-           job->name(),
-           NPRT(jcr->RestoreBootstrap),
-           NPRT(jcr->res.pool->name()), jcr->res.pool_source,
-           jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*"),
-           NPRT(jcr->res.npool_source),
-           jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
-           jcr->res.wstore_source,
-           jcr->MigrateJobId == 0 ? _("*None*") : edit_uint64(jcr->MigrateJobId, ec1),
-           bstrutime(dt, sizeof(dt), jcr->sched_time),
-           jcr->res.catalog->name(),
-           jcr->JobPriority);
+                        "JobName:       %s\n"
+                        "Bootstrap:     %s\n"
+                        "Read Storage:  %s (From %s)\n"
+                        "Pool:          %s (From %s)\n"
+                        "Write Storage: %s (From %s)\n"
+                        "NextPool:      %s (From %s)\n"
+                        "JobId:         %s\n"
+                        "When:          %s\n"
+                        "Catalog:       %s\n"
+                        "Priority:      %d\n"),
+                      prt_type,
+                      job->name(),
+                      NPRT(jcr->RestoreBootstrap),
+                      jcr->res.rstore ? jcr->res.rstore->name() : _("*None*"),
+                      jcr->res.rstore_source,
+                      NPRT(jcr->res.pool->name()), jcr->res.pool_source,
+                      jcr->res.wstore ? jcr->res.wstore->name() : _("*None*"),
+                      jcr->res.wstore_source,
+                      jcr->res.next_pool ? jcr->res.next_pool->name() : _("*None*"),
+                      NPRT(jcr->res.npool_source),
+                      jcr->MigrateJobId == 0 ? _("*None*") : edit_uint64(jcr->MigrateJobId, ec1),
+                      bstrutime(dt, sizeof(dt), jcr->sched_time),
+                      jcr->res.catalog->name(),
+                      jcr->JobPriority);
       }
       break;
    default:
@@ -1773,7 +1857,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
                   return false;
                }
                rc.regexwhere = ua->argv[i];
-               if (!acl_access_ok(ua, Where_ACL, rc.regexwhere, true)) {
+               if (!ua->acl_access_ok(Where_ACL, rc.regexwhere, true)) {
                   ua->send_msg(_("No authorization for \"regexwhere\" specification.\n"));
                   return false;
                }
@@ -1785,7 +1869,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
                   return false;
                }
                rc.where = ua->argv[i];
-               if (!acl_access_ok(ua, Where_ACL, rc.where, true)) {
+               if (!ua->acl_access_ok(Where_ACL, rc.where, true)) {
                   ua->send_msg(_("No authoriztion for \"where\" specification.\n"));
                   return false;
                }
@@ -1904,7 +1988,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
                   return false;
                }
                rc.plugin_options = ua->argv[i];
-               if (!acl_access_ok(ua, PluginOptions_ACL, rc.plugin_options, true)) {
+               if (!ua->acl_access_ok(PluginOptions_ACL, rc.plugin_options, true)) {
                   ua->send_msg(_("No authorization for \"PluginOptions\" specification.\n"));
                   return false;
                }
@@ -1990,21 +2074,17 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
       }
    }
    if (rc.catalog_name) {
-       rc.catalog = GetCatalogResWithName(rc.catalog_name);
-       if (rc.catalog == NULL) {
-            ua->error_msg(_("Catalog \"%s\" not found\n"), rc.catalog_name);
-           return false;
-       }
-       if (!acl_access_ok(ua, Catalog_ACL, rc.catalog->name(), true)) {
-          ua->error_msg(_("No authorization. Catalog \"%s\".\n"), rc.catalog->name());
-          return false;
-       }
+      rc.catalog = ua->GetCatalogResWithName(rc.catalog_name);
+      if (rc.catalog == NULL) {
+         ua->error_msg(_("Catalog \"%s\" not found\n"), rc.catalog_name);
+         return false;
+      }
    }
    Dmsg1(800, "Using catalog=%s\n", NPRT(rc.catalog_name));
 
    if (rc.job_name) {
       /* Find Job */
-      rc.job = GetJobResWithName(rc.job_name);
+      rc.job = ua->GetJobResWithName(rc.job_name);
       if (!rc.job) {
          if (*rc.job_name != 0) {
             ua->send_msg(_("Job \"%s\" not found\n"), rc.job_name);
@@ -2019,13 +2099,10 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
    if (!rc.job) {
       return false;
-   } else if (!acl_access_ok(ua, Job_ACL, rc.job->name(), true)) {
-      ua->error_msg(_("No authorization. Job \"%s\".\n"), rc.job->name());
-      return false;
    }
 
    if (rc.pool_name) {
-      rc.pool = GetPoolResWithName(rc.pool_name);
+      rc.pool = ua->GetPoolResWithName(rc.pool_name);
       if (!rc.pool) {
          if (*rc.pool_name != 0) {
             ua->warning_msg(_("Pool \"%s\" not found.\n"), rc.pool_name);
@@ -2037,14 +2114,11 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
    if (!rc.pool) {
       return false;
-   } else if (!acl_access_ok(ua, Pool_ACL, rc.pool->name(), true)) {
-      ua->error_msg(_("No authorization. Pool \"%s\".\n"), rc.pool->name());
-      return false;
    }
    Dmsg1(100, "Using pool %s\n", rc.pool->name());
 
    if (rc.next_pool_name) {
-      rc.next_pool = GetPoolResWithName(rc.next_pool_name);
+      rc.next_pool = ua->GetPoolResWithName(rc.next_pool_name);
       if (!rc.next_pool) {
          if (*rc.next_pool_name != 0) {
             ua->warning_msg(_("Pool \"%s\" not found.\n"), rc.next_pool_name);
@@ -2055,15 +2129,11 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
       rc.next_pool = rc.pool->NextPool;     /* use default */
    }
    if (rc.next_pool) {
-      if (!acl_access_ok(ua, Pool_ACL, rc.pool->name(), true)) {
-         ua->error_msg(_("No authorization. Pool \"%s\".\n"), rc.next_pool->name());
-         return false;
-      }
       Dmsg1(100, "Using next pool %s\n", rc.next_pool->name());
    }
 
    if (rc.store_name) {
-      rc.store->store = GetStoreResWithName(rc.store_name);
+      rc.store->store = ua->GetStoreResWithName(rc.store_name);
       pm_strcpy(rc.store->store_source, _("command line"));
       if (!rc.store->store) {
          if (*rc.store_name != 0) {
@@ -2088,7 +2158,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
       if (!rc.store->store) {
          ua->error_msg(_("No storage specified.\n"));
          return false;
-      } else if (!acl_access_ok(ua, Storage_ACL, rc.store->store->name(), true)) {
+      } else if (!ua->acl_access_ok(Storage_ACL, rc.store->store->name(), true)) {
          ua->error_msg(_("No authorization. Storage \"%s\".\n"), rc.store->store->name());
          return false;
       }
@@ -2097,7 +2167,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.client_name) {
-      rc.client = GetClientResWithName(rc.client_name);
+      rc.client = ua->GetClientResWithName(rc.client_name);
       if (!rc.client) {
          if (*rc.client_name != 0) {
             ua->warning_msg(_("Client \"%s\" not found.\n"), rc.client_name);
@@ -2109,7 +2179,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.client) {
-      if (!acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
+      if (!ua->acl_access_ok(Client_ACL, rc.client->name(), true)) {
          ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
          return false;
       } else {
@@ -2118,7 +2188,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.restore_client_name) {
-      rc.client = GetClientResWithName(rc.restore_client_name);
+      rc.client = ua->GetClientResWithName(rc.restore_client_name);
       if (!rc.client) {
          if (*rc.restore_client_name != 0) {
             ua->warning_msg(_("Restore Client \"%s\" not found.\n"), rc.restore_client_name);
@@ -2130,7 +2200,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.client) {
-      if (!acl_access_ok(ua, Client_ACL, rc.client->name(), true)) {
+      if (!ua->acl_access_ok(Client_ACL, rc.client->name(), true)) {
          ua->error_msg(_("No authorization. Client \"%s\".\n"), rc.client->name());
          return false;
       } else {
@@ -2139,22 +2209,20 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.fileset_name) {
-      rc.fileset = GetFileSetResWithName(rc.fileset_name);
+      rc.fileset = ua->GetFileSetResWithName(rc.fileset_name);
       if (!rc.fileset) {
          ua->send_msg(_("FileSet \"%s\" not found.\n"), rc.fileset_name);
          rc.fileset = select_fileset_resource(ua);
+         if (!rc.fileset) {
+            return false;
+         }
       }
    } else if (!rc.fileset) {
       rc.fileset = rc.job->fileset;           /* use default */
    }
 
-   if (rc.fileset && !acl_access_ok(ua, FileSet_ACL, rc.fileset->name(), true)) {
-      ua->send_msg(_("No authorization. FileSet \"%s\".\n"), rc.fileset->name());
-      return false;
-   }
-
    if (rc.verify_job_name) {
-      rc.verify_job = GetJobResWithName(rc.verify_job_name);
+      rc.verify_job = ua->GetJobResWithName(rc.verify_job_name);
       if (!rc.verify_job) {
          ua->send_msg(_("Verify Job \"%s\" not found.\n"), rc.verify_job_name);
          rc.verify_job = select_job_resource(ua);
@@ -2164,7 +2232,7 @@ static bool scan_command_line_arguments(UAContext *ua, RUN_CTX &rc)
    }
 
    if (rc.previous_job_name) {
-      rc.previous_job = GetJobResWithName(rc.previous_job_name);
+      rc.previous_job = ua->GetJobResWithName(rc.previous_job_name);
       if (!rc.previous_job) {
          ua->send_msg(_("Migration Job \"%s\" not found.\n"), rc.previous_job_name);
          rc.previous_job = select_job_resource(ua);

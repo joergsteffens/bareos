@@ -385,7 +385,7 @@ bool do_ndmp_backup_init(JCR *jcr)
     */
    copy_wstorage(jcr, jcr->res.pool->storage, _("Pool resource"));
 
-   if (!jcr->wstorage) {
+   if (!jcr->res.wstorage) {
       Jmsg(jcr, M_FATAL, 0, _("No Storage specification found in Job or Pool.\n"));
       return false;
    }
@@ -479,7 +479,7 @@ bool do_ndmp_backup(JCR *jcr)
       /*
        * Now start a job with the Storage daemon
        */
-      if (!start_storage_daemon_job(jcr, NULL, jcr->wstorage)) {
+      if (!start_storage_daemon_job(jcr, NULL, jcr->res.wstorage)) {
          return false;
       }
 
@@ -580,6 +580,14 @@ bool do_ndmp_backup(JCR *jcr)
           * Copy the actual job to perform.
           */
          memcpy(&ndmp_sess.control_acb->job, &ndmp_job, sizeof(struct ndm_job_param));
+
+         /*
+          * We can use the same private pointer used in the logging with the JCR in
+          * the file index generation. We don't setup a index_log.deliver
+          * function as we catch the index information via callbacks.
+          */
+         ndmp_sess.control_acb->job.index_log.ctx = ndmp_sess.param->log.ctx;
+
          if (!fill_backup_environment(jcr,
                                       ie,
                                       nis->filesystem,
@@ -625,12 +633,6 @@ bool do_ndmp_backup(JCR *jcr)
          ndmp_sess.conn_open = 1;
          ndmp_sess.conn_authorized = 1;
 
-         /*
-          * We can use the same private pointer used in the logging with the JCR in
-          * the file index generation. We don't setup a index_log.deliver
-          * function as we catch the index information via callbacks.
-          */
-         ndmp_sess.control_acb->job.index_log.ctx = ndmp_sess.param->log.ctx;
          register_callback_hooks(&ndmp_sess.control_acb->job.index_log);
 
          /*

@@ -36,6 +36,10 @@ AC_SUBST(BAREOS)dnl
 AC_SUBST(post_host)dnl
 AC_SUBST(BDB_VERSION)dnl
 
+dnl major version number (first two components)
+MAJOR_VERSION=`echo $VERSION | cut -d. -f 1,2`
+AC_SUBST(MAJOR_VERSION)
+
 dnl src/lib
 dnl can be overwritten by specific values from version.h
 LIBBAREOS_LT_RELEASE=`sed -n -e 's/^#.*LIBBAREOS_LT_RELEASE.*"\(.*\)"$/\1/p' ${srcdir}/src/include/version.h`
@@ -485,6 +489,24 @@ fi
 
 
 dnl -------------------------------------------
+dnl Developer Mode (default off)
+dnl -------------------------------------------
+AC_ARG_ENABLE(developer,
+   AC_HELP_STRING([--enable-developer-mode], [enable developer mode @<:@default=no@:>@]),
+   [
+       if test x$enableval = xyes; then
+	  enable_developer_commands=yes
+       fi
+   ]
+)
+
+if test x$enable_developer_commands = xyes; then
+   AC_DEFINE(DEVELOPER, 1, [Define to 1 if you want the Developer mode enabled])
+fi
+
+
+
+dnl -------------------------------------------
 dnl static-tools (default off)
 dnl -------------------------------------------
 AC_ARG_ENABLE(static-tools,
@@ -863,9 +885,10 @@ MAKE_SHELL=/bin/sh
 AC_SUBST(MAKE_SHELL)
 AC_HEADER_STAT
 AC_HEADER_DIRENT
+AC_CHECK_HEADER(glob.h, [AC_DEFINE(HAVE_GLOB_H, 1, [Define to 1 if you have the <glob.h> header file.])] , )
 AC_CHECK_HEADER(poll.h, [AC_DEFINE(HAVE_POLL_H, 1, [Define to 1 if you have the <poll.h> header file.])] , )
 AC_CHECK_HEADER(sys/poll.h, [AC_DEFINE(HAVE_SYS_POLL_H, 1, [Define to 1 if you have the <sys/poll.h> header file.])] , )
-AC_CHECK_FUNCS(strcasecmp select poll setenv putenv tcgetattr)
+AC_CHECK_FUNCS(glob strcasecmp select poll setenv putenv tcgetattr)
 AC_CHECK_FUNCS(lstat lchown lchmod utimes lutimes futimes futimens fchmod fchown)
 AC_CHECK_FUNCS(nanosleep nl_langinfo)
 AC_CHECK_HEADERS(varargs.h)
@@ -4218,13 +4241,9 @@ debian|ubuntu|univention)
       debian/bareos-filedaemon.postinst \
       debian/bareos-filedaemon.preinst \
       debian/bareos-storage-ceph.install \
-      debian/bareos-storage-ceph.postinst \
       debian/bareos-storage-glusterfs.install \
-      debian/bareos-storage-glusterfs.postinst \
-      debian/bareos-storage-fifo.postinst \
       debian/bareos-storage-fifo.install \
       debian/bareos-storage-python-plugin.install \
-      debian/bareos-storage-tape.postinst \
       debian/bareos-storage-tape.install \
       debian/bareos-storage.bareos-sd.init \
       debian/bareos-storage.install \
@@ -4245,6 +4264,8 @@ debian|ubuntu|univention)
          PFILES="${PFILES} \
             debian/univention-bareos.install \
             debian/univention-bareos.postinst \
+            platforms/univention/conffiles/etc/apt/sources.list.d/60_bareos.list \
+            platforms/univention/get_bareos_release_key.sh \
             platforms/univention/Makefile \
             platforms/univention/AppCenter/univention-bareos.ini \
             platforms/univention/AppCenter/LICENSE_AGREEMENT"
@@ -4550,20 +4571,6 @@ fi
 AC_SUBST(BUILD_SD_BACKENDS)
 
 
-
-dnl install storage backend config files
-
-INSTALL_SD_CONFS="device-fifo.conf device-tape-with-autoloader.conf"
-if test X"$have_glusterfs" = "Xyes" ; then
-    INSTALL_SD_CONFS="${INSTALL_SD_CONFS} device-gluster.conf"
-fi
-if test X"$have_ceph_rados" = "Xyes" ; then
-    INSTALL_SD_CONFS="${INSTALL_SD_CONFS} device-ceph-rados.conf"
-fi
-AC_SUBST(INSTALL_SD_CONFS)
-
-
-
 dnl Insanity check
 if test "x${subsysdir}" = "x${sbindir}" ; then
    echo " "
@@ -4586,6 +4593,7 @@ manpages/Makefile \
 scripts/bareos-config \
 scripts/bareos-config-lib.sh \
 scripts/bareos-explorer \
+scripts/bareos-glusterfind-wrapper \
 scripts/btraceback \
 scripts/bconsole \
 scripts/bareos \
@@ -4611,6 +4619,29 @@ src/qt-console/bat.conf \
 src/qt-console/bat.desktop \
 src/qt-console/bat.pro \
 src/qt-console/install_conf_file \
+src/defaultconfigs/bareos-dir.d/catalog/MyCatalog.conf \
+src/defaultconfigs/bareos-dir.d/client/bareos-fd.conf \
+src/defaultconfigs/bareos-dir.d/console/bareos-mon.conf \
+src/defaultconfigs/bareos-dir.d/director/bareos-dir.conf \
+src/defaultconfigs/bareos-dir.d/fileset/Catalog.conf \
+src/defaultconfigs/bareos-dir.d/fileset/LinuxAll.conf \
+src/defaultconfigs/bareos-dir.d/fileset/SelfTest.conf \
+src/defaultconfigs/bareos-dir.d/job/BackupCatalog.conf \
+src/defaultconfigs/bareos-dir.d/jobdefs/DefaultJob.conf \
+src/defaultconfigs/bareos-dir.d/messages/Daemon.conf \
+src/defaultconfigs/bareos-dir.d/messages/Standard.conf \
+src/defaultconfigs/bareos-dir.d/storage/File.conf \
+src/defaultconfigs/bareos-sd.d/device/FileStorage.conf \
+src/defaultconfigs/bareos-sd.d/director/bareos-dir.conf \
+src/defaultconfigs/bareos-sd.d/director/bareos-mon.conf \
+src/defaultconfigs/bareos-sd.d/storage/bareos-sd.conf \
+src/defaultconfigs/bareos-fd.d/client/myself.conf \
+src/defaultconfigs/bareos-fd.d/director/bareos-dir.conf \
+src/defaultconfigs/bareos-fd.d/director/bareos-mon.conf \
+src/defaultconfigs/tray-monitor.d/client/FileDaemon-local.conf \
+src/defaultconfigs/tray-monitor.d/director/Director-local.conf \
+src/defaultconfigs/tray-monitor.d/monitor/bareos-mon.conf \
+src/defaultconfigs/tray-monitor.d/storage/StorageDaemon-local.conf \
 src/dird/Makefile \
 src/dird/bareos-dir.conf \
 src/lib/Makefile \
@@ -4639,7 +4670,7 @@ src/ndmp/Makefile \
 src/tests/Makefile \
 src/tools/Makefile \
 src/plugins/filed/Makefile \
-src/plugins/filed/plugin-python-ldap.conf \
+src/plugins/filed/python-ldap-conf.d/bareos-dir.d/fileset/plugin-ldap.conf.example \
 src/plugins/stored/Makefile \
 src/plugins/dird/Makefile \
 po/Makefile.in \

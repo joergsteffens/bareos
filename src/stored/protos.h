@@ -50,10 +50,11 @@ bool authenticate_with_filedaemon(JCR *jcr);
 bool init_autochangers();
 int autoload_device(DCR *dcr, int writing, BSOCK *dir);
 bool autochanger_cmd(DCR *dcr, BSOCK *dir, const char *cmd);
-bool autochanger_transfer_cmd(DCR *dcr, BSOCK *dir, int src_slot, int dst_slot);
-bool unload_autochanger(DCR *dcr, int loaded);
-bool unload_dev(DCR *dcr, DEVICE *dev);
-int get_autochanger_loaded_slot(DCR *dcr);
+bool autochanger_transfer_cmd(DCR *dcr, BSOCK *dir,
+                              slot_number_t src_slot, slot_number_t dst_slot);
+bool unload_autochanger(DCR *dcr, slot_number_t loaded, bool lock_set = false);
+bool unload_dev(DCR *dcr, DEVICE *dev, bool lock_set = false);
+slot_number_t get_autochanger_loaded_slot(DCR *dcr, bool lock_set = false);
 
 /* block.c */
 void dump_block(DEV_BLOCK *b, const char *msg);
@@ -110,7 +111,6 @@ void stored_free_jcr(JCR *jcr);
 
 /* label.c */
 int read_dev_volume_label(DCR *dcr);
-void create_session_label(DCR *dcr, DEV_RECORD *rec, int label);
 void create_volume_label(DEVICE *dev, const char *VolName, const char *PoolName);
 
 #define ANSI_VOL_LABEL 0
@@ -191,14 +191,15 @@ bool read_records(DCR *dcr,
 /* record.c */
 const char *FI_to_ascii(char *buf, int fi);
 const char *stream_to_ascii(char *buf, int stream, int fi);
+void dump_record(const char *tag, const DEV_RECORD *rec);
 bool write_record_to_block(DCR *dcr, DEV_RECORD *rec);
-bool can_write_record_to_block(DEV_BLOCK *block, DEV_RECORD *rec);
+bool can_write_record_to_block(DEV_BLOCK *block, const DEV_RECORD *rec);
 bool read_record_from_block(DCR *dcr, DEV_RECORD *rec);
 DEV_RECORD *new_record(bool with_data = true);
 void empty_record(DEV_RECORD *rec);
 void copy_record_state(DEV_RECORD *dst, DEV_RECORD *src);
 void free_record(DEV_RECORD *rec);
-uint64_t get_record_address(DEV_RECORD *rec);
+uint64_t get_record_address(const DEV_RECORD *rec);
 
 /* reserve.c */
 void init_reservations_lock();
@@ -259,7 +260,7 @@ void *handle_stored_connection(BSOCK *sd, char *job_name);
 bool do_listen_run(JCR *jcr);
 
 /* sd_plugins.c */
-char *edit_device_codes(DCR *dcr, char *omsg, const char *imsg, const char *cmd);
+char *edit_device_codes(DCR *dcr, POOLMEM *&omsg, const char *imsg, const char *cmd);
 
 /* sd_stats.c */
 int start_statistics_thread(void);

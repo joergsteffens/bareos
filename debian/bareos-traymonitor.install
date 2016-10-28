@@ -1,5 +1,5 @@
 /etc/xdg/autostart/bareos-tray-monitor.desktop
-/etc/bareos/tray-monitor.conf  /usr/lib/bareos/defaultconfigs
+/etc/bareos/tray-monitor.d/monitor/bareos-mon.conf /usr/lib/bareos/defaultconfigs/tray-monitor.d/monitor/
 /usr/bin/bareos-tray-monitor
 /usr/share/man/man1/bareos-tray-monitor.1.gz
 /usr/share/applications/bareos-tray-monitor.desktop

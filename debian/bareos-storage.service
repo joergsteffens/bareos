@@ -28,7 +28,7 @@ WorkingDirectory=/var/lib/bareos
 PIDFile=/var/lib/bareos/bareos-sd.9103.pid
 # EnvironmentFile=-/etc/sysconfig/bareos-sd
 StandardOutput=syslog
-ExecStart=/usr/sbin/bareos-sd -c /etc/bareos/bareos-sd.conf
+ExecStart=/usr/sbin/bareos-sd
 SuccessExitStatus=0 15
 Restart=on-failure
 

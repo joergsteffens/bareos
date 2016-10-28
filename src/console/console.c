@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -107,8 +107,6 @@ static int eolcmd(FILE *input, BSOCK *UA_sock);
 
 #endif
 
-#define CONFIG_FILE "bconsole.conf"   /* default configuration file */
-
 static void usage()
 {
    fprintf(stderr, _(
@@ -117,7 +115,7 @@ PROG_COPYRIGHT
 "Usage: bconsole [-s] [-c config_file] [-d debug_level]\n"
 "        -D <dir>    select a Director\n"
 "        -l          list Directors defined\n"
-"        -c <file>   set configuration file to file\n"
+"        -c <path>   specify configuration file or directory\n"
 "        -d <nn>     set debug level to <nn>\n"
 "        -dt         print timestamp in debug output\n"
 "        -n          no conio\n"
@@ -216,7 +214,7 @@ static int do_a_command(FILE *input, BSOCK *UA_sock)
       }
    }
    if (!found) {
-      pm_strcat(&UA_sock->msg, _(": is an invalid command\n"));
+      pm_strcat(UA_sock->msg, _(": is an invalid command\n"));
       UA_sock->msglen = strlen(UA_sock->msg);
       sendit(UA_sock->msg);
    }
@@ -279,7 +277,7 @@ static void read_and_process_input(FILE *input, BSOCK *UA_sock)
           * @ => internal command for us
           */
          if (UA_sock->msg[0] == '@') {
-            parse_args(UA_sock->msg, &args, &argc, argk, argv, MAX_CMD_ARGS);
+            parse_args(UA_sock->msg, args, &argc, argk, argv, MAX_CMD_ARGS);
             if (!do_a_command(input, UA_sock)) {
                break;
             }
@@ -482,10 +480,11 @@ void init_items()
    items->list.init();
 }
 
-/* Match a regexp and add the result to the items list
+/*
+ * Match a regexp and add the result to the items list
  * This function is recursive
  */
-static void match_kw(regex_t *preg, const char *what, int len, POOLMEM **buf)
+static void match_kw(regex_t *preg, const char *what, int len, POOLMEM *&buf)
 {
    int rc, size;
    int nmatch = 20;
@@ -504,12 +503,15 @@ static void match_kw(regex_t *preg, const char *what, int len, POOLMEM **buf)
       Pmsg2(0, "%i-%i\n", pmatch[3].rm_so, pmatch[3].rm_eo);
 #endif
       size = pmatch[1].rm_eo - pmatch[1].rm_so;
-      *buf = check_pool_memory_size(*buf, size + 1);
-      memcpy(*buf, what+pmatch[1].rm_so, size);
-      (*buf)[size] = 0;
+      buf = check_pool_memory_size(buf, size + 1);
+      memcpy(buf, what + pmatch[1].rm_so, size);
+      buf[size] = '\0';
 
-      items->list.append(bstrdup(*buf));
-      /* We search for the next keyword in the line */
+      items->list.append(bstrdup(buf));
+
+      /*
+       * We search for the next keyword in the line
+       */
       match_kw(preg, what + pmatch[1].rm_eo, len - pmatch[1].rm_eo, buf);
    }
 }
@@ -531,7 +533,7 @@ void get_arguments(const char *what)
    UA_sock->fsend(".help item=%s", what);
    while (UA_sock->recv() > 0) {
       strip_trailing_junk(UA_sock->msg);
-      match_kw(&preg, UA_sock->msg, UA_sock->msglen, &buf);
+      match_kw(&preg, UA_sock->msg, UA_sock->msglen, buf);
    }
    free_pool_memory(buf);
    regfree(&preg);
@@ -769,7 +771,7 @@ int get_cmd(FILE *input, const char *prompt, BSOCK *sock, int sec)
       senditf("%s%s\n", prompt, command);
    }
 
-   sock->msglen = pm_strcpy(&sock->msg, command);
+   sock->msglen = pm_strcpy(sock->msg, command);
    if (sock->msglen) {
       do_history++;
    }
@@ -1086,7 +1088,7 @@ int main(int argc, char *argv[])
    int errmsg_len;
    char *director = NULL;
    const char *name;
-   char *password;
+   s_password *password = NULL;
    char errmsg[1024];
    bool list_directors = false;
    bool no_signals = false;
@@ -1094,8 +1096,7 @@ int main(int argc, char *argv[])
    bool export_config = false;
    bool export_config_schema = false;
    JCR jcr;
-   alist *verify_list = NULL;
-   TLS_CONTEXT *tls_ctx = NULL;
+   tls_t *tls = NULL;
    POOL_MEM history_file;
    utime_t heart_beat;
 
@@ -1199,10 +1200,6 @@ int main(int argc, char *argv[])
       exit(1);
    }
 
-   if (configfile == NULL) {
-      configfile = bstrdup(CONFIG_FILE);
-   }
-
    if (export_config_schema) {
       POOL_MEM buffer;
 
@@ -1226,7 +1223,7 @@ int main(int argc, char *argv[])
    }
 
    if (!check_resources()) {
-      Emsg1(M_ERROR_TERM, 0, _("Please correct configuration file: %s\n"), configfile);
+      Emsg1(M_ERROR_TERM, 0, _("Please correct configuration file: %s\n"), my_config->get_base_config_path());
    }
 
    if (!no_conio) {
@@ -1261,7 +1258,7 @@ int main(int argc, char *argv[])
    /*
     * Initialize Console TLS context
     */
-   if (cons && (cons->tls_enable || cons->tls_require)) {
+   if (cons && (cons->tls.enable || cons->tls.require)) {
       /*
        * Generate passphrase prompt
        */
@@ -1272,31 +1269,31 @@ int main(int argc, char *argv[])
        * Args: CA certfile, CA certdir, Certfile, Keyfile,
        * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer
        */
-      cons->tls_ctx = new_tls_context(cons->tls_ca_certfile,
-                                      cons->tls_ca_certdir,
-                                      cons->tls_crlfile,
-                                      cons->tls_certfile,
-                                      cons->tls_keyfile,
+      cons->tls.ctx = new_tls_context(cons->tls.ca_certfile,
+                                      cons->tls.ca_certdir,
+                                      cons->tls.crlfile,
+                                      cons->tls.certfile,
+                                      cons->tls.keyfile,
                                       tls_pem_callback,
                                       &errmsg,
                                       NULL,
-                                      cons->tls_cipherlist,
-                                      cons->tls_verify_peer);
+                                      cons->tls.cipherlist,
+                                      cons->tls.verify_peer);
 
-      if (!cons->tls_ctx) {
+      if (!cons->tls.ctx) {
          senditf(_("Failed to initialize TLS context for Console \"%s\".\n"), cons->name());
          terminate_console(0);
          return 1;
       }
 
-      set_tls_enable(cons->tls_ctx, cons->tls_enable);
-      set_tls_require(cons->tls_ctx, cons->tls_require);
+      set_tls_enable(cons->tls.ctx, cons->tls.enable);
+      set_tls_require(cons->tls.ctx, cons->tls.require);
    }
 
    /*
     * Initialize Director TLS context
     */
-   if (dir->tls_enable || dir->tls_require) {
+   if (dir->tls.enable || dir->tls.require) {
       /*
        * Generate passphrase prompt
        */
@@ -1306,25 +1303,25 @@ int main(int argc, char *argv[])
        * Initialize TLS context:
        * Args: CA certfile, CA certdir, Certfile, Keyfile,
        * Keyfile PEM Callback, Keyfile CB Userdata, DHfile, Verify Peer */
-      dir->tls_ctx = new_tls_context(dir->tls_ca_certfile,
-                                     dir->tls_ca_certdir,
-                                     dir->tls_crlfile,
-                                     dir->tls_certfile,
-                                     dir->tls_keyfile,
+      dir->tls.ctx = new_tls_context(dir->tls.ca_certfile,
+                                     dir->tls.ca_certdir,
+                                     dir->tls.crlfile,
+                                     dir->tls.certfile,
+                                     dir->tls.keyfile,
                                      tls_pem_callback,
                                      &errmsg,
                                      NULL,
-                                     dir->tls_cipherlist,
-                                     dir->tls_verify_peer);
+                                     dir->tls.cipherlist,
+                                     dir->tls.verify_peer);
 
-      if (!dir->tls_ctx) {
+      if (!dir->tls.ctx) {
          senditf(_("Failed to initialize TLS context for Director \"%s\".\n"), dir->name());
          terminate_console(0);
          return 1;
       }
 
-      set_tls_enable(dir->tls_ctx, dir->tls_enable);
-      set_tls_require(dir->tls_ctx, dir->tls_require);
+      set_tls_enable(dir->tls.ctx, dir->tls.enable);
+      set_tls_require(dir->tls.ctx, dir->tls.require);
    }
 
    if (dir->heartbeat_interval) {
@@ -1349,22 +1346,21 @@ int main(int argc, char *argv[])
    if (cons) {
       name = cons->name();
       ASSERT(cons->password.encoding == p_encoding_md5);
-      password = cons->password.value;
-      tls_ctx = cons->tls_ctx;
-      verify_list = cons->tls_allowed_cns;
+      password = &cons->password;
+      tls = &cons->tls;
    } else {
       name = "*UserAgent*";
       ASSERT(dir->password.encoding == p_encoding_md5);
-      password = dir->password.value;
-      tls_ctx = dir->tls_ctx;
-      verify_list = dir->tls_allowed_cns;
+      password = &dir->password;
+      tls = &dir->tls;
    }
 
-   if (!UA_sock->authenticate_with_director(name, password, tls_ctx, verify_list, errmsg, errmsg_len)) {
+   if (!UA_sock->authenticate_with_director(&jcr, name, *password, *tls, errmsg, errmsg_len)) {
       sendit(errmsg);
       terminate_console(0);
       return 1;
    }
+
    sendit(errmsg);
 
    Dmsg0(40, "Opened connection with Director daemon\n");
@@ -1389,8 +1385,8 @@ int main(int argc, char *argv[])
    if (env) {
       FILE *fp;
 
-      pm_strcpy(&UA_sock->msg, env);
-      pm_strcat(&UA_sock->msg, "/.bconsolerc");
+      pm_strcpy(UA_sock->msg, env);
+      pm_strcat(UA_sock->msg, "/.bconsolerc");
       fp = fopen(UA_sock->msg, "rb");
       if (fp) {
          read_and_process_input(fp, UA_sock);
@@ -1475,29 +1471,29 @@ static int check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (director->tls_require) {
+      if (director->tls.require) {
          if (have_tls) {
-            director->tls_enable = true;
+            director->tls.enable = true;
          } else {
             Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in Bareos.\n"));
             OK = false;
             continue;
          }
       }
-      tls_needed = director->tls_enable || director->tls_authenticate;
+      tls_needed = director->tls.enable || director->tls.authenticate;
 
-      if ((!director->tls_ca_certfile && !director->tls_ca_certdir) && tls_needed) {
+      if ((!director->tls.ca_certfile && !director->tls.ca_certdir) && tls_needed) {
          Emsg2(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
                              " or \"TLS CA Certificate Dir\" are defined for Director \"%s\" in %s."
                              " At least one CA certificate store is required.\n"),
-                             director->name(), configfile);
+                             director->name(), my_config->get_base_config_path());
          OK = false;
       }
    }
 
    if (numdir == 0) {
       Emsg1(M_FATAL, 0, _("No Director resource defined in %s\n"
-                          "Without that I don't how to speak to the Director :-(\n"), configfile);
+                          "Without that I don't how to speak to the Director :-(\n"), my_config->get_base_config_path());
       OK = false;
    }
 
@@ -1509,20 +1505,20 @@ static int check_resources()
       /*
        * tls_require implies tls_enable
        */
-      if (cons->tls_require) {
+      if (cons->tls.require) {
          if (have_tls) {
-            cons->tls_enable = true;
+            cons->tls.enable = true;
          } else {
             Jmsg(NULL, M_FATAL, 0, _("TLS required but not configured in Bareos.\n"));
             OK = false;
             continue;
          }
       }
-      tls_needed = cons->tls_enable || cons->tls_authenticate;
-      if ((!cons->tls_ca_certfile && !cons->tls_ca_certdir) && tls_needed) {
+      tls_needed = cons->tls.enable || cons->tls.authenticate;
+      if ((!cons->tls.ca_certfile && !cons->tls.ca_certdir) && tls_needed) {
          Emsg2(M_FATAL, 0, _("Neither \"TLS CA Certificate\""
                              " or \"TLS CA Certificate Dir\" are defined for Console \"%s\" in %s.\n"),
-                             cons->name(), configfile);
+                             cons->name(), my_config->get_base_config_path());
          OK = false;
       }
    }

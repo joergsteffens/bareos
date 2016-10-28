@@ -3,7 +3,7 @@
 
    Copyright (C) 2008-2012 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -21,9 +21,8 @@
    02110-1301, USA.
 */
 /*
- * BAREOS Director -- vbackup.c -- responsible for doing virtual
- *                    backup jobs or in other words, consolidation or synthetic
- *                    backups.
+ * BAREOS Director -- vbackup.c -- responsible for doing virtual backup jobs or
+ *                    in other words, consolidation or synthetic backups.
  *
  * Kern Sibbald, July MMVIII
  *
@@ -43,8 +42,7 @@ static const int dbglevel = 10;
 static bool create_bootstrap_file(JCR *jcr, char *jobids);
 
 /*
- * Called here before the job is run to do the job
- *   specific setup.
+ * Called here before the job is run to do the job specific setup.
  */
 bool do_native_vbackup_init(JCR *jcr)
 {
@@ -67,16 +65,19 @@ bool do_native_vbackup_init(JCR *jcr)
       Jmsg(jcr, M_FATAL, 0, _("Could not get or create a Pool record.\n"));
       return false;
    }
+
    /*
-    * Note, at this point, pool is the pool for this job.  We
-    *  transfer it to rpool (read pool), and a bit later,
-    *  pool will be changed to point to the write pool,
-    *  which comes from pool->NextPool.
+    * Note, at this point, pool is the pool for this job.
+    * We transfer it to rpool (read pool), and a bit later,
+    * pool will be changed to point to the write pool,
+    * which comes from pool->NextPool.
     */
    jcr->res.rpool = jcr->res.pool;    /* save read pool */
    pm_strcpy(jcr->res.rpool_source, jcr->res.pool_source);
 
-   /* If pool storage specified, use it for restore */
+   /*
+    * If pool storage specified, use it for restore
+    */
    copy_rstorage(jcr, jcr->res.pool->storage, _("Pool resource"));
 
    Dmsg2(dbglevel, "Read pool=%s (From %s)\n", jcr->res.rpool->name(), jcr->res.rpool_source);
@@ -116,8 +117,8 @@ bool do_native_vbackup_init(JCR *jcr)
 
    /*
     * If the original backup pool has a NextPool, make sure a
-    *  record exists in the database. Note, in this case, we
-    *  will be migrating from pool to pool->NextPool.
+    * record exists in the database. Note, in this case, we
+    * will be migrating from pool to pool->NextPool.
     */
    if (jcr->res.next_pool) {
       jcr->jr.PoolId = get_or_create_pool_record(jcr, jcr->res.next_pool->name());
@@ -140,62 +141,105 @@ bool do_native_vbackup_init(JCR *jcr)
 }
 
 /*
- * Do a virtual backup, which consolidates all previous backups into
- *  a sort of synthetic Full.
+ * Do a virtual backup, which consolidates all previous backups into a sort of synthetic Full.
  *
- *  Returns:  false on failure
- *            true  on success
+ * Returns:  false on failure
+ *           true  on success
  */
 bool do_native_vbackup(JCR *jcr)
 {
-   char ed1[100];
-   BSOCK *sd;
    char *p;
-   db_list_ctx jobids;
+   BSOCK *sd;
+   char *jobids;
+   char ed1[100];
+   int JobLevel_of_first_job;
 
-   if (!jcr->rstorage) {
+   if (!jcr->res.rstorage) {
       Jmsg(jcr, M_FATAL, 0, _("No storage for reading given.\n"));
       return false;
    }
 
-   if (!jcr->wstorage) {
+   if (!jcr->res.wstorage) {
       Jmsg(jcr, M_FATAL, 0, _("No storage for writing given.\n"));
       return false;
    }
 
-   Dmsg2(100, "rstorage=%p wstorage=%p\n", jcr->rstorage, jcr->wstorage);
+   Dmsg2(100, "rstorage=%p wstorage=%p\n", jcr->res.rstorage, jcr->res.wstorage);
    Dmsg2(100, "Read store=%s, write store=%s\n",
-      ((STORERES *)jcr->rstorage->first())->name(),
-      ((STORERES *)jcr->wstorage->first())->name());
+         ((STORERES *)jcr->res.rstorage->first())->name(),
+         ((STORERES *)jcr->res.wstorage->first())->name());
 
    /*
     * Print Job Start message
     */
    Jmsg(jcr, M_INFO, 0, _("Start Virtual Backup JobId %s, Job=%s\n"),
         edit_uint64(jcr->JobId, ed1), jcr->Job);
+
    if (!jcr->accurate) {
       Jmsg(jcr, M_WARNING, 0,
            _("This Job is not an Accurate backup so is not equivalent to a Full backup.\n"));
    }
 
-   db_accurate_get_jobids(jcr, jcr->db, &jcr->jr, &jobids);
-   Dmsg1(10, "Accurate jobids=%s\n", jobids.list);
-   if (jobids.count == 0) {
-      Jmsg(jcr, M_FATAL, 0, _("No previous Jobs found.\n"));
-      return false;
+   /*
+    * See if we already got a list of jobids to use.
+    */
+   if (jcr->vf_jobids) {
+      Dmsg1(10, "jobids=%s\n", jcr->vf_jobids);
+      jobids = bstrdup(jcr->vf_jobids);
+
+   } else {
+      db_list_ctx jobids_ctx;
+      db_accurate_get_jobids(jcr, jcr->db, &jcr->jr, &jobids_ctx);
+      Dmsg1(10, "consolidate candidates:  %s.\n", jobids_ctx.list);
+
+      if (jobids_ctx.count == 0) {
+         Jmsg(jcr, M_FATAL, 0, _("No previous Jobs found.\n"));
+         return false;
+      }
+
+      jobids = bstrdup(jobids_ctx.list);
    }
 
+   Jmsg(jcr, M_INFO, 0, _("Consolidating JobIds %s\n"), jobids);
+
    /*
-    * Now we find the last job that ran and store it's info in
-    * the previous_jr record.  We will set our times to the
+    * Find oldest Jobid, get the db record and find its level
+    */
+   p = strchr(jobids, ',');                /* find oldest jobid */
+   if (p) {
+      *p = '\0';
+   }
+
+   memset(&jcr->previous_jr, 0, sizeof(jcr->previous_jr));
+   jcr->previous_jr.JobId = str_to_int64(jobids);
+   Dmsg1(10, "Previous JobId=%s\n", jobids);
+
+   /*
+    * See if we need to restore the stripped ','
+    */
+   if (p) {
+      *p = ',';
+   }
+
+   if (!db_get_job_record(jcr, jcr->db, &jcr->previous_jr)) {
+      Jmsg(jcr, M_FATAL, 0, _("Error getting Job record for first Job: ERR=%s"), db_strerror(jcr->db));
+      goto bail_out;
+   }
+
+   JobLevel_of_first_job = jcr->previous_jr.JobLevel;
+   Dmsg2(10, "Level of first consolidated job %d: %s\n", jcr->previous_jr.JobId, job_level_to_str(JobLevel_of_first_job));
+
+   /*
+    * Now we find the newest job that ran and store its info in
+    * the previous_jr record. We will set our times to the
     * values from that job so that anything changed after that
     * time will be picked up on the next backup.
     */
-   p = strrchr(jobids.list, ',');           /* find last jobid */
-   if (p != NULL) {
+   p = strrchr(jobids, ',');                /* find newest jobid */
+   if (p) {
       p++;
    } else {
-      p = jobids.list;
+      p = jobids;
    }
 
    memset(&jcr->previous_jr, 0, sizeof(jcr->previous_jr));
@@ -204,20 +248,19 @@ bool do_native_vbackup(JCR *jcr)
 
    if (!db_get_job_record(jcr, jcr->db, &jcr->previous_jr)) {
       Jmsg(jcr, M_FATAL, 0, _("Error getting Job record for previous Job: ERR=%s"),
-               db_strerror(jcr->db));
-      return false;
+           db_strerror(jcr->db));
+      goto bail_out;
    }
 
-   if (!create_bootstrap_file(jcr, jobids.list)) {
+   if (!create_bootstrap_file(jcr, jobids)) {
       Jmsg(jcr, M_FATAL, 0, _("Could not get or create the FileSet record.\n"));
-      return false;
+      goto bail_out;
    }
 
    /*
     * Open a message channel connection with the Storage
     * daemon. This is to let him know that our client
     * will be contacting him for a backup  session.
-    *
     */
    Dmsg0(110, "Open connection with storage daemon\n");
    jcr->setJobStatus(JS_WaitSD);
@@ -226,15 +269,15 @@ bool do_native_vbackup(JCR *jcr)
     * Start conversation with Storage daemon
     */
    if (!connect_to_storage_daemon(jcr, 10, me->SDConnectTimeout, true)) {
-      return false;
+      goto bail_out;
    }
    sd = jcr->store_bsock;
 
    /*
     * Now start a job with the Storage daemon
     */
-   if (!start_storage_daemon_job(jcr, jcr->rstorage, jcr->wstorage, /* send_bsr */ true)) {
-      return false;
+   if (!start_storage_daemon_job(jcr, jcr->res.rstorage, jcr->res.wstorage, /* send_bsr */ true)) {
+      goto bail_out;
    }
    Dmsg0(100, "Storage daemon connection OK\n");
 
@@ -258,7 +301,7 @@ bool do_native_vbackup(JCR *jcr)
     */
    if (!db_update_job_start_record(jcr, jcr->db, &jcr->jr)) {
       Jmsg(jcr, M_FATAL, 0, "%s", db_strerror(jcr->db));
-      return false;
+      goto bail_out;
    }
 
    /*
@@ -272,14 +315,14 @@ bool do_native_vbackup(JCR *jcr)
     * the same time.
     */
    if (!sd->fsend("run")) {
-      return false;
+      goto bail_out;
    }
 
    /*
     * Now start a Storage daemon message thread
     */
    if (!start_storage_daemon_message_thread(jcr)) {
-      return false;
+      goto bail_out;
    }
 
    jcr->setJobStatus(JS_Running);
@@ -292,17 +335,33 @@ bool do_native_vbackup(JCR *jcr)
    jcr->setJobStatus(jcr->SDJobStatus);
    db_write_batch_file_records(jcr);    /* used by bulk batch file insert */
    if (!jcr->is_JobStatus(JS_Terminated)) {
-      return false;
+      goto bail_out;
    }
 
-   native_vbackup_cleanup(jcr, jcr->JobStatus);
+   native_vbackup_cleanup(jcr, jcr->JobStatus, JobLevel_of_first_job);
+
+   /*
+    * Remove the successfully consolidated jobids from the database
+    */
+    if (jcr->res.job->AlwaysIncremental && jcr->res.job->AlwaysIncrementalJobRetention) {
+      UAContext *ua;
+      ua = new_ua_context(jcr);
+      purge_jobs_from_catalog(ua, jobids);
+      Jmsg(jcr, M_INFO, 0, _("purged JobIds %s as they were consolidated into Job %s\n"), jobids,  edit_uint64(jcr->JobId, ed1) );
+    }
+
+   free(jobids);
    return true;
+
+bail_out:
+   free(jobids);
+   return false;
 }
 
 /*
  * Release resources allocated during backup.
  */
-void native_vbackup_cleanup(JCR *jcr, int TermCode)
+void native_vbackup_cleanup(JCR *jcr, int TermCode, int JobLevel)
 {
    char ec1[30], ec2[30];
    char term_code[100];
@@ -317,7 +376,8 @@ void native_vbackup_cleanup(JCR *jcr, int TermCode)
    switch (jcr->JobStatus) {
    case JS_Terminated:
    case JS_Warnings:
-      jcr->jr.JobLevel = L_FULL;        /* we want this to appear as a Full backup */
+      jcr->jr.JobLevel = JobLevel;      /* We want this to appear as what the first consolidated job was */
+      Jmsg(jcr, M_INFO, 0, _("Joblevel was set to joblevel of first consolidated job: %s\n"), job_level_to_str(JobLevel));
       break;
    default:
       break;

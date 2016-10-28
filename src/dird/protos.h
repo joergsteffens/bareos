@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2012 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2013 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -29,10 +29,15 @@ bool do_admin_init(JCR *jcr);
 bool do_admin(JCR *jcr);
 void admin_cleanup(JCR *jcr, int TermCode);
 
+/* archive.c */
+bool do_archive_init(JCR *jcr);
+bool do_archive(JCR *jcr);
+void archive_cleanup(JCR *jcr, int TermCode);
+
 /* authenticate.c */
 bool authenticate_with_storage_daemon(JCR *jcr, STORERES *store);
 bool authenticate_with_file_daemon(JCR *jcr);
-bool authenticate_file_daemon(JCR *jcr, char *client_name);
+bool authenticate_file_daemon(BSOCK *fd, char *client_name);
 bool authenticate_user_agent(UAContext *ua);
 
 /* autoprune.c */
@@ -67,7 +72,7 @@ uint32_t write_bsr(UAContext *ua, RESTORE_CTX &rx, POOL_MEM *buffer);
 void add_findex(RBSR *bsr, uint32_t JobId, int32_t findex);
 void add_findex_all(RBSR *bsr, uint32_t JobId);
 RBSR_FINDEX *new_findex();
-void make_unique_restore_filename(UAContext *ua, POOLMEM **fname);
+void make_unique_restore_filename(UAContext *ua, POOLMEM *&fname);
 void print_bsr(UAContext *ua, RESTORE_CTX &rx);
 bool open_bootstrap_file(JCR *jcr, bootstrap_info &info);
 bool send_bootstrap_file(JCR *jcr, BSOCK *sock, bootstrap_info &info);
@@ -78,6 +83,11 @@ void catalog_request(JCR *jcr, BSOCK *bs);
 void catalog_update(JCR *jcr, BSOCK *bs);
 bool despool_attributes_from_file(JCR *jcr, const char *file);
 
+/* consolidate.c */
+bool do_consolidate_init(JCR *jcr);
+bool do_consolidate(JCR *jcr);
+void consolidate_cleanup(JCR *jcr, int TermCode);
+
 /* dird_conf.c */
 bool print_datatype_schema_json(POOL_MEM &buffer, int level, const int type,
                                 RES_ITEM items[], const bool last = false);
@@ -87,18 +97,21 @@ json_t *json_datatype(const int type, RES_ITEM items[]);
 const char *auth_protocol_to_str(uint32_t auth_protocol);
 const char *level_to_str(int level);
 extern "C" char *job_code_callback_director(JCR *jcr, const char*);
+const char *get_configure_usage_string();
+void destroy_configure_usage_string();
 bool populate_defs();
 
 /* expand.c */
-int variable_expansion(JCR *jcr, char *inp, POOLMEM **exp);
+int variable_expansion(JCR *jcr, char *inp, POOLMEM *&exp);
 
 /* fd_cmds.c */
-int connect_to_file_daemon(JCR *jcr, int retry_interval, int max_retry_time,
-                           bool verbose, bool start_job);
+bool connect_to_file_daemon(JCR *jcr, int retry_interval, int max_retry_time, bool verbose);
+int  send_job_info(JCR *jcr);
 bool send_include_list(JCR *jcr);
 bool send_exclude_list(JCR *jcr);
 bool send_level_command(JCR *jcr);
 bool send_bwlimit_to_fd(JCR *jcr, const char *Job);
+bool send_secure_erase_req_to_fd(JCR *jcr);
 bool send_previous_restore_objects(JCR *jcr);
 int get_attributes_and_put_in_catalog(JCR *jcr);
 void get_attributes_and_compare_to_catalog(JCR *jcr, JobId_t JobId);
@@ -110,7 +123,15 @@ bool send_restore_objects(JCR *jcr, JobId_t JobId, bool send_global);
 bool cancel_file_daemon_job(UAContext *ua, JCR *jcr);
 void do_native_client_status(UAContext *ua, CLIENTRES *client, char *cmd);
 void do_client_resolve(UAContext *ua, CLIENTRES *client);
-void *handle_filed_connection(BSOCK *fd, char *client_name);
+void *handle_filed_connection(CONNECTION_POOL *connections, BSOCK *fd,
+                              char *client_name, int fd_protocol_version);
+
+CONNECTION_POOL *get_client_connections();
+bool is_connecting_to_client_allowed(CLIENTRES *res);
+bool is_connecting_to_client_allowed(JCR *jcr);
+bool is_connect_from_client_allowed(CLIENTRES *res);
+bool is_connect_from_client_allowed(JCR *jcr);
+bool use_waiting_client(JCR *jcr_job, int timeout);
 
 /* getmsg.c */
 bool response(JCR *jcr, BSOCK *fd, char *resp, const char *cmd, e_prtmsg prtmsg);
@@ -142,19 +163,6 @@ bool cancel_job(UAContext *ua, JCR *jcr);
 void get_job_storage(USTORERES *store, JOBRES *job, RUNRES *run);
 void init_jcr_job_record(JCR *jcr);
 void update_job_end(JCR *jcr, int TermCode);
-void copy_rwstorage(JCR *jcr, alist *storage, const char *where);
-void set_rwstorage(JCR *jcr, USTORERES *store);
-void free_rwstorage(JCR *jcr);
-void copy_wstorage(JCR *jcr, alist *storage, const char *where);
-void set_wstorage(JCR *jcr, USTORERES *store);
-void free_wstorage(JCR *jcr);
-void copy_rstorage(JCR *jcr, alist *storage, const char *where);
-void set_rstorage(JCR *jcr, USTORERES *store);
-void free_rstorage(JCR *jcr);
-bool select_next_rstore(JCR *jcr, bootstrap_info &info);
-void set_paired_storage(JCR *jcr);
-void free_paired_storage(JCR *jcr);
-bool has_paired_storage(JCR *jcr);
 bool setup_job(JCR *jcr, bool suppress_output = false);
 void create_clones(JCR *jcr);
 int create_restore_bootstrap_file(JCR *jcr);
@@ -201,6 +209,16 @@ void ndmp_restore_cleanup(JCR *jcr, int TermCode);
 
 /* ndmp_dma_storage.c */
 void do_ndmp_storage_status(UAContext *ua, STORERES *store, char *cmd);
+dlist *ndmp_get_vol_list(UAContext *ua, STORERES *store, bool listall, bool scan);
+slot_number_t ndmp_get_num_slots(UAContext *ua, STORERES *store);
+drive_number_t ndmp_get_num_drives(UAContext *ua, STORERES *store);
+bool ndmp_transfer_volume(UAContext *ua, STORERES *store,
+                          slot_number_t src_slot, slot_number_t dst_slot);
+bool ndmp_autochanger_volume_operation(UAContext *ua, STORERES *store, const char *operation,
+                                       drive_number_t drive, slot_number_t slot);
+bool ndmp_send_label_request(UAContext *ua, STORERES *store, MEDIA_DBR *mr,
+                             MEDIA_DBR *omr, POOL_DBR *pr, bool relabel,
+                             drive_number_t drive, slot_number_t slot);
 
 /* next_vol.c */
 void set_storageid_in_mr(STORERES *store, MEDIA_DBR *mr);
@@ -208,8 +226,7 @@ int find_next_volume_for_append(JCR *jcr, MEDIA_DBR *mr, int index,
                                 const char *unwanted_volumes, bool create, bool purge);
 bool has_volume_expired(JCR *jcr, MEDIA_DBR *mr);
 void check_if_volume_valid_or_recyclable(JCR *jcr, MEDIA_DBR *mr, const char **reason);
-bool get_scratch_volume(JCR *jcr, bool InChanger, MEDIA_DBR *mr,
-        STORERES *store);
+bool get_scratch_volume(JCR *jcr, bool InChanger, MEDIA_DBR *mr, STORERES *store);
 
 /* newvol.c */
 bool newVolume(JCR *jcr, MEDIA_DBR *mr, STORERES *store);
@@ -230,19 +247,20 @@ bool connect_to_storage_daemon(JCR *jcr, int retry_interval,
                                int max_retry_time, bool verbose);
 BSOCK *open_sd_bsock(UAContext *ua);
 void close_sd_bsock(UAContext *ua);
-char *get_volume_name_from_SD(UAContext *ua, int Slot, int drive);
-dlist *get_vol_list_from_SD(UAContext *ua, STORERES *store, bool listall, bool scan);
-void free_vol_list(dlist *vol_list);
-int get_num_slots_from_SD(UAContext *ua);
-int get_num_drives_from_SD(UAContext *ua);
+char *get_volume_name_from_SD(UAContext *ua, slot_number_t Slot, drive_number_t drive);
+dlist *native_get_vol_list(UAContext *ua, STORERES *store, bool listall, bool scan);
+slot_number_t native_get_num_slots(UAContext *ua, STORERES *store);
+drive_number_t native_get_num_drives(UAContext *ua, STORERES *store);
 bool cancel_storage_daemon_job(UAContext *ua, STORERES *store, char *JobId);
 bool cancel_storage_daemon_job(UAContext *ua, JCR *jcr, bool interactive = true);
 void cancel_storage_daemon_job(JCR *jcr);
 void do_native_storage_status(UAContext *ua, STORERES *store, char *cmd);
-bool transfer_volume(UAContext *ua, STORERES *store, int src_slot, int dst_slot);
-bool do_autochanger_volume_operation(UAContext *ua, STORERES *store,
-                                     const char *operation, int drive, int slot);
+bool native_transfer_volume(UAContext *ua, STORERES *store,
+                            slot_number_t src_slot, slot_number_t dst_slot);
+bool native_autochanger_volume_operation(UAContext *ua, STORERES *store, const char *operation,
+                                         drive_number_t drive, slot_number_t slot);
 bool send_bwlimit_to_sd(JCR *jcr, const char *Job);
+bool send_secure_erase_req_to_sd(JCR *jcr);
 bool do_storage_resolve(UAContext *ua, STORERES *store);
 bool do_storage_plugin_options(JCR *jcr);
 
@@ -260,20 +278,44 @@ int start_statistics_thread(void);
 void stop_statistics_thread();
 void stats_job_started();
 
-/* ua_acl.c */
-bool acl_access_ok(UAContext *ua, int acl, const char *item, bool audit_event = false);
-bool acl_access_ok(UAContext *ua, int acl, const char *item, int len, bool audit_event = false);
-
-/* ua_audit.c */
-bool audit_event_wanted(UAContext *ua, bool audit_event_enabled);
-void log_audit_event_acl_failure(UAContext *ua, int acl, const char *item);
-void log_audit_event_acl_success(UAContext *ua, int acl, const char *item);
-void log_audit_event_cmdline(UAContext *ua);
+/* storage.c */
+void copy_rwstorage(JCR *jcr, alist *storage, const char *where);
+void set_rwstorage(JCR *jcr, USTORERES *store);
+void free_rwstorage(JCR *jcr);
+void copy_wstorage(JCR *jcr, alist *storage, const char *where);
+void set_wstorage(JCR *jcr, USTORERES *store);
+void free_wstorage(JCR *jcr);
+void copy_rstorage(JCR *jcr, alist *storage, const char *where);
+void set_rstorage(JCR *jcr, USTORERES *store);
+void free_rstorage(JCR *jcr);
+void set_paired_storage(JCR *jcr);
+void free_paired_storage(JCR *jcr);
+bool has_paired_storage(JCR *jcr);
+bool select_next_rstore(JCR *jcr, bootstrap_info &info);
+void storage_status(UAContext *ua, STORERES *store, char *cmd);
+int storage_compare_vol_list_entry(void *e1, void *e2);
+changer_vol_list_t *get_vol_list_from_storage(UAContext *ua, STORERES *store,
+                                              bool listall, bool scan, bool cached = true);
+slot_number_t get_num_slots(UAContext *ua, STORERES *store);
+drive_number_t get_num_drives(UAContext *ua, STORERES *store);
+bool transfer_volume(UAContext *ua, STORERES *store,
+                     slot_number_t src_slot, slot_number_t dst_slot);
+bool do_autochanger_volume_operation(UAContext *ua, STORERES *store,
+                                     const char *operation,
+                                     drive_number_t drive, slot_number_t slot);
+vol_list_t *vol_is_loaded_in_drive(STORERES *store, changer_vol_list_t *vol_list, slot_number_t slot);
+void storage_release_vol_list(STORERES *store, changer_vol_list_t *vol_list);
+void storage_free_vol_list(STORERES *store, changer_vol_list_t *vol_list);
+void invalidate_vol_list(STORERES *store);
+int compare_storage_mapping(void *e1, void *e2);
+slot_number_t lookup_storage_mapping(STORERES *store, slot_type slot_type,
+                                     s_mapping_type map_type, slot_number_t slot);
 
 /* ua_cmds.c */
 bool do_a_command(UAContext *ua);
-bool do_a_dot_command(UAContext *ua);
 bool dot_messages_cmd(UAContext *ua, const char *cmd);
+
+/* ua_db.c */
 bool open_client_db(UAContext *ua, bool use_private = false);
 bool open_db(UAContext *ua, bool use_private = false);
 void close_db(UAContext *ua);
@@ -302,11 +344,12 @@ bool is_volume_name_legal(UAContext *ua, const char *name);
 
 /* ua_update.c */
 void update_vol_pool(UAContext *ua, char *val, MEDIA_DBR *mr, POOL_DBR *opr);
-void update_slots_from_vol_list(UAContext *ua, STORERES *store, dlist *vol_list, char *slot_list);
-void update_inchanger_for_export(UAContext *ua, STORERES *store, dlist *vol_list, char *slot_list);
+void update_slots_from_vol_list(UAContext *ua, STORERES *store, changer_vol_list_t *vol_list, char *slot_list);
+void update_inchanger_for_export(UAContext *ua, STORERES *store, changer_vol_list_t *vol_list, char *slot_list);
 
 /* ua_output.c */
 void bsendmsg(void *ua_ctx, const char *fmt, ...);
+of_filter_state filterit(void *ctx, void *data, of_filter_tuple *tuple);
 bool printit(void *ctx, const char *msg);
 bool complete_jcr_for_job(JCR *jcr, JOBRES *job, POOLRES *pool);
 RUNRES *find_next_run(RUNRES *run, JOBRES *job, utime_t &runtime, int ndays);
@@ -332,6 +375,7 @@ SCHEDRES *select_enable_disable_schedule_resource(UAContext *ua, bool enable);
 bool select_pool_and_media_dbr(UAContext *ua, POOL_DBR *pr, MEDIA_DBR *mr);
 bool select_media_dbr(UAContext *ua, MEDIA_DBR *mr);
 bool select_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk = "pool");
+bool select_storage_dbr(UAContext *ua, STORAGE_DBR *pr, const char *argk = "storage");
 bool select_client_dbr(UAContext *ua, CLIENT_DBR *cr);
 
 void start_prompt(UAContext *ua, const char *msg);
@@ -340,10 +384,11 @@ int do_prompt(UAContext *ua, const char *automsg, const char *msg, char *prompt,
 CATRES *get_catalog_resource(UAContext *ua);
 STORERES *get_storage_resource(UAContext *ua, bool use_default = false,
                                bool autochanger_only = false);
-int get_storage_drive(UAContext *ua, STORERES *store);
-int get_storage_slot(UAContext *ua, STORERES *store);
+drive_number_t get_storage_drive(UAContext *ua, STORERES *store);
+slot_number_t get_storage_slot(UAContext *ua, STORERES *store);
 int get_media_type(UAContext *ua, char *MediaType, int max_media);
 bool get_pool_dbr(UAContext *ua, POOL_DBR *pr, const char *argk = "pool");
+bool get_storage_dbr(UAContext *ua, STORAGE_DBR *sr, const char *argk = "storage");
 bool get_client_dbr(UAContext *ua, CLIENT_DBR *cr);
 POOLRES *get_pool_resource(UAContext *ua);
 JOBRES *get_restore_job(UAContext *ua);
@@ -397,7 +442,7 @@ int do_run_cmd(UAContext *ua, const char *cmd);
 /* vbackup.c */
 bool do_native_vbackup_init(JCR *jcr);
 bool do_native_vbackup(JCR *jcr);
-void native_vbackup_cleanup(JCR *jcr, int TermCode);
+void native_vbackup_cleanup(JCR *jcr, int TermCode, int JobLevel = L_FULL);
 
 /* verify.c */
 bool do_verify(JCR *jcr);

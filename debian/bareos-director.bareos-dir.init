@@ -52,6 +52,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 checkcfg() {
    echo "Checking Configuration and Database connection ... "
    su -s /bin/sh $DAEMON_USER -c "/usr/sbin/bareos-dir -f -t -c /etc/bareos/bareos-dir.conf"
+   su -s /bin/sh $DAEMON_USER -c "/usr/sbin/bareos-dir -f -t"
    if [ $? -eq 0 ]; then
       return 0
    else

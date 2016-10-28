@@ -514,21 +514,8 @@ void print_memory_pool_stats() {}
 
 /*
  * Concatenate a string (str) onto a pool memory buffer pm
- *   Returns: length of concatenated string
+ * Returns: length of concatenated string
  */
-int pm_strcat(POOLMEM **pm, const char *str)
-{
-   int pmlen = strlen(*pm);
-   int len;
-
-   if (!str) str = "";
-
-   len = strlen(str) + 1;
-   *pm = check_pool_memory_size(*pm, pmlen + len);
-   memcpy(*pm+pmlen, str, len);
-   return pmlen + len - 1;
-}
-
 int pm_strcat(POOLMEM *&pm, const char *str)
 {
    int pmlen = strlen(pm);
@@ -565,22 +552,23 @@ int pm_strcat(POOL_MEM &pm, const char *str)
    return pmlen + len - 1;
 }
 
-/*
- * Copy a string (str) into a pool memory buffer pm
- *   Returns: length of string copied
- */
-int pm_strcpy(POOLMEM **pm, const char *str)
+int pm_strcat(POOL_MEM *&pm, const char *str)
 {
+   int pmlen = strlen(pm->c_str());
    int len;
 
    if (!str) str = "";
 
    len = strlen(str) + 1;
-   *pm = check_pool_memory_size(*pm, len);
-   memcpy(*pm, str, len);
-   return len - 1;
+   pm->check_size(pmlen + len);
+   memcpy(pm->c_str()+pmlen, str, len);
+   return pmlen + len - 1;
 }
 
+/*
+ * Copy a string (str) into a pool memory buffer pm
+ * Returns: length of string copied
+ */
 int pm_strcpy(POOLMEM *&pm, const char *str)
 {
    int len;
@@ -614,17 +602,22 @@ int pm_strcpy(POOL_MEM &pm, const char *str)
    return len - 1;
 }
 
-/*
- * Copy data into a pool memory buffer pm
- *   Returns: length of data copied
- */
-int pm_memcpy(POOLMEM **pm, const char *data, int32_t n)
+int pm_strcpy(POOL_MEM *&pm, const char *str)
 {
-   *pm = check_pool_memory_size(*pm, n);
-   memcpy(*pm, data, n);
-   return n;
+   int len;
+
+   if (!str) str = "";
+
+   len = strlen(str) + 1;
+   pm->check_size(len);
+   memcpy(pm->c_str(), str, len);
+   return len - 1;
 }
 
+/*
+ * Copy data into a pool memory buffer pm
+ * Returns: length of data copied
+ */
 int pm_memcpy(POOLMEM *&pm, const char *data, int32_t n)
 {
    pm = check_pool_memory_size(pm, n);
@@ -643,6 +636,13 @@ int pm_memcpy(POOL_MEM &pm, const char *data, int32_t n)
 {
    pm.check_size(n);
    memcpy(pm.c_str(), data, n);
+   return n;
+}
+
+int pm_memcpy(POOL_MEM *&pm, const char *data, int32_t n)
+{
+   pm->check_size(n);
+   memcpy(pm->c_str(), data, n);
    return n;
 }
 

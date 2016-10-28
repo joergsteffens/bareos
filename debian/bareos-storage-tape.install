@@ -1,6 +1,8 @@
 #! /usr/bin/dh-exec
 /etc/bareos/mtx-changer.conf
-/etc/bareos/bareos-sd.d/device-tape-with-autoloader.conf
+/etc/bareos/bareos-dir.d/storage/Tape.conf.example
+/etc/bareos/bareos-sd.d/autochanger/autochanger-0.conf.example
+/etc/bareos/bareos-sd.d/device/tapedrive-0.conf.example
 /usr/lib/bareos/backends/libbareossd-gentape*.so
 /usr/lib/bareos/backends/libbareossd-tape*.so
 [linux-any] /usr/lib/bareos/plugins/scsicrypto-sd.so

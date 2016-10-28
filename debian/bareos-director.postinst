@@ -20,30 +20,22 @@ set -e
 daemon_user=bareos
 daemon_group=bareos
 
-DEFCONFIGDIR="/usr/lib/bareos/defaultconfigs"
-CONFIG="bareos-dir.conf"
-TARGET="/etc/bareos/${CONFIG}"
-
+DEFCONFIGDIR="/usr/lib/bareos/defaultconfigs/bareos-dir.d/"
+CONFIGDIR="/etc/bareos/bareos-dir.d/"
 
 permissions()
 {
-  chown ${daemon_user}:${daemon_group} /etc/bareos/bareos-dir.d
-  if [ -f "$TARGET" ]; then
-    chown ${daemon_user}:${daemon_group} $TARGET
-    chmod 640 $TARGET
-  fi
+    for dir in /etc/bareos/bareos-dir-export/ /etc/bareos/bareos-dir-export/client; do
+        chown ${daemon_user}:${daemon_group} "$dir"
+        chmod 750 "$dir"
+    done
 }
 
 case "$1" in
     configure)
-        if [ ! -f "$TARGET" ]; then
-            cat ${DEFCONFIGDIR}/${CONFIG} > ${TARGET}
-            /usr/lib/bareos/scripts/bareos-config initialize_local_hostname
-            /usr/lib/bareos/scripts/bareos-config initialize_passwords
+        if /usr/lib/bareos/scripts/bareos-config deploy_config "$DEFCONFIGDIR" "$CONFIGDIR"; then
             /usr/lib/bareos/scripts/bareos-config initialize_database_driver
             /usr/lib/bareos/scripts/bareos-config apply_dbconfig_settings
-        else
-            cat ${DEFCONFIGDIR}/${CONFIG} > ${TARGET}.dist
         fi
         permissions
         ;;

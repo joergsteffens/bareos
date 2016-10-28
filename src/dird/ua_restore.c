@@ -145,14 +145,14 @@ bool restore_cmd(UAContext *ua, const char *cmd)
    /* TODO: add acl for regexwhere ? */
 
    if (rx.RegexWhere) {
-      if (!acl_access_ok(ua, Where_ACL, rx.RegexWhere, true)) {
+      if (!ua->acl_access_ok(Where_ACL, rx.RegexWhere, true)) {
          ua->error_msg(_("\"RegexWhere\" specification not authorized.\n"));
          goto bail_out;
       }
    }
 
    if (rx.where) {
-      if (!acl_access_ok(ua, Where_ACL, rx.where, true)) {
+      if (!ua->acl_access_ok(Where_ACL, rx.where, true)) {
          ua->error_msg(_("\"where\" specification not authorized.\n"));
          goto bail_out;
       }
@@ -175,8 +175,9 @@ bool restore_cmd(UAContext *ua, const char *cmd)
    UnlockRes();
    if (!rx.restore_jobs) {
       ua->error_msg(_(
-         "No Restore Job Resource found in bareos-dir.conf.\n"
-         "You must create at least one before running this command.\n"));
+         "No Restore Job Resource found in %s.\n"
+         "You must create at least one before running this command.\n"),
+         my_config->get_base_config_path());
       goto bail_out;
    }
 
@@ -411,7 +412,7 @@ static bool get_client_name(UAContext *ua, RESTORE_CTX *rx)
          i = find_arg_with_value(ua, NT_("backupclient"));
       }
       if (i >= 0) {
-         if (!is_name_valid(ua->argv[i], &ua->errmsg)) {
+         if (!is_name_valid(ua->argv[i], ua->errmsg)) {
             ua->error_msg("%s argument: %s", ua->argk[i], ua->errmsg);
             return false;
          }
@@ -444,11 +445,11 @@ static bool get_restore_client_name(UAContext *ua, RESTORE_CTX &rx)
     */
    i = find_arg_with_value(ua, NT_("restoreclient"));
    if (i >= 0) {
-      if (!is_name_valid(ua->argv[i], &ua->errmsg)) {
+      if (!is_name_valid(ua->argv[i], ua->errmsg)) {
          ua->error_msg("%s argument: %s", ua->argk[i], ua->errmsg);
          return false;
       }
-      if (!GetClientResWithName(ua->argv[i])) {
+      if (!ua->GetClientResWithName(ua->argv[i])) {
          ua->error_msg("invalid %s argument: %s\n", ua->argk[i], ua->argv[i]);
          return false;
       }
@@ -606,14 +607,9 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          if (!has_value(ua, i)) {
             return 0;
          }
-         rx->pool = (POOLRES *)GetResWithName(R_POOL, ua->argv[i]);
+         rx->pool = ua->GetPoolResWithName(ua->argv[i]);
          if (!rx->pool) {
             ua->error_msg(_("Error: Pool resource \"%s\" does not exist.\n"), ua->argv[i]);
-            return 0;
-         }
-         if (!acl_access_ok(ua, Pool_ACL, ua->argv[i], true)) {
-            rx->pool = NULL;
-            ua->error_msg(_("Error: Pool resource \"%s\" access not allowed.\n"), ua->argv[i]);
             return 0;
          }
          break;
@@ -651,7 +647,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
       case -1:                        /* error or cancel */
          return 0;
       case 0:                         /* list last 20 Jobs run */
-         if (!acl_access_ok(ua, Command_ACL, NT_("sqlquery"), true)) {
+         if (!ua->acl_access_ok(Command_ACL, NT_("sqlquery"), true)) {
             ua->error_msg(_("SQL query not authorized.\n"));
             return 0;
          }
@@ -686,7 +682,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          pm_strcpy(rx->JobIds, ua->cmd);
          break;
       case 3:                         /* Enter an SQL list command */
-         if (!acl_access_ok(ua, Command_ACL, NT_("sqlquery"), true)) {
+         if (!ua->acl_access_ok(Command_ACL, NT_("sqlquery"), true)) {
             ua->error_msg(_("SQL query not authorized.\n"));
             return 0;
          }
@@ -881,7 +877,7 @@ static int user_select_jobids_or_files(UAContext *ua, RESTORE_CTX *rx)
          free_pool_memory(JobIds);
          return 0;
       }
-      if (!acl_access_ok(ua, Job_ACL, jr.Name, true)) {
+      if (!ua->acl_access_ok(Job_ACL, jr.Name, true)) {
          ua->error_msg(_("Access to JobId=%s (Job \"%s\") not authorized. Not selected.\n"),
             edit_int64(JobId, ed1), jr.Name);
          continue;
@@ -1109,8 +1105,10 @@ static bool ask_for_fileregex(UAContext *ua, RESTORE_CTX *rx)
                  "so file selection is not possible.\n"
                  "Most likely your retention policy pruned the files.\n"));
    if (get_yesno(ua, _("\nDo you want to restore all the files? (yes|no): "))) {
-      if (ua->pint32_val == 1)
+      if (ua->pint32_val) {
          return true;
+      }
+
       while (get_cmd(ua, _("\nRegexp matching files to restore? (empty to abort): "))) {
          if (ua->cmd[0] == '\0') {
             break;
@@ -1135,6 +1133,7 @@ static bool ask_for_fileregex(UAContext *ua, RESTORE_CTX *rx)
          }
       }
    }
+
    return false;
 }
 
@@ -1303,17 +1302,20 @@ static bool build_directory_tree(UAContext *ua, RESTORE_CTX *rx)
  */
 static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *date)
 {
-   bool ok = false;
-   FILESET_DBR fsr;
+   int i;
    CLIENT_DBR cr;
-   char fileset_name[MAX_NAME_LENGTH];
+   FILESET_DBR fsr;
+   bool ok = false;
    char ed1[50], ed2[50];
    char pool_select[MAX_NAME_LENGTH];
-   int i;
+   char fileset_name[MAX_NAME_LENGTH];
 
-   /* Create temp tables */
+   /*
+    * Create temp tables
+    */
    db_sql_query(ua->db, uar_del_temp);
    db_sql_query(ua->db, uar_del_temp1);
+
    if (!db_sql_query(ua->db, uar_create_temp[db_get_type_index(ua->db)])) {
       ua->error_msg("%s\n", db_strerror(ua->db));
    }
@@ -1335,11 +1337,10 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
    memset(&fsr, 0, sizeof(fsr));
    i = find_arg_with_value(ua, "FileSet");
 
-   if (i >= 0 && is_name_valid(ua->argv[i], &ua->errmsg)) {
+   if (i >= 0 && is_name_valid(ua->argv[i], ua->errmsg)) {
       bstrncpy(fsr.FileSet, ua->argv[i], sizeof(fsr.FileSet));
       if (!db_get_fileset_record(ua->jcr, ua->db, &fsr)) {
-         ua->error_msg(_("Error getting FileSet \"%s\": ERR=%s\n"), fsr.FileSet,
-            db_strerror(ua->db));
+         ua->error_msg(_("Error getting FileSet \"%s\": ERR=%s\n"), fsr.FileSet, db_strerror(ua->db));
          i = -1;
       }
    } else if (i >= 0) {         /* name is invalid */
@@ -1363,7 +1364,7 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
       if (!db_get_fileset_record(ua->jcr, ua->db, &fsr)) {
          ua->warning_msg(_("Error getting FileSet record: %s\n"), db_strerror(ua->db));
          ua->send_msg(_("This probably means you modified the FileSet.\n"
-                     "Continuing anyway.\n"));
+                        "Continuing anyway.\n"));
       }
    }
 
@@ -1373,11 +1374,11 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
    pool_select[0] = 0;
    if (rx->pool) {
       POOL_DBR pr;
+
       memset(&pr, 0, sizeof(pr));
       bstrncpy(pr.Name, rx->pool->name(), sizeof(pr.Name));
       if (db_get_pool_record(ua->jcr, ua->db, &pr)) {
-         bsnprintf(pool_select, sizeof(pool_select), "AND Media.PoolId=%s ",
-            edit_int64(pr.PoolId, ed1));
+         bsnprintf(pool_select, sizeof(pool_select), "AND Media.PoolId=%s ", edit_int64(pr.PoolId, ed1));
       } else {
          ua->warning_msg(_("Pool \"%s\" not found, using any pool.\n"), pr.Name);
       }
@@ -1456,7 +1457,6 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
     * Get the JobIds from that list
     */
    rx->last_jobid[0] = rx->JobIds[0] = 0;
-
    if (!db_sql_query(ua->db, uar_sel_jobid_temp, jobid_handler, (void *)rx)) {
       ua->warning_msg("%s\n", db_strerror(ua->db));
    }
@@ -1467,12 +1467,34 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
           * Display a list of all copies
           */
          db_list_copies_records(ua->jcr, ua->db, "", rx->JobIds, ua->send, HORZ_LIST);
+
+         if (find_arg(ua, NT_("yes")) > 0) {
+            ua->pint32_val = 1;
+         } else {
+            get_yesno(ua, _("\nDo you want to restore from these copies? (yes|no): "));
+         }
+
+         if (ua->pint32_val) {
+            POOL_MEM JobIds(PM_FNAME);
+
+            /*
+             * Change the list of jobs needed to do the restore to the copies of the Job.
+             */
+            pm_strcpy(JobIds, rx->JobIds);
+            rx->last_jobid[0] = rx->JobIds[0] = 0;
+            Mmsg(rx->query, uar_sel_jobid_copies, JobIds.c_str());
+            if (!db_sql_query(ua->db, rx->query, jobid_handler, (void *)rx)) {
+               ua->warning_msg("%s\n", db_strerror(ua->db));
+            }
+         }
       }
 
       /*
        * Display a list of Jobs selected for this restore
        */
-      db_list_sql_query(ua->jcr, ua->db, uar_list_temp, ua->send, HORZ_LIST, true);
+      Mmsg(rx->query, uar_list_jobs_by_idlist, rx->JobIds);
+      db_list_sql_query(ua->jcr, ua->db, rx->query, ua->send, HORZ_LIST, true);
+
       ok = true;
    } else {
       ua->warning_msg(_("No jobs found.\n"));
@@ -1481,6 +1503,7 @@ static bool select_backups_before_date(UAContext *ua, RESTORE_CTX *rx, char *dat
 bail_out:
    db_sql_query(ua->db, uar_del_temp);
    db_sql_query(ua->db, uar_del_temp1);
+
    return ok;
 }
 
@@ -1578,7 +1601,7 @@ void find_storage_resource(UAContext *ua, RESTORE_CTX &rx, char *Storage, char *
    LockRes();
    foreach_res(store, R_STORAGE) {
       if (bstrcmp(Storage, store->name())) {
-         if (acl_access_ok(ua, Storage_ACL, store->name())) {
+         if (ua->acl_access_ok(Storage_ACL, store->name())) {
             rx.store = store;
          }
          break;
@@ -1595,16 +1618,11 @@ void find_storage_resource(UAContext *ua, RESTORE_CTX &rx, char *Storage, char *
       store = NULL;
       i = find_arg_with_value(ua, "storage");
       if (i > 0) {
-         store = (STORERES *)GetResWithName(R_STORAGE, ua->argv[i]);
-         if (store && !acl_access_ok(ua, Storage_ACL, store->name(), true)) {
-            store = NULL;
-         }
+         store = ua->GetStoreResWithName(ua->argv[i]);
       }
       if (store && (store != rx.store)) {
-         ua->info_msg(_("Warning default storage overridden by \"%s\" on command line.\n"),
-                      store->name());
+         ua->info_msg(_("Warning default storage overridden by \"%s\" on command line.\n"), store->name());
          rx.store = store;
-         bstrncpy(Storage, store->name(), MAX_NAME_LENGTH);
          Dmsg1(200, "Set store=%s\n", rx.store->name());
       }
       return;
@@ -1617,7 +1635,7 @@ void find_storage_resource(UAContext *ua, RESTORE_CTX &rx, char *Storage, char *
       LockRes();
       foreach_res(store, R_STORAGE) {
          if (bstrcmp(MediaType, store->media_type)) {
-            if (acl_access_ok(ua, Storage_ACL, store->name())) {
+            if (ua->acl_access_ok(Storage_ACL, store->name())) {
                rx.store = store;
                Dmsg1(200, "Set store=%s\n", rx.store->name());
                if (Storage == NULL) {

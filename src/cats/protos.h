@@ -78,8 +78,8 @@ bool db_delete_pool_record(JCR *jcr, B_DB *db, POOL_DBR *pool_dbr);
 bool db_delete_media_record(JCR *jcr, B_DB *mdb, MEDIA_DBR *mr);
 
 /* sql_find.c */
-bool db_find_last_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM **stime, char *job, int JobLevel);
-bool db_find_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM **stime, char *job);
+bool db_find_last_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM *&stime, char *job, int JobLevel);
+bool db_find_job_start_time(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM *&stime, char *job);
 bool db_find_last_jobid(JCR *jcr, B_DB *mdb, const char *Name, JOB_DBR *jr);
 int db_find_next_volume(JCR *jcr, B_DB *mdb, int index, bool InChanger, MEDIA_DBR *mr, const char *unwanted_volumes);
 bool db_find_failed_job_since(JCR *jcr, B_DB *mdb, JOB_DBR *jr, POOLMEM *stime, int &JobLevel);
@@ -91,8 +91,9 @@ bool db_get_base_file_list(JCR *jcr, B_DB *mdb, bool use_md5,
                            DB_RESULT_HANDLER *result_handler,void *ctx);
 int db_get_path_record(JCR *jcr, B_DB *mdb);
 bool db_get_pool_record(JCR *jcr, B_DB *db, POOL_DBR *pdbr);
+bool db_get_storage_record(JCR *jcr, B_DB *mdb, STORAGE_DBR *sdbr);
 bool db_get_job_record(JCR *jcr, B_DB *mdb, JOB_DBR *jr);
-int db_get_job_volume_names(JCR *jcr, B_DB *mdb, JobId_t JobId, POOLMEM **VolumeNames);
+int db_get_job_volume_names(JCR *jcr, B_DB *mdb, JobId_t JobId, POOLMEM *&VolumeNames);
 bool db_get_file_attributes_record(JCR *jcr, B_DB *mdb, char *fname, JOB_DBR *jr, FILE_DBR *fdbr);
 int db_get_fileset_record(JCR *jcr, B_DB *mdb, FILESET_DBR *fsr);
 bool db_get_media_record(JCR *jcr, B_DB *mdb, MEDIA_DBR *mr);
@@ -100,7 +101,8 @@ int db_get_num_media_records(JCR *jcr, B_DB *mdb);
 int db_get_num_pool_records(JCR *jcr, B_DB *mdb);
 int db_get_pool_ids(JCR *jcr, B_DB *mdb, int *num_ids, DBId_t **ids);
 bool db_get_client_ids(JCR *jcr, B_DB *mdb, int *num_ids, DBId_t **ids);
-bool db_get_media_ids(JCR *jcr, B_DB *mdb, MEDIA_DBR *mr, POOL_MEM &volumes, int *num_ids, uint32_t **ids);
+int db_get_storage_ids(JCR *jcr, B_DB *mdb, int *num_ids, DBId_t **ids);
+bool db_get_media_ids(JCR *jcr, B_DB *mdb, MEDIA_DBR *mr, POOL_MEM &volumes, int *num_ids, DBId_t **ids);
 int db_get_job_volume_parameters(JCR *jcr, B_DB *mdb, JobId_t JobId, VOL_PARAMS **VolParams);
 bool db_get_client_record(JCR *jcr, B_DB *mdb, CLIENT_DBR *cdbr);
 bool db_get_counter_record(JCR *jcr, B_DB *mdb, COUNTER_DBR *cr);
@@ -122,8 +124,8 @@ bool db_get_ndmp_environment_string(JCR *jcr, B_DB *mdb, JOB_DBR *jr,
 void db_list_pool_records(JCR *jcr, B_DB *db, POOL_DBR *pr,
                           OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_job_records(JCR *jcr, B_DB *db, JOB_DBR *jr, const char *range,
-                         const char* clientname, int jobstatus, const char* volumename,
-                         utime_t since_time, int last, int count,
+                         const char *clientname, int jobstatus, const char *volumename,
+                         utime_t since_time, bool last, bool count,
                          OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_job_totals(JCR *jcr, B_DB *db, JOB_DBR *jr,
                         OUTPUT_FORMATTER *sendit);
@@ -137,8 +139,8 @@ void db_list_jobmedia_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
                               OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_joblog_records(JCR *jcr, B_DB *mdb, JobId_t JobId,
                             OUTPUT_FORMATTER *sendit, e_list_type type);
-void db_list_log_records(JCR *jcr, B_DB *mdb, const char *range, bool reverse,
-                         OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_log_records(JCR *jcr, B_DB *mdb, const char *clientname, const char *range,
+                         bool reverse, OUTPUT_FORMATTER *sendit, e_list_type type);
 bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
                        OUTPUT_FORMATTER *sendit, e_list_type type,
                        bool verbose);
@@ -147,7 +149,9 @@ bool db_list_sql_query(JCR *jcr, B_DB *mdb, const char *query,
                        const char *description, bool verbose = false);
 void db_list_client_records(JCR *jcr, B_DB *mdb, char *clientname,
                             OUTPUT_FORMATTER *sendit, e_list_type type);
-void db_list_copies_records(JCR *jcr, B_DB *mdb, const char *range, char *jobids,
+void db_list_storage_records(JCR *jcr, B_DB *mdb,
+                             OUTPUT_FORMATTER *sendit, e_list_type type);
+void db_list_copies_records(JCR *jcr, B_DB *mdb, const char *range, const char *jobids,
                             OUTPUT_FORMATTER *sendit, e_list_type type);
 void db_list_base_files_for_job(JCR *jcr, B_DB *mdb, JobId_t jobid,
                                 OUTPUT_FORMATTER *sendit);

@@ -3,7 +3,7 @@
 
    Copyright (C) 2004-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2014 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -44,7 +44,7 @@
 #include "bareos.h"
 #include "tray_conf.h"
 
-extern CONFIG *my_config;             /* Our Global config */
+#define CONFIG_FILE "tray-monitor.conf"   /* default configuration file */
 
 /*
  * Define the first and last resource ID record
@@ -165,7 +165,7 @@ static RES_TABLE resources[] = {
  * Dump contents of resource
  */
 void dump_resource(int type, RES *reshdr, void sendit(void *sock, const char *fmt, ...),
-                   void *sock, bool hide_sensitive_data)
+                   void *sock, bool hide_sensitive_data, bool verbose)
 {
    POOL_MEM buf;
    URES *res = (URES *)reshdr;
@@ -189,7 +189,7 @@ void dump_resource(int type, RES *reshdr, void sendit(void *sock, const char *fm
    sendit(sock, "%s", buf.c_str());
 
    if (recurse && res->res_monitor.hdr.next) {
-      dump_resource(type, res->res_monitor.hdr.next, sendit, sock, hide_sensitive_data);
+      dump_resource(type, res->res_monitor.hdr.next, sendit, sock, hide_sensitive_data, verbose);
    }
 }
 
@@ -269,7 +269,7 @@ void free_resource(RES *sres, int type)
  * pointers because they may not have been defined until
  * later in pass 1.
  */
-void save_resource(int type, RES_ITEM *items, int pass)
+bool save_resource(int type, RES_ITEM *items, int pass)
 {
    URES *res;
    int rindex = type - R_FIRST;
@@ -326,7 +326,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
          free(res_all.res_monitor.hdr.desc);
          res_all.res_monitor.hdr.desc = NULL;
       }
-      return;
+      return (error == 0);
    }
 
    /*
@@ -357,6 +357,7 @@ void save_resource(int type, RES_ITEM *items, int pass)
                res_to_str(type), res->res_monitor.name(), rindex, pass);
       }
    }
+   return (error == 0);
 }
 
 void init_tmon_config(CONFIG *config, const char *configfile, int exit_code)
@@ -374,6 +375,8 @@ void init_tmon_config(CONFIG *config, const char *configfile, int exit_code)
                 R_LAST,
                 resources,
                 res_head);
+   config->set_default_config_filename(CONFIG_FILE);
+   config->set_config_include_dir("tray-monitor.d");
 }
 
 bool parse_tmon_config(CONFIG *config, const char *configfile, int exit_code)

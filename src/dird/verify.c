@@ -139,8 +139,8 @@ bool do_verify(JCR *jcr)
       /*
        * See if user supplied a jobid= as run argument or from menu
        */
-      if (jcr->RestoreJobId) {
-         verify_jobid = jcr->RestoreJobId;
+      if (jcr->VerifyJobId) {
+         verify_jobid = jcr->VerifyJobId;
          Dmsg1(100, "Supplied jobid=%d\n", verify_jobid);
 
       } else {
@@ -237,7 +237,7 @@ bool do_verify(JCR *jcr)
       /*
        * Now start a job with the Storage daemon
        */
-      if (!start_storage_daemon_job(jcr, jcr->rstorage, NULL, /* send_bsr */ true)) {
+      if (!start_storage_daemon_job(jcr, jcr->res.rstorage, NULL, /* send_bsr */ true)) {
          return false;
       }
 
@@ -263,9 +263,10 @@ bool do_verify(JCR *jcr)
        * OK, now connect to the File daemon and ask him for the files.
        */
       jcr->setJobStatus(JS_Blocked);
-      if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true, true)) {
+      if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true)) {
          goto bail_out;
       }
+      send_job_info(jcr);
       fd = jcr->file_bsock;
 
       /*
@@ -284,9 +285,10 @@ bool do_verify(JCR *jcr)
        * OK, now connect to the File daemon and ask him for the files.
        */
       jcr->setJobStatus(JS_Blocked);
-      if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true, true)) {
+      if (!connect_to_file_daemon(jcr, 10, me->FDConnectTimeout, true)) {
          goto bail_out;
       }
+      send_job_info(jcr);
       fd = jcr->file_bsock;
       break;
    }
@@ -333,8 +335,8 @@ bool do_verify(JCR *jcr)
          /*
           * TLS Requirement
           */
-         if (store->tls_enable) {
-            if (store->tls_require) {
+         if (store->tls.enable) {
+            if (store->tls.require) {
                tls_need = BNET_TLS_REQUIRED;
             } else {
                tls_need = BNET_TLS_OK;
@@ -352,8 +354,8 @@ bool do_verify(JCR *jcr)
          /*
           * TLS Requirement
           */
-         if (client->tls_enable) {
-            if (client->tls_require) {
+         if (client->tls.enable) {
+            if (client->tls.require) {
                tls_need = BNET_TLS_REQUIRED;
             } else {
                tls_need = BNET_TLS_OK;
