@@ -11,6 +11,7 @@ bareos (16.2.4-1) UNRELEASED; urgency=medium
   [ Felix Geyer ]
   * Refresh dont-generate-debian-files patch
   * Update tests for new config file locations
+  * Switch back to the default gcc 6.
 
  -- Felix Geyer <fgeyer@debian.org>  Fri, 28 Oct 2016 22:57:02 +0200
 
