@@ -118,7 +118,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -n -Xusr/lib/bareos/plugins/ -Xusr/lib/bareos/backends/
 
 %:
-	dh $@ --parallel --with systemd
+	dh $@ --max-parallel=4 --with systemd
 
 gen-debian-copyright:
 	(cd debian; make copyright)
