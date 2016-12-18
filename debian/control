@@ -2,7 +2,7 @@ Source: bareos
 Section: admin
 Priority: optional
 Maintainer: Bareos Packaging Team <pkg-bareos-devel@lists.alioth.debian.org>
-Uploaders: Joerg Steffens <joerg.steffens@bareos.com>, Evgeni Golov <evgeni@debian.org>
+Uploaders: Joerg Steffens <joerg.steffens@bareos.com>
 Build-Depends: acl-dev,
  autotools-dev,
  bc,
