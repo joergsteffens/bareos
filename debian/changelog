@@ -1,3 +1,16 @@
+bareos (16.2.4-3) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Evgeni Golov ]
+  * remove myself from uploaders
+  * mark bareos-filedaemon-ceph-plugin as linux-any
+
+  [ Felix Geyer ]
+  * Re-add accidentally dropped bareos-bat package.
+
+ -- Felix Geyer <fgeyer@debian.org>  Sun, 08 Jan 2017 18:36:30 +0100
+
 bareos (16.2.4-2) unstable; urgency=medium
 
   * Team upload to unstable.
