@@ -248,9 +248,19 @@ static void build_path_hierarchy(JCR *jcr, B_DB *mdb,
             }
             ppathid_cache.insert(pathid);
 
+            /* Prevent from ERROR:  duplicate key value violates unique
+             * constraint "pathhierarchy_pkey" when multiple .bvfs_update
+             * to prevent from unique key violation when multiple .bvfs_update
+             * are run parallel.
+             * The syntax of the following quere works for PostgreSQL, MySQL
+             * and SQLite
+             */
             Mmsg(mdb->cmd,
-                 "INSERT INTO PathHierarchy (PathId, PPathId) "
-                 "VALUES (%s,%lld)",
+                 "INSERT INTO PathHierarchy (PathId,PPathId) "
+                    "SELECT ph.PathId,ph.PPathId FROM "
+                       "(SELECT %s AS PathId, %lld AS PPathId) ph "
+                       "WHERE NOT EXISTS "
+                       "(SELECT 1 FROM PathHierarchy phi WHERE phi.PathId = ph.PathId)",
                  pathid, (uint64_t) parent.PathId);
 
             if (!INSERT_DB(jcr, mdb, mdb->cmd)) {
@@ -299,6 +309,26 @@ static bool update_path_hierarchy_cache(JCR *jcr,
       retval = true;
       goto bail_out;
    }
+
+   /* prevent from DB lock waits when already in progress */
+   Mmsg(mdb->cmd, "SELECT 1 FROM Job WHERE JobId = %s AND HasCache=-1", jobid);
+
+   if (!QUERY_DB(jcr, mdb, mdb->cmd) || sql_num_rows(mdb) > 0) {
+      Dmsg1(dbglevel, "already in progress %d\n", (uint32_t)JobId );
+      retval = false;
+      goto bail_out;
+   }
+
+   /* set HasCache to -1 in Job (in progress) */
+   Mmsg(mdb->cmd, "UPDATE Job SET HasCache=-1 WHERE JobId=%s", jobid);
+   UPDATE_DB(jcr, mdb, mdb->cmd);
+
+   /* need to COMMIT here to ensure that other concurrent .bvfs_update runs
+    * see the current HasCache value. A new transaction must only be started
+    * after having finished PathHierarchy processing, otherwise prevention
+    * from duplicate key violations in build_path_hierarchy() will not work.
+    */
+   db_end_transaction(jcr, mdb);
 
    /* Inserting path records for JobId */
    Mmsg(mdb->cmd, "INSERT INTO PathVisibility (PathId, JobId) "
@@ -359,6 +389,8 @@ static bool update_path_hierarchy_cache(JCR *jcr,
       }
       free(result);
    }
+
+   db_start_transaction(jcr, mdb);
 
    if (mdb->db_get_type_index() == SQL_TYPE_SQLITE3) {
       Mmsg(mdb->cmd,
@@ -450,7 +482,7 @@ bool bvfs_update_path_hierarchy_cache(JCR *jcr, B_DB *mdb, char *jobids)
    char *p;
    int status;
    JobId_t JobId;
-   bool retval = false;
+   bool retval = true;
    pathid_cache ppathid_cache;
 
    p = jobids;
@@ -464,13 +496,12 @@ bool bvfs_update_path_hierarchy_cache(JCR *jcr, B_DB *mdb, char *jobids)
          /*
           * We reached the end of the list.
           */
-         retval = true;
          goto bail_out;
       }
 
       Dmsg1(dbglevel, "Updating cache for %lld\n", (uint64_t)JobId);
       if (!update_path_hierarchy_cache(jcr, mdb, ppathid_cache, JobId)) {
-         goto bail_out;
+         retval = false;
       }
    }
 
