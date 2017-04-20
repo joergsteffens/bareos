@@ -1,3 +1,11 @@
+bareos (16.2.5-1) experimental; urgency=medium
+
+  * Team upload to experimental.
+  * New upstream release.
+  * Make bareos-client only suggest bareos-traymonitor. (Closes: #854109)
+
+ -- Felix Geyer <fgeyer@debian.org>  Thu, 20 Apr 2017 18:42:58 +0200
+
 bareos (16.2.4-3) unstable; urgency=medium
 
   * Team upload.
