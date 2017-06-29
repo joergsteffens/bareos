@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+# reinstall database in case mysql wasn't started early enough
+
+service mysql start
+
+echo 'bareos-database-common bareos-database-common/dbconfig-reinstall boolean true' | debconf-set-selections
+echo 'bareos-database-common bareos-database-common/dbconfig-reinstall seen true' | debconf-set-selections
+dpkg-reconfigure bareos-database-common
+
+service bareos-dir restart
+
+test/all
