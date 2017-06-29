@@ -3,7 +3,7 @@
 
    Copyright (C) 2000-2011 Free Software Foundation Europe e.V.
    Copyright (C) 2011-2012 Planets Communications B.V.
-   Copyright (C) 2013-2016 Bareos GmbH & Co. KG
+   Copyright (C) 2013-2017 Bareos GmbH & Co. KG
 
    This program is Free Software; you can redistribute it and/or
    modify it under the terms of version three of the GNU Affero General Public
@@ -214,6 +214,8 @@ static RES_ITEM cli_items[] = {
    { "Protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_client.Protocol), 0, CFG_ITEM_DEFAULT, "Native", "13.2.0-", NULL },
    { "AuthType", CFG_TYPE_AUTHTYPE, ITEM(res_client.AuthType), 0, CFG_ITEM_DEFAULT, "None", NULL, NULL },
    { "Address", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
+   { "LanAddress", CFG_TYPE_STR, ITEM(res_client.lanaddress), 0, CFG_ITEM_DEFAULT, NULL, "16.2.6-",
+     "Sets additional address used for connections between Client and Storage Daemon inside separate network."},
    { "FdAddress", CFG_TYPE_STR, ITEM(res_client.address), 0, CFG_ITEM_ALIAS, NULL, NULL, "Alias for Address." },
    { "Port", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT, FD_DEFAULT_PORT, NULL, NULL },
    { "FdPort", CFG_TYPE_PINT32, ITEM(res_client.FDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, FD_DEFAULT_PORT, NULL, NULL },
@@ -260,6 +262,8 @@ static RES_ITEM store_items[] = {
    { "Protocol", CFG_TYPE_AUTHPROTOCOLTYPE, ITEM(res_store.Protocol), 0, CFG_ITEM_DEFAULT, "Native", NULL, NULL },
    { "AuthType", CFG_TYPE_AUTHTYPE, ITEM(res_store.AuthType), 0, CFG_ITEM_DEFAULT, "None", NULL, NULL },
    { "Address", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_REQUIRED, NULL, NULL, NULL },
+   { "LanAddress", CFG_TYPE_STR, ITEM(res_store.lanaddress), 0, CFG_ITEM_DEFAULT, NULL, "16.2.6-",
+     "Sets additional address used for connections between Client and Storage Daemon inside separate network."},
    { "SdAddress", CFG_TYPE_STR, ITEM(res_store.address), 0, CFG_ITEM_ALIAS, NULL, NULL, "Alias for Address." },
    { "Port", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT, SD_DEFAULT_PORT, NULL, NULL },
    { "SdPort", CFG_TYPE_PINT32, ITEM(res_store.SDport), 0, CFG_ITEM_DEFAULT | CFG_ITEM_ALIAS, SD_DEFAULT_PORT, NULL, "Alias for Port." },
@@ -2554,6 +2558,9 @@ void free_resource(RES *sres, int type)
       if (res->res_client.address) {
          free(res->res_client.address);
       }
+      if (res->res_client.lanaddress) {
+         free(res->res_client.lanaddress);
+      }
       if (res->res_client.username) {
          free(res->res_client.username);
       }
@@ -2568,6 +2575,9 @@ void free_resource(RES *sres, int type)
    case R_STORAGE:
       if (res->res_store.address) {
          free(res->res_store.address);
+      }
+      if (res->res_store.lanaddress) {
+         free(res->res_store.lanaddress);
       }
       if (res->res_store.username) {
          free(res->res_store.username);

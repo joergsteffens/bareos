@@ -16,6 +16,7 @@ Build-Depends: acl-dev,
  libcap-dev [linux-any],
  libcephfs-dev [linux-any],
  librados-dev [linux-any],
+ libradosstriper-dev [linux-any],
  libcmocka-dev (>= 1.0.1),
  libjansson-dev,
  liblzo2-dev,
@@ -24,7 +25,7 @@ Build-Depends: acl-dev,
  libgnutls28-dev,
  libwrap0-dev,
  libx11-dev,
- libsqlite3-dev, default-libmysqlclient-dev, libpq-dev,
+ libsqlite3-dev, default-libmysqlclient-dev | libmysqlclient-dev, libpq-dev,
  logrotate,
  lsb-release,
  mtx [!hurd-any],
@@ -38,7 +39,11 @@ Build-Depends: acl-dev,
 # libfastlz-dev:
 #   installed in OBS via dsc file,
 #   not part of Debian/Ubuntu.
-# libcephfs-dev, librados-dev
+# librados-dev:
+#   Debian >= 8, Ubuntu >= 14.04
+# libradosstriper-dev:
+#   Ubuntu >= 16.04
+# libcephfs-dev:
 #   Debian >= 8, Ubuntu >= 14.04
 # glusterfs-common:
 #   Debian >= 8, Ubuntu >= 15.04
@@ -140,7 +145,7 @@ Description: Backup Archiving Recovery Open Sourced - MySQL backend
  data across a network of computers of different kinds.
  .
  This package provides the functionality to connect the Bareos Director
- daemon to a MySQL database.
+ daemon to a MySQL compatible database.
 
 
 Package:        bareos-database-sqlite3
