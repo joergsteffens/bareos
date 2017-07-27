@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# stop on first error
+set -e
+
+sed -i "s#Signature = MD5.*#Signature = SHA1#" /etc/bareos/bareos-dir.d/fileset/SelfTest.conf
+
+echo "start testing ... "
+echo "TRAVIS_BRANCH: $TRAVIS_BRANCH"
+echo "USER: $USER"
+echo "DB: $DB"
+
+echo "--------- restarting services ----------- "
+service bareos-dir restart
+service bareos-sd restart
+service bareos-fd restart
+sleep 10
+
+echo "--------- checking services ----------- "
+service bareos-dir status
+service bareos-sd status
+service bareos-fd status
+
+
+# enable bash debug
+set -v
+
+BACKUP_TEST_FILE=/usr/sbin/bareos.test
+
+echo -e "status dir" | bconsole
+echo
+echo "---- label a volume ----"
+echo -e "label volume=testvol pool=Full" | bconsole
+echo
+echo "----- create some file to test backup / restore ----"
+dd if=/dev/urandom of=${BACKUP_TEST_FILE} bs=1024 count=1100
+echo
+echo "------ trigger backup job -----"
+echo -e "run job=backup-bareos-fd yes\rwait" | bconsole | grep "Job queued. JobId="
+echo "status dir" | bconsole
+echo
+echo "------ trigger restore job -----"
+echo -e "restore select current\r2\rls\rmark usr\rdone\ryes\rwait" | bconsole
+echo "status dir" | bconsole
+if ! cmp ${BACKUP_TEST_FILE} /tmp/bareos-restores/${BACKUP_TEST_FILE}; then
+  echo "Restored file is corrupted"
+  exit 1
+fi

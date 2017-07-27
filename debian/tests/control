@@ -10,6 +10,6 @@ Test-Command: test/all
 Restrictions: breaks-testbed needs-root allow-stderr
 Depends: bareos-database-sqlite3, bareos
 
-Tests: tls tls-passive
+Tests: tls tls-passive sha1
 Restrictions: breaks-testbed needs-root allow-stderr
 Depends: bareos-database-sqlite3, bareos
