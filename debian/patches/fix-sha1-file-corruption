@@ -1,0 +1,29 @@
+From 49be4618319e681a4ad79fde63e984df1748938c Mon Sep 17 00:00:00 2001
+From: Joerg Steffens <joerg.steffens@bareos.com>
+Date: Wed, 26 Jul 2017 21:57:38 +0200
+Subject: [PATCH] bugfix: prevents file corruptions by SHA1
+
+Fixes a bug when using SHA1 file signatures in Bareos version compiled
+without openssl.
+
+Fixes #838: File corruption with SHA1 signature
+---
+ src/lib/sha1.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib/sha1.c b/src/lib/sha1.c
+index 9972cb2..f67c466 100644
+--- a/src/lib/sha1.c
++++ b/src/lib/sha1.c
+@@ -20,7 +20,8 @@ A million repetitions of "a"
+ #if __LITTLE_ENDIAN__
+ #define LITTLE_ENDIAN
+ #endif
+-/* #define SHA1HANDSOFF * Copies data before messing with it. */
++/* #define SHA1HANDSOFF * Copies data before messing with it. Do not modify original data! */
++#define SHA1HANDSOFF
+ 
+ #include "sha1.h"
+ 
+-- 
+2.7.4
