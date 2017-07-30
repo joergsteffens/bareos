@@ -38,6 +38,12 @@ case "$1" in
             /usr/lib/bareos/scripts/bareos-config apply_dbconfig_settings
         fi
         permissions
+
+        if dpkg --compare-versions "$2" lt-nl "16.2.6-3~"; then
+            if [ -e /etc/logrotate.d/bareos-dir ]; then
+                chmod -x /etc/logrotate.d/bareos-dir
+            fi
+        fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         ;;
