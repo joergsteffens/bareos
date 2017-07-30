@@ -1,3 +1,10 @@
+bareos (16.2.6-3) UNRELEASED; urgency=medium
+
+  * Remove duplicate config check call in the init script.
+    - Avoids (harmless) warning when /etc/bareos/bareos-dir.conf doesn't exist.
+
+ -- Felix Geyer <fgeyer@debian.org>  Sun, 30 Jul 2017 23:43:51 +0200
+
 bareos (16.2.6-2) unstable; urgency=medium
 
   * Fix file corruption when using SHA1 signature. (Closes: #869608)
