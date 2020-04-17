@@ -1,0 +1,37 @@
+name: Publish Python 🐍 distributions 📦 to PyPI and TestPyPI
+
+on: push
+
+jobs:
+  build-n-publish:
+    name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
+    runs-on: ubuntu-18.04
+    
+    steps:
+    - uses: actions/checkout@v2
+    - run: git fetch --prune --unshallow
+
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+        
+    - name: build
+      run: |
+        pip install --user wheel
+        cd python-bareos
+        # sdist mangles around with version information
+        # and name it rc* themself.
+        # So we also set the expected suffix.
+        ../docs/manuals/source/get-version.sh |  sed -r -e 's/~pre([0-9]+).*/rc\1/' > bareos/VERSION.txt
+        echo 'Version'
+        cat bareos/VERSION.txt
+        python setup.py sdist bdist_wheel
+        
+    - name: Publish distribution 📦 to Test PyPI
+      uses: pypa/gh-action-pypi-publish@v1.1.0
+      with:
+        repository_url: https://test.pypi.org/legacy/
+        password: ${{ secrets.test_pypi_password }}
+        packages_dir: python-bareos/dist/
+
