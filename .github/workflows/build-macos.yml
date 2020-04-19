@@ -1,0 +1,35 @@
+name: Build MacOS
+
+on: push
+
+jobs:
+  build:
+    name: Build MacOS
+    runs-on: macos-10.15
+    
+    steps:
+    - uses: actions/checkout@v2
+    - run: git fetch --prune --unshallow
+
+    - name: install dependencies
+      run: |
+        brew install jansson
+    
+    - name: build
+      run: |
+        ls -la /usr/local/include
+        ls -la /usr/local/include/jansson.h
+        mkdir cmake-build
+        cd cmake-build
+        export CXXFLAGS="-I/usr/local/include"
+        cmake .. -Dclient-only=yes
+        make -j 4
+        make package VERBOSE=1
+        ls -la ./*.pkg
+        mkdir -p "${{ github.workspace }}/BUILD_RESULTS/MacOS"
+        mv ./*.pkg "${{ github.workspace }}/BUILD_RESULTS/MacOS"
+        
+    - name: Upload pkg
+      uses: actions/upload-artifact@v2-preview
+      with:
+        path: ${{ github.workspace }}/BUILD_RESULTS/MacOS/*.pkg
