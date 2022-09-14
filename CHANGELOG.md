@@ -4,8 +4,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and since Bareos version 20 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-## Fixed
+
+### Changed
+- build: switch from FreeBSD 13.0 to 13.1 [PR #1256]
+
+### Fixed
+- dird: RunScript fixes [PR #1222]
+  - fix show command output for RunScript RunsOnClient
+  - fix show verbose for RunScripts
+  - execute console runscripts only on the Director
 - devtools/dist-tarball.sh: fix name if version contains "~pre" [PR #1220]
+
+### Documentation
+- Univention Corporate Server (UCS) >= 5: same support as for other Linux distributions, but no extended integration as for UCS < 5 [PR #1245]
+
+- backport mssql add a warning in case of pitr to run another backup full or diff afterwards [PR #1246]
+- backport improve troubleshooting and debugging chapter [PR #1246]
+- backport update Appendix/HardwareSizing DB size with new numbers and formulas [BUG #1477][PR #1246]
+- backport add description to fileset signature sha256 and sha512 parameter [PR #1246]
+- backport add example to selection type = sql query [PR #1246]
+- backport improve Wild(*) section with links to example [PR #1246]
+- backport FreeBSD install create /usr/local/etc/pkg/repos directory [PR #1246]
+- backport dir-job-RescheduleTimes remove wrong default sentence [PR #1246]
 
 ## [21.1.4] - 2022-08-05
 
@@ -189,6 +209,7 @@ and since Bareos version 20 this project adheres to [Semantic Versioning](https:
 - fix systemtests daemon control scripts [PR #762]
 - SQL: queries: fix sql queries to handle negative job duration value [PR #1201]
 - dird: fix TLS-PSK credential not found error with very long job names [PR #1208]
+- dird: fix odd-even weeks parsing bug in schedule [PR #1232]
 
 ### Added
 - plugin: added mariabackup python plugin, added systemtest for mariabackup and updated systemtest for percona-xtrabackup [PR #967]
@@ -581,4 +602,7 @@ and since Bareos version 20 this project adheres to [Semantic Versioning](https:
 [PR #1208]: https://github.com/bareos/bareos/pull/1208
 [PR #1212]: https://github.com/bareos/bareos/pull/1212
 [PR #1214]: https://github.com/bareos/bareos/pull/1214
+[PR #1220]: https://github.com/bareos/bareos/pull/1220
+[PR #1222]: https://github.com/bareos/bareos/pull/1222
+[PR #1232]: https://github.com/bareos/bareos/pull/1232
 [unreleased]: https://github.com/bareos/bareos/tree/master
